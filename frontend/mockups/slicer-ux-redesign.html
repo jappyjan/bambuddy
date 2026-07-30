@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Slicer UX redesign — approved mockups</title>
+<style>
+  /* Both screens were authored as separate fragments; the slicer block scopes
+     these vars to .sl, so hoist them to :root or the first screen's buttons
+     lose their fill once the two are concatenated. */
+  :root{--accent:#2f81b7;--bd:#2a2e35;--pn:#191c21;--tile:#1f2329;}
+  body{margin:0;padding:28px 32px 60px;background:#0f1114;color:#e6e8ea;
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  .page{max-width:1080px;margin:0 auto;}
+  h2{font-size:23px;margin:0 0 6px;} .subtitle{opacity:.65;margin:0 0 26px;line-height:1.6;}
+  code{background:#1f2329;padding:1px 4px;border-radius:3px;}
+  .option.selected,.optrow.selected,.optcard.selected{border-color:#4ade80!important;}
+  hr.sep{border:0;border-top:1px solid #23272e;margin:52px 0 34px;}
+  .banner{background:#17251c;border:1px solid #2f5d3f;border-radius:8px;padding:12px 15px;
+          margin-bottom:30px;font-size:13px;line-height:1.6;}
+  .banner b{color:#8ee0a8;}
+</style></head><body><div class="page">
+<div class="banner"><b>Approved design.</b> On screen 1 the chosen option is <b>A</b> (right-hand inspector).
+On screen 2 the desktop layout is accepted as drawn, and the chosen phone strategy is <b>C</b> (guided steps).
+Spec: <code>docs/superpowers/specs/2026-07-30-slicer-ux-redesign-design.md</code></div>
+<h2>File browser: where does the detail view go?</h2>
+<p class="subtitle">Click a file &rarr; see its info &rarr; hit Slice. All three options show the same grouped-sliced-files treatment (the <b>&#9656;</b> chevron on <i>Lighthouse.3mf</i>). The question is only <b>where the detail lives</b> on desktop and on a phone.</p>
+
+<style>
+  .fbwrap { display:flex; flex-direction:column; gap:34px; }
+  .optrow { border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:16px 18px 20px; cursor:pointer; transition:.15s; }
+  .optrow:hover { border-color:rgba(120,200,255,.45); }
+  .optrow.selected { border-color:#4ade80; box-shadow:0 0 0 1px #4ade80 inset; }
+  .opthead { display:flex; align-items:baseline; gap:12px; margin-bottom:4px; }
+  .optletter { font-weight:700; font-size:20px; opacity:.55; }
+  .opthead h3 { margin:0; font-size:17px; }
+  .optdesc { font-size:13px; opacity:.7; margin:0 0 14px; line-height:1.5; }
+  .pair { display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }
+  .devlabel { font-size:10px; letter-spacing:.12em; text-transform:uppercase; opacity:.5; margin-bottom:6px; }
+
+  /* --- fake app chrome --- */
+  .win { background:#16181c; border:1px solid #2a2e35; border-radius:7px; overflow:hidden; flex:1 1 460px; min-width:380px; }
+  .phone { background:#16181c; border:1px solid #2a2e35; border-radius:14px; overflow:hidden; width:186px; flex:0 0 186px; }
+  .topbar { height:22px; background:#1d2026; border-bottom:1px solid #2a2e35; display:flex; align-items:center; padding:0 8px; gap:5px; }
+  .dot { width:6px; height:6px; border-radius:50%; background:#3a4048; }
+  .crumb { font-size:9px; opacity:.55; margin-left:6px; }
+  .body { display:flex; height:212px; }
+  .tree { width:78px; flex:0 0 78px; border-right:1px solid #2a2e35; padding:7px 6px; background:#191c21; }
+  .trow { font-size:8.5px; opacity:.6; padding:2.5px 3px; border-radius:3px; }
+  .trow.act { background:#2b3a4a; opacity:1; color:#8fd0ff; }
+  .main { flex:1; padding:8px; display:flex; flex-direction:column; min-width:0; }
+  .searchbar { height:15px; background:#1f2329; border:1px solid #2a2e35; border-radius:4px; margin-bottom:7px; }
+  .grid { display:grid; gap:5px; }
+  .g4 { grid-template-columns:repeat(4,1fr); }
+  .g3 { grid-template-columns:repeat(3,1fr); }
+  .g2 { grid-template-columns:repeat(2,1fr); }
+  .tile { background:#1f2329; border:1px solid #2a2e35; border-radius:4px; padding:4px; }
+  .tile .thumb { height:26px; background:linear-gradient(160deg,#1c4a63,#2e7fa8); border-radius:2px; margin-bottom:3px; }
+  .tile .nm { font-size:7px; opacity:.75; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .tile .sz { font-size:6px; opacity:.4; }
+  .tile.sel { border-color:#4a9fd8; background:#22303c; }
+  .tile.child { margin-left:9px; border-left:2px solid #4a9fd8; }
+  .chev { font-size:6px; opacity:.6; margin-right:2px; }
+  .gbadge { display:inline-block; font-size:5.5px; background:#2f5d3f; color:#8ee0a8; border-radius:2px; padding:0 2px; vertical-align:middle; }
+
+  .panel { width:132px; flex:0 0 132px; border-left:1px solid #2a2e35; background:#191c21; padding:8px 7px; }
+  .panel h5 { margin:0 0 5px; font-size:9px; }
+  .pmeta { font-size:6.5px; opacity:.55; line-height:1.7; margin-bottom:7px; }
+  .btn { height:13px; border-radius:3px; font-size:6.5px; display:flex; align-items:center; justify-content:center; margin-bottom:3.5px; }
+  .btn.prim { background:#2f81b7; color:#eaf6ff; }
+  .btn.ghost { background:transparent; border:1px solid #37506b; color:#8fc4e8; }
+  .prev3d { height:44px; margin-top:5px; border-radius:3px; background:repeating-linear-gradient(45deg,#1a1e24,#1a1e24 4px,#1e242c 4px,#1e242c 8px); display:flex; align-items:center; justify-content:center; font-size:6px; opacity:.5; }
+
+  /* phone */
+  .pbody { height:250px; display:flex; flex-direction:column; position:relative; overflow:hidden; }
+  .pmain { flex:1; padding:6px; }
+  .sheet { position:absolute; left:0; right:0; bottom:0; background:#1b1f25; border-top:1px solid #37506b; border-radius:10px 10px 0 0; padding:7px 8px 9px; box-shadow:0 -8px 20px rgba(0,0,0,.5); }
+  .grabber { width:26px; height:2.5px; background:#4a5563; border-radius:2px; margin:0 auto 6px; }
+  .fullover { position:absolute; inset:0; background:#1b1f25; padding:7px 8px; }
+  .backrow { font-size:8px; opacity:.6; margin-bottom:6px; }
+  .expandrow { background:#22303c; border:1px solid #4a9fd8; border-radius:4px; padding:5px; margin:4px 0; }
+  .tabs { display:flex; gap:4px; margin-bottom:6px; }
+  .tab { font-size:6.5px; padding:2px 5px; border-radius:3px; background:#1f2329; opacity:.6; }
+  .tab.act { background:#2f81b7; opacity:1; color:#fff; }
+  .note { font-size:11.5px; opacity:.62; margin-top:11px; line-height:1.55; }
+  .note b { opacity:.9; }
+</style>
+
+<div class="fbwrap options" data-multiselect style="display:flex;">
+
+  <!-- ============ OPTION A ============ -->
+  <div class="optrow option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="opthead"><span class="optletter">A</span><h3>Right-hand inspector &mdash; the SimplyPrint pattern</h3></div>
+    <p class="optdesc">Desktop: clicking a file slides in a panel on the right and the grid reflows from 5 columns to 3. Nothing navigates &mdash; you can click through files and watch the panel update. Phone: the same panel arrives as a bottom sheet you can drag up to full height.</p>
+    <div class="pair">
+      <div style="flex:1 1 460px; min-width:380px;">
+        <div class="devlabel">Desktop</div>
+        <div class="win">
+          <div class="topbar"><div class="dot"></div><div class="dot"></div><div class="dot"></div><span class="crumb">Library &rsaquo; Starter files</span></div>
+          <div class="body">
+            <div class="tree">
+              <div class="trow">&#9662; Library</div>
+              <div class="trow act">Starter files</div>
+              <div class="trow">Calibration</div>
+              <div class="trow">Gridfinity</div>
+              <div class="trow">Archive</div>
+            </div>
+            <div class="main">
+              <div class="searchbar"></div>
+              <div class="grid g3">
+                <div class="tile sel"><div class="thumb"></div><div class="nm"><span class="chev">&#9662;</span>Lighthouse.3mf</div><div class="sz">338 KB</div></div>
+                <div class="tile"><div class="thumb"></div><div class="nm">Benchy.3mf</div><div class="sz">3 MB</div></div>
+                <div class="tile"><div class="thumb"></div><div class="nm">Orca Cube.3mf</div><div class="sz">584 KB</div></div>
+                <div class="tile child"><div class="thumb"></div><div class="nm">Lighthouse.gcode.3mf <span class="gbadge">SLICED</span></div><div class="sz">2h 14m</div></div>
+                <div class="tile"><div class="thumb"></div><div class="nm">Boaty.3mf</div><div class="sz">175 KB</div></div>
+                <div class="tile"><div class="thumb"></div><div class="nm">Calicat.3mf</div><div class="sz">38 KB</div></div>
+              </div>
+            </div>
+            <div class="panel">
+              <h5>Lighthouse.3mf</h5>
+              <div class="pmeta">31 &times; 31 &times; 74 mm<br>338 KB &middot; 1 plate<br>Uploaded 12 Jun<br>Sliced once &rarr;</div>
+              <div class="btn prim">Slice &amp; Print</div>
+              <div class="btn ghost">Add to queue</div>
+              <div class="btn ghost">Download</div>
+              <div class="prev3d">3D preview</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="devlabel">Phone</div>
+        <div class="phone">
+          <div class="topbar"><span class="crumb">Starter files</span></div>
+          <div class="pbody">
+            <div class="pmain">
+              <div class="searchbar"></div>
+              <div class="grid g2">
+                <div class="tile sel"><div class="thumb"></div><div class="nm">Lighthouse</div></div>
+                <div class="tile"><div class="thumb"></div><div class="nm">Benchy</div></div>
+                <div class="tile"><div class="thumb"></div><div class="nm">Orca Cube</div></div>
+                <div class="tile"><div class="thumb"></div><div class="nm">Boaty</div></div>
+              </div>
+            </div>
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div style="font-size:9px;margin-bottom:3px;">Lighthouse.3mf</div>
+              <div class="pmeta">31 &times; 31 &times; 74 mm &middot; 338 KB</div>
+              <div class="btn prim">Slice &amp; Print</div>
+              <div class="btn ghost">Add to queue</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OPTION B ============ -->
+  <div class="optrow option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="opthead"><span class="optletter">B</span><h3>Expand in place</h3></div>
+    <p class="optdesc">The clicked card grows into a full-width row where it sits, pushing the rest of the grid down &mdash; same behaviour on both sizes, so there is only one layout to build and maintain. Detail stays anchored to the file's position in the folder.</p>
+    <div class="pair">
+      <div style="flex:1 1 460px; min-width:380px;">
+        <div class="devlabel">Desktop</div>
+        <div class="win">
+          <div class="topbar"><div class="dot"></div><div class="dot"></div><div class="dot"></div><span class="crumb">Library &rsaquo; Starter files</span></div>
+          <div class="body">
+            <div class="tree">
+              <div class="trow">&#9662; Library</div>
+              <div class="trow act">Starter files</div>
+              <div class="trow">Calibration</div>
+              <div class="trow">Gridfinity</div>
+            </div>
+            <div class="main">
+              <div class="searchbar"></div>
+              <div class="grid g4" style="margin-bottom:5px;">
+                <div class="tile"><div class="thumb"></div><div class="nm">Benchy.3mf</div><div class="sz">3 MB</div></div>
+                <div class="tile"><div class="thumb"></div><div class="nm">Orca Cube.3mf</div><div class="sz">584 KB</div></div>
+                <div class="tile"><div class="thumb"></div><div class="nm">Boaty.3mf</div><div class="sz">175 KB</div></div>
+                <div class="tile"><div class="thumb"></div><div class="nm">Calicat.3mf</div><div class="sz">38 KB</div></div>
+              </div>
+              <div class="expandrow">
+                <div style="display:flex;gap:7px;">
+                  <div style="width:48px;height:48px;background:linear-gradient(160deg,#1c4a63,#2e7fa8);border-radius:3px;flex:0 0 48px;"></div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:8.5px;margin-bottom:2px;"><span class="chev">&#9662;</span>Lighthouse.3mf <span class="gbadge">1 SLICE</span></div>
+                    <div class="pmeta" style="margin-bottom:4px;">31 &times; 31 &times; 74 mm &middot; 338 KB &middot; 1 plate &middot; uploaded 12 Jun</div>
+                    <div style="display:flex;gap:3px;">
+                      <div class="btn prim" style="width:52px;margin:0;">Slice &amp; Print</div>
+                      <div class="btn ghost" style="width:44px;margin:0;">Queue</div>
+                      <div class="btn ghost" style="width:40px;margin:0;">3D</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="grid g4">
+                <div class="tile child" style="grid-column:span 1;"><div class="thumb"></div><div class="nm">Lighthouse.gcode.3mf</div><div class="sz">2h 14m</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="devlabel">Phone</div>
+        <div class="phone">
+          <div class="topbar"><span class="crumb">Starter files</span></div>
+          <div class="pbody">
+            <div class="pmain">
+              <div class="searchbar"></div>
+              <div class="grid g2" style="margin-bottom:4px;">
+                <div class="tile"><div class="thumb"></div><div class="nm">Benchy</div></div>
+                <div class="tile"><div class="thumb"></div><div class="nm">Orca Cube</div></div>
+              </div>
+              <div class="expandrow">
+                <div style="width:100%;height:34px;background:linear-gradient(160deg,#1c4a63,#2e7fa8);border-radius:3px;margin-bottom:4px;"></div>
+                <div style="font-size:8px;margin-bottom:2px;">Lighthouse.3mf</div>
+                <div class="pmeta">31 &times; 31 &times; 74 mm</div>
+                <div class="btn prim">Slice &amp; Print</div>
+                <div class="btn ghost">Add to queue</div>
+              </div>
+              <div class="grid g2">
+                <div class="tile"><div class="thumb"></div><div class="nm">Boaty</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OPTION C ============ -->
+  <div class="optrow option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="opthead"><span class="optletter">C</span><h3>Detail is its own screen</h3></div>
+    <p class="optdesc">Clicking a file navigates to <code style="font-size:11px;">/library/file/42</code> &mdash; a real page with room for a large 3D preview, slice history, notes and tags. Deep-linkable and shareable. Costs you the fast click-through-a-folder browsing that A and B keep.</p>
+    <div class="pair">
+      <div style="flex:1 1 460px; min-width:380px;">
+        <div class="devlabel">Desktop</div>
+        <div class="win">
+          <div class="topbar"><div class="dot"></div><div class="dot"></div><div class="dot"></div><span class="crumb">Library &rsaquo; Starter files &rsaquo; Lighthouse.3mf</span></div>
+          <div class="body">
+            <div class="main" style="padding:9px;">
+              <div class="backrow">&larr; Back to Starter files</div>
+              <div style="display:flex;gap:9px;height:100%;">
+                <div style="flex:1;background:repeating-linear-gradient(45deg,#1a1e24,#1a1e24 5px,#1e242c 5px,#1e242c 10px);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;opacity:.55;">large 3D preview</div>
+                <div style="width:140px;flex:0 0 140px;">
+                  <div style="font-size:10px;margin-bottom:4px;">Lighthouse.3mf</div>
+                  <div class="pmeta">31 &times; 31 &times; 74 mm<br>338 KB &middot; 1 plate<br>uploaded 12 Jun<br>printed 3&times;</div>
+                  <div class="btn prim">Slice &amp; Print</div>
+                  <div class="btn ghost">Add to queue</div>
+                  <div class="btn ghost">Download</div>
+                  <div style="font-size:6.5px;opacity:.45;margin:6px 0 3px;">SLICED OUTPUTS</div>
+                  <div class="tile child" style="margin-left:0;"><div class="nm">Lighthouse.gcode.3mf</div><div class="sz">2h 14m &middot; P1S</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="devlabel">Phone</div>
+        <div class="phone">
+          <div class="topbar"><span class="crumb">Lighthouse.3mf</span></div>
+          <div class="pbody">
+            <div class="fullover">
+              <div class="backrow">&larr; Starter files</div>
+              <div class="tabs"><div class="tab act">Model</div><div class="tab">Info</div><div class="tab">Slices</div></div>
+              <div style="height:78px;background:repeating-linear-gradient(45deg,#1a1e24,#1a1e24 5px,#1e242c 5px,#1e242c 10px);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:7px;opacity:.5;margin-bottom:6px;">3D preview</div>
+              <div class="pmeta">31 &times; 31 &times; 74 mm &middot; 338 KB &middot; 1 plate</div>
+              <div class="btn prim">Slice &amp; Print</div>
+              <div class="btn ghost">Add to queue</div>
+              <div class="btn ghost">Download</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="note"><b>My read:</b> <b>A</b>, because the thing SimplyPrint actually got right is that the detail view is <i>cheap to open and cheap to abandon</i> &mdash; you skim a folder by clicking, and the Slice button is always in the same place. Your page already has the resizable sidebar and the <code>lg:</code> breakpoints this needs, so the panel is additive rather than a rewrite. <b>B</b> is the least code of the three but the grid jumping around under your cursor gets old fast, and there is nowhere to put a 3D preview. <b>C</b> is the most room to grow and the only deep-linkable one &mdash; but every folder skim becomes navigate-in, navigate-out.</p>
+<p class="note">Multi-select is on, so if you want e.g. <b>A on desktop and C on phone</b> (panel on big screens, real screen on small ones), click both &mdash; that combination is a legitimate answer and honours your &ldquo;different views per screen size&rdquo; ask.</p>
+<hr class="sep">
+<h2>The slicer page</h2>
+<p class="subtitle">The desktop layout is more or less dictated by the reference you sent, so I've drawn it once below &mdash; tell me if anything's wrong. <b>The real open question is the phone</b>, and that's the A/B/C choice at the bottom.</p>
+
+<style>
+  .sl { --bd:#2a2e35; --pn:#191c21; --tile:#1f2329; --accent:#2f81b7; }
+  .sl h4 { margin:26px 0 4px; font-size:14px; letter-spacing:.02em; }
+  .sl .lead { font-size:12.5px; opacity:.68; margin:0 0 12px; line-height:1.55; }
+  .devlabel { font-size:10px; letter-spacing:.12em; text-transform:uppercase; opacity:.5; margin-bottom:6px; }
+
+  .win { background:#16181c; border:1px solid var(--bd); border-radius:7px; overflow:hidden; }
+  .topbar { height:24px; background:#1d2026; border-bottom:1px solid var(--bd); display:flex; align-items:center; padding:0 9px; gap:5px; }
+  .dot { width:6px; height:6px; border-radius:50%; background:#3a4048; }
+  .crumb { font-size:9.5px; opacity:.6; margin-left:7px; }
+
+  /* ---------- desktop slicer ---------- */
+  .dbody { display:flex; height:352px; }
+  .rail { width:210px; flex:0 0 210px; background:var(--pn); border-right:1px solid var(--bd); padding:8px; overflow:hidden; display:flex; flex-direction:column; }
+  .sel { background:var(--tile); border:1px solid var(--bd); border-radius:4px; padding:4px 5px; font-size:8px; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center; }
+  .sel .cap { font-size:6px; opacity:.45; text-transform:uppercase; letter-spacing:.08em; }
+  .sel .v { opacity:.85; }
+  .slots { display:grid; grid-template-columns:1fr 1fr; gap:3px; margin-bottom:5px; }
+  .slot { background:var(--tile); border:1px solid var(--bd); border-radius:3px; padding:3px 4px; font-size:6.5px; display:flex; gap:3px; align-items:center; }
+  .sw { width:8px; height:8px; border-radius:2px; flex:0 0 8px; }
+  .tiers { display:flex; gap:2px; margin:6px 0 5px; background:#141619; border-radius:4px; padding:2px; }
+  .tier { flex:1; text-align:center; font-size:6.5px; padding:2.5px 0; border-radius:3px; opacity:.55; }
+  .tier.act { background:var(--accent); color:#fff; opacity:1; }
+  .srch { height:15px; background:var(--tile); border:1px solid var(--bd); border-radius:4px; margin-bottom:5px; display:flex; align-items:center; padding:0 5px; font-size:6.5px; opacity:.4; }
+  .cats { display:flex; gap:3px; flex-wrap:wrap; margin-bottom:6px; }
+  .cat { font-size:6px; padding:2px 4px; border-radius:3px; background:var(--tile); opacity:.6; }
+  .cat.act { background:#2b3a4a; color:#8fd0ff; opacity:1; }
+  .frow { display:flex; justify-content:space-between; align-items:center; font-size:7px; padding:2.5px 0; border-bottom:1px solid rgba(255,255,255,.045); }
+  .frow .lbl { opacity:.7; }
+  .frow .inp { background:var(--tile); border:1px solid var(--bd); border-radius:2px; width:38px; text-align:right; padding:1px 3px; font-size:6.5px; }
+  .frow.ovr .inp { border-color:#c98b2e; color:#f0c070; }
+  .frow.ovr .lbl::after { content:" \25CF"; color:#c98b2e; font-size:5px; }
+  .grpttl { font-size:6px; text-transform:uppercase; letter-spacing:.1em; opacity:.4; margin:7px 0 2px; }
+
+  .stage { flex:1; position:relative; background:radial-gradient(ellipse at 50% 42%,#20262e,#141719 72%); min-width:0; }
+  .plates { position:absolute; top:7px; left:8px; display:flex; gap:3px; }
+  .pl { font-size:6.5px; padding:2px 6px; border-radius:3px; background:rgba(0,0,0,.45); border:1px solid var(--bd); opacity:.6; }
+  .pl.act { background:var(--accent); border-color:var(--accent); color:#fff; opacity:1; }
+  .gizmo { position:absolute; left:8px; top:32px; display:flex; flex-direction:column; gap:3px; }
+  .gz { width:20px; height:20px; border-radius:4px; background:rgba(0,0,0,.5); border:1px solid var(--bd); display:flex; align-items:center; justify-content:center; font-size:8.5px; opacity:.75; }
+  .gz.act { background:var(--accent); border-color:var(--accent); opacity:1; }
+  .vtools { position:absolute; right:8px; top:7px; display:flex; gap:3px; }
+  .bed { position:absolute; left:50%; top:52%; transform:translate(-50%,-50%) perspective(420px) rotateX(58deg); width:214px; height:214px; background:repeating-linear-gradient(0deg,transparent,transparent 20px,rgba(255,255,255,.05) 20px,rgba(255,255,255,.05) 21px),repeating-linear-gradient(90deg,transparent,transparent 20px,rgba(255,255,255,.05) 20px,rgba(255,255,255,.05) 21px); border:1px solid rgba(255,255,255,.15); border-radius:2px; }
+  .modelbox { position:absolute; left:50%; top:44%; transform:translate(-50%,-50%); width:30px; height:62px; background:linear-gradient(160deg,#3a9fd0,#1d5f80); border-radius:2px; box-shadow:0 0 0 1px #f0a63a, 0 0 16px rgba(240,166,58,.3); }
+  .handle { position:absolute; width:5px; height:5px; background:#f0a63a; border-radius:1px; }
+  .dims { position:absolute; left:50%; top:calc(44% + 40px); transform:translateX(-50%); font-size:6px; background:rgba(0,0,0,.6); padding:1px 4px; border-radius:2px; opacity:.85; white-space:nowrap; }
+  .inspect { position:absolute; right:8px; bottom:44px; width:104px; background:rgba(20,23,27,.94); border:1px solid var(--bd); border-radius:5px; padding:6px; }
+  .inspect .t { font-size:6.5px; text-transform:uppercase; letter-spacing:.09em; opacity:.45; margin-bottom:4px; }
+  .xyz { display:flex; gap:3px; margin-bottom:3px; }
+  .xyz .f { flex:1; background:var(--tile); border:1px solid var(--bd); border-radius:2px; font-size:6px; padding:2px; text-align:center; }
+  .actbar { position:absolute; left:0; right:0; bottom:0; height:34px; background:rgba(20,23,27,.95); border-top:1px solid var(--bd); display:flex; align-items:center; padding:0 9px; gap:8px; }
+  .est { font-size:7px; opacity:.6; line-height:1.45; }
+  .btn { border-radius:4px; font-size:7.5px; display:flex; align-items:center; justify-content:center; padding:0 9px; height:19px; }
+  .btn.prim { background:var(--accent); color:#eaf6ff; }
+  .btn.go { background:#2f9358; color:#e8fff1; }
+  .btn.ghost { background:transparent; border:1px solid #37506b; color:#8fc4e8; }
+
+  /* ---------- phones ---------- */
+  .phonerow { display:flex; gap:16px; flex-wrap:wrap; }
+  .optcard { border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:14px 15px 17px; cursor:pointer; transition:.15s; flex:1 1 250px; min-width:236px; }
+  .optcard:hover { border-color:rgba(120,200,255,.45); }
+  .optcard.selected { border-color:#4ade80; box-shadow:0 0 0 1px #4ade80 inset; }
+  .oh { display:flex; align-items:baseline; gap:9px; margin-bottom:3px; }
+  .ol { font-weight:700; font-size:18px; opacity:.55; }
+  .oh h3 { margin:0; font-size:14.5px; }
+  .od { font-size:12px; opacity:.68; margin:0 0 12px; line-height:1.5; }
+  .phone { background:#16181c; border:1px solid var(--bd); border-radius:15px; overflow:hidden; width:190px; margin:0 auto; }
+  .ptop { height:19px; background:#1d2026; border-bottom:1px solid var(--bd); display:flex; align-items:center; padding:0 7px; font-size:8px; opacity:.6; }
+  .pbody { height:290px; position:relative; display:flex; flex-direction:column; }
+  .pstage { position:relative; background:radial-gradient(ellipse at 50% 45%,#20262e,#141719 72%); }
+  .pbed { position:absolute; left:50%; top:52%; transform:translate(-50%,-50%) perspective(300px) rotateX(58deg); width:120px; height:120px; background:repeating-linear-gradient(0deg,transparent,transparent 14px,rgba(255,255,255,.05) 14px,rgba(255,255,255,.05) 15px),repeating-linear-gradient(90deg,transparent,transparent 14px,rgba(255,255,255,.05) 14px,rgba(255,255,255,.05) 15px); border:1px solid rgba(255,255,255,.14); }
+  .pmodel { position:absolute; left:50%; top:44%; transform:translate(-50%,-50%); width:19px; height:40px; background:linear-gradient(160deg,#3a9fd0,#1d5f80); border-radius:2px; box-shadow:0 0 0 1px #f0a63a; }
+  .pgz { position:absolute; left:6px; top:6px; display:flex; flex-direction:column; gap:3px; }
+  .pgzb { width:17px; height:17px; border-radius:4px; background:rgba(0,0,0,.5); border:1px solid var(--bd); display:flex; align-items:center; justify-content:center; font-size:8px; opacity:.75; }
+  .pgzb.act { background:var(--accent); border-color:var(--accent); opacity:1; }
+  .tabbar { height:26px; border-top:1px solid var(--bd); background:#1b1f25; display:flex; }
+  .tb { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:6px; opacity:.45; gap:1px; }
+  .tb .ic { font-size:9px; }
+  .tb.act { opacity:1; color:#8fd0ff; }
+  .menulist { flex:1; overflow:hidden; }
+  .mi { display:flex; justify-content:space-between; align-items:center; padding:6.5px 8px; border-bottom:1px solid rgba(255,255,255,.05); font-size:8px; }
+  .mi .r { font-size:7px; opacity:.45; }
+  .mgrp { font-size:6px; text-transform:uppercase; letter-spacing:.1em; opacity:.4; padding:7px 8px 3px; background:#141619; }
+  .drag { height:11px; display:flex; align-items:center; justify-content:center; background:#1b1f25; border-top:1px solid var(--bd); border-bottom:1px solid var(--bd); }
+  .drag i { width:24px; height:2.5px; background:#4a5563; border-radius:2px; display:block; }
+  .pbtnbar { height:30px; border-top:1px solid var(--bd); background:#1b1f25; display:flex; align-items:center; padding:0 7px; gap:5px; }
+  .stepdots { display:flex; gap:3px; justify-content:center; padding:6px 0 4px; }
+  .sd { width:5px; height:5px; border-radius:50%; background:#374049; }
+  .sd.act { background:var(--accent); }
+  .wizhd { font-size:9px; padding:2px 8px 6px; }
+  .note { font-size:12px; opacity:.64; margin-top:12px; line-height:1.58; }
+  .note b { opacity:.92; }
+</style>
+
+<div class="sl">
+
+<h4>Proposed desktop layout</h4>
+<p class="lead">Left rail = the preset triplet on top, then the parameter editor fed by the 102 fields already sitting in <code style="font-size:11px">process_fields.json</code> &mdash; Basic / Advanced tiers, a search box, category chips matching that file's own categories. Overridden values get an amber dot and are the only ones sent to the backend. Viewport owns the space; placement gizmos left, plate tabs top-left, transform readout bottom-right. Bottom bar: estimate, then <b>Slice</b>, then <b>Print now</b> lights up once a slice exists &mdash; no bouncing back to the file manager.</p>
+<div class="devlabel">Desktop &mdash; <code style="font-size:10px">/slicer?file=42</code></div>
+<div class="win">
+  <div class="topbar"><div class="dot"></div><div class="dot"></div><div class="dot"></div><span class="crumb">Slicer &mdash; Lighthouse.3mf</span></div>
+  <div class="dbody">
+    <div class="rail">
+      <div class="sel"><span><span class="cap">Printer</span><br><span class="v">Bambu Lab P1S</span></span><span style="opacity:.4">&#9662;</span></div>
+      <div class="sel"><span><span class="cap">Process</span><br><span class="v">0.20mm Standard</span></span><span style="opacity:.4">&#9662;</span></div>
+      <div class="slots">
+        <div class="slot"><span class="sw" style="background:#d94f4f"></span>PLA Basic</div>
+        <div class="slot"><span class="sw" style="background:#3f7fd9"></span>PLA Matte</div>
+        <div class="slot"><span class="sw" style="background:#2e2e2e"></span>ASA Black</div>
+        <div class="slot" style="opacity:.4"><span class="sw" style="background:#3a4048"></span>empty</div>
+      </div>
+      <div class="sel" style="font-size:7px"><span><span class="cap">Build plate</span><br><span class="v">Textured PEI</span></span><span style="opacity:.4">&#9662;</span></div>
+      <div class="tiers"><div class="tier">Basic</div><div class="tier act">Advanced</div></div>
+      <div class="srch">&#9906;&nbsp; Search 102 settings&hellip;</div>
+      <div class="cats"><span class="cat act">Quality</span><span class="cat">Strength</span><span class="cat">Speed</span><span class="cat">Support</span><span class="cat">Infill</span><span class="cat">Adhesion</span><span class="cat">Accel.</span><span class="cat">Multi</span></div>
+      <div class="grpttl">Layer height</div>
+      <div class="frow"><span class="lbl">Layer height</span><span class="inp">0.20</span></div>
+      <div class="frow ovr"><span class="lbl">Initial layer height</span><span class="inp">0.24</span></div>
+      <div class="grpttl">Line width</div>
+      <div class="frow"><span class="lbl">Default line width</span><span class="inp">0.42</span></div>
+      <div class="frow"><span class="lbl">First layer</span><span class="inp">0.50</span></div>
+      <div class="frow ovr"><span class="lbl">Outer wall</span><span class="inp">0.40</span></div>
+      <div class="frow"><span class="lbl">Inner wall</span><span class="inp">0.45</span></div>
+      <div class="grpttl">Seam</div>
+      <div class="frow"><span class="lbl">Seam position</span><span class="inp" style="width:46px">Aligned</span></div>
+      <div style="margin-top:auto;padding-top:7px;font-size:6.5px;opacity:.55;display:flex;justify-content:space-between;">
+        <span>2 overrides</span><span style="color:#8fc4e8">Reset &middot; Save as preset</span>
+      </div>
+    </div>
+    <div class="stage">
+      <div class="plates"><span class="pl act">Plate 1</span><span class="pl">Plate 2</span><span class="pl">+</span></div>
+      <div class="gizmo">
+        <div class="gz act" title="move">&#10021;</div>
+        <div class="gz" title="rotate">&#8635;</div>
+        <div class="gz" title="scale">&#9713;</div>
+        <div class="gz" title="lay flat">&#9707;</div>
+        <div class="gz" title="auto-arrange">&#9638;</div>
+      </div>
+      <div class="vtools"><div class="gz">&#9737;</div><div class="gz">&#8853;</div><div class="gz">&#8854;</div></div>
+      <div class="bed"></div>
+      <div class="modelbox">
+        <div class="handle" style="left:-3px;top:-3px"></div><div class="handle" style="right:-3px;top:-3px"></div>
+        <div class="handle" style="left:-3px;bottom:-3px"></div><div class="handle" style="right:-3px;bottom:-3px"></div>
+      </div>
+      <div class="dims">30.9 &times; 31.2 &times; 74.4 mm</div>
+      <div class="inspect">
+        <div class="t">Position</div>
+        <div class="xyz"><span class="f">X 128</span><span class="f">Y 128</span><span class="f">Z 0</span></div>
+        <div class="t">Rotate &middot; Scale</div>
+        <div class="xyz"><span class="f">0&deg;</span><span class="f">0&deg;</span><span class="f">100%</span></div>
+      </div>
+      <div class="actbar">
+        <div class="est">2h 14m &middot; 41.8 g<br><span style="opacity:.6">P1S &middot; Textured PEI</span></div>
+        <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+          <div class="btn ghost">Save layout</div>
+          <div class="btn prim">Slice</div>
+          <div class="btn go">Print now &rarr;</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h4>Phone: three strategies</h4>
+<p class="lead">You asked for &ldquo;more menu focused on phones&rdquo;. These differ in how far they let go of the desktop shape to get there.</p>
+
+<div class="phonerow options" data-multiselect style="display:flex;">
+
+  <div class="optcard option" data-choice="tabs" onclick="toggleSelect(this)">
+    <div class="oh"><span class="ol">A</span><h3>Bottom tabs</h3></div>
+    <p class="od"><b>Plate</b> is a full-bleed viewport with big touch gizmos. <b>Settings</b> is a native-feeling drill-down list &mdash; tap Quality, get its fields, tap back. <b>Print</b> is the summary and the two buttons. Each tab gets the whole screen at the density it wants.</p>
+    <div class="phone">
+      <div class="ptop">&larr; Lighthouse.3mf</div>
+      <div class="pbody">
+        <div class="menulist">
+          <div class="mgrp">Profile</div>
+          <div class="mi"><span>Printer</span><span class="r">P1S &rsaquo;</span></div>
+          <div class="mi"><span>Process</span><span class="r">0.20 Standard &rsaquo;</span></div>
+          <div class="mi"><span>Filaments</span><span class="r">3 slots &rsaquo;</span></div>
+          <div class="mi"><span>Build plate</span><span class="r">Textured PEI &rsaquo;</span></div>
+          <div class="mgrp">Settings &nbsp;&middot;&nbsp; 2 overrides</div>
+          <div class="mi"><span>Quality</span><span class="r">2 changed &rsaquo;</span></div>
+          <div class="mi"><span>Strength</span><span class="r">&rsaquo;</span></div>
+          <div class="mi"><span>Speed</span><span class="r">&rsaquo;</span></div>
+          <div class="mi"><span>Support</span><span class="r">off &rsaquo;</span></div>
+          <div class="mi"><span>Infill</span><span class="r">15% &rsaquo;</span></div>
+        </div>
+        <div class="tabbar">
+          <div class="tb"><span class="ic">&#9638;</span>Plate</div>
+          <div class="tb act"><span class="ic">&#9881;</span>Settings</div>
+          <div class="tb"><span class="ic">&#9654;</span>Print</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="optcard option" data-choice="split" onclick="toggleSelect(this)">
+    <div class="oh"><span class="ol">B</span><h3>Stacked, draggable divider</h3></div>
+    <p class="od">Viewport on top, settings scrolling underneath, drag the grabber to trade one for the other &mdash; pull it down for a near-full-screen plate, shove it up to work through settings. Slice bar pinned. Closest to the desktop layout, just rotated.</p>
+    <div class="phone">
+      <div class="ptop">&larr; Lighthouse.3mf</div>
+      <div class="pbody">
+        <div class="pstage" style="height:104px">
+          <div class="pgz"><div class="pgzb act">&#10021;</div><div class="pgzb">&#8635;</div><div class="pgzb">&#9713;</div></div>
+          <div class="pbed"></div><div class="pmodel"></div>
+        </div>
+        <div class="drag"><i></i></div>
+        <div class="menulist">
+          <div class="mi" style="padding:5px 8px"><span>Printer</span><span class="r">P1S &rsaquo;</span></div>
+          <div class="mi" style="padding:5px 8px"><span>Process</span><span class="r">0.20 &rsaquo;</span></div>
+          <div class="mgrp">Quality</div>
+          <div class="mi" style="padding:5px 8px"><span>Layer height</span><span class="r">0.20</span></div>
+          <div class="mi" style="padding:5px 8px"><span>Initial layer</span><span class="r" style="color:#f0c070">0.24</span></div>
+          <div class="mi" style="padding:5px 8px"><span>Outer wall</span><span class="r" style="color:#f0c070">0.40</span></div>
+        </div>
+        <div class="pbtnbar">
+          <span style="font-size:6.5px;opacity:.6">2h 14m<br>41.8 g</span>
+          <div class="btn prim" style="margin-left:auto;height:17px;font-size:7px">Slice</div>
+          <div class="btn go" style="height:17px;font-size:7px">Print</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="optcard option" data-choice="wizard" onclick="toggleSelect(this)">
+    <div class="oh"><span class="ol">C</span><h3>Guided steps</h3></div>
+    <p class="od">One decision per screen: Printer &rarr; Filaments &rarr; Settings &rarr; Review. A thumbnail carries the model along; the full viewport is one tap away but never in your way. Hardest to misuse on a phone, slowest for someone who just wants to re-slice with the same profile.</p>
+    <div class="phone">
+      <div class="ptop">&larr; Step 2 of 4</div>
+      <div class="pbody">
+        <div class="stepdots"><span class="sd"></span><span class="sd act"></span><span class="sd"></span><span class="sd"></span></div>
+        <div class="wizhd">Which filaments?</div>
+        <div class="pstage" style="height:62px"><div class="pbed" style="width:74px;height:74px"></div><div class="pmodel" style="width:13px;height:26px"></div></div>
+        <div class="menulist" style="margin-top:5px">
+          <div class="mi"><span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#d94f4f;margin-right:5px"></span>Slot 1</span><span class="r">PLA Basic &rsaquo;</span></div>
+          <div class="mi"><span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#3f7fd9;margin-right:5px"></span>Slot 2</span><span class="r">PLA Matte &rsaquo;</span></div>
+          <div class="mi"><span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#2e2e2e;margin-right:5px"></span>Slot 3</span><span class="r">ASA Black &rsaquo;</span></div>
+        </div>
+        <div class="pbtnbar"><div class="btn ghost" style="height:17px;font-size:7px">Back</div><div class="btn prim" style="margin-left:auto;height:17px;font-size:7px">Next &rarr;</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="note"><b>My read: A.</b> It's the only one where the 3D view gets the entire screen when you want it <i>and</i> the settings get a proper full-height list when you want that &mdash; which is exactly the &ldquo;3D-centred on desktop, menu-centred on phone&rdquo; split you described, without a compromise in the middle. It's also the cheapest to build honestly: the tabs render <i>the same three components</i> the desktop rail and stage already render, just at one-per-screen instead of side-by-side. <b>B</b> looks like less work but a drag-divider over a WebGL canvas is fiddly on touch, and you end up with two cramped panes instead of one good one. <b>C</b> is the most beginner-proof and the most annoying for the 90% case of re-slicing a file you've sliced before.</p>
+<p class="note">Multi-select is on if you want to say &ldquo;A, but borrow C's filament step&rdquo;.</p>
+</div>
+</div>
+<script>function toggleSelect(el){el.classList.toggle('selected');}</script>
+</body></html>
