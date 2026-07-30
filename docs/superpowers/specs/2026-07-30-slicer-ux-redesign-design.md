@@ -37,11 +37,42 @@ Make slicing in Bambuddy feel like using a desktop slicer next to an operating-s
 | Phone slicer layout | Guided steps: Printer → Filaments → Settings → Review. | Chosen by the project owner over bottom tabs and a draggable split. Most beginner-proof on a small screen. |
 | Repeat-slice on phone | A file with a previous slice opens the wizard **on Review**, last settings pre-filled, earlier steps reachable as editable chips. | Removes the wizard's one real weakness — four screens to change nothing. First slice stays guided; repeat slice is two taps. |
 | Slicer surface | A route, `/slicer?file=42` (`?archive=7` for archives). | Deep-linkable, survives refresh, browser Back works, matches the reference product's URL shape. A modal cannot hold a viewport plus a settings tree comfortably. |
-| Settings UI source | `process_fields.json`, rendered generically. | The metadata already exists with labels, units and ranges. Rendering it is a view problem, not a data problem. |
+| Settings UI source | `process_fields.json` for metadata, intersected with the target slicer's real key set from the sidecar. | Labels, units and ranges exist nowhere else — the CLIs do not emit them (§3a). Which keys are *valid*, however, differs per slicer and must come from the slicer itself. |
 | Per-slice overrides | `process_overrides: dict` on `SliceRequest`, patched server-side into the resolved process JSON. | Reuses the mechanism `bed_type` already proves. No preset cloning, no new preset rows. |
 | Placement persistence | `plate_layout` JSON column on the source file. Reset-to-original available. | Re-opening the slicer restores the arrangement. Source 3MF bytes are never mutated, so nothing is destructive and no versioning is required. |
 | Grouping mechanism | `sliced_from_file_id` FK on `library_files`. | One nullable column closes the gap. The source id is already in scope where the output row is created. |
 | Backfill of existing sliced files | None. | No recoverable link exists. Filename matching would mis-group as often as it helped. Grouping applies to new slices only. |
+
+## 3a. Verified sidecar behaviour
+
+Run 2026-07-30 against `ghcr.io/maziggy/orca-slicer-api:latest` (OrcaSlicer 2.3.2) and `ghcr.io/maziggy/bambu-studio-api:latest` (BambuStudio 02.07.01.57), both `linux/amd64` under emulation on an arm64 host. The sidecar source is `maziggy/orca-slicer-api` @ `bambuddy/profile-resolver`; only the Compose stack lives in this repo.
+
+Facts established, replacing what was previously guesswork:
+
+**1. There is no rich schema dump.** `--help-fff` does not exist in either binary (removed upstream). Neither CLI emits labels, units, ranges or enum options for its settings. **Field metadata must stay hand-curated** — `process_fields.json` is doing the part that cannot be automated.
+
+**2. The authoritative key list *is* obtainable.** `--export-settings out.json` writes every setting the binary knows, with its current value:
+
+| | keys |
+|---|---|
+| BambuStudio 02.07 | 545 |
+| OrcaSlicer 2.3.2 | 572 |
+| common to both | 394 |
+| BambuStudio-only | 151 |
+| OrcaSlicer-only | 178 |
+
+**3. `process_fields.json` is partly invalid, including for the slicer it targets.** The file is labelled "for Bambu Lab printers", but of its 102 keys:
+
+- **91 of 102 valid on BambuStudio** — 11 keys do not exist: `bridge_acceleration`, `fuzzy_skin_point_dist`, `gcode_comments`, `infill_anchor`, `infill_anchor_max`, `initial_layer_height`, `only_one_wall_top`, `overhang_speed_classic`, `prime_tower_enable`, `prime_volume`, `staggered_inner_seams`
+- **98 of 102 valid on OrcaSlicer** — 4 do not exist: `fuzzy_skin_point_dist`, `initial_layer_height`, `overhang_speed_classic`, `prime_tower_enable`
+
+Four are wrong on *both*, and mostly look like naming drift — OrcaSlicer spells them `fuzzy_skin_point_distance`, `initial_layer_print_height`, `enable_prime_tower`. `overhang_speed_classic` has no equivalent at all. Note that `initial_layer_height` appears as an overridden field in the approved mockup; it is one of the broken ones.
+
+**Consequence:** validating overrides against `process_fields.json`, as §5 originally specified, would happily accept keys the slicer then silently ignores. The user changes a setting, the slice succeeds, nothing differs, and nothing reports why. Validation must go against the target slicer's real key set.
+
+**4. Settings can be passed directly on the command line.** `--layer-height 0.3` was accepted and the exported settings confirmed `layer_height: 0.3`; the CLI documents command-line values as the highest-priority source, above `--load-settings` and above the 3MF. So overrides have two viable transports. **The design keeps JSON patching anyway** — it is already proven in this codebase for `bed_type`, needs no sidecar change, and does not put user-supplied strings into an argv.
+
+**5. The CLI transform flags are not a placement shortcut.** `--scale`, `--rotate`, `--rotate-x/y` exist on both binaries. On BambuStudio `--scale 2 --export-3mf` succeeded; on OrcaSlicer the same call **segfaulted, on both STL and 3MF input**. This was on an emulated amd64 host, so the segfault needs confirming on real x86_64 before being treated as settled. Regardless: these flags are *global* — one scale, one rotation, applied to the whole model — so they cannot express per-object placement on a multi-object plate. Byte-rewriting remains the approach. The flags are at best a fallback for single-object STL on BambuStudio only, and are not part of this design.
 
 ## 4. Data model
 
@@ -90,17 +121,28 @@ Migrations follow the existing `_safe_execute(conn, "ALTER TABLE …")` pattern 
 | `?group=nested` on the file-list endpoint — sliced children nested inside their parent rather than returned as siblings | `backend/app/api/routes/library.py` |
 | `GET /library/files/{id}/layout`, `PUT /library/files/{id}/layout` | new |
 | `process_overrides: dict[str, Any]` on `SliceRequest` | `backend/app/schemas/slicer.py` |
-| `GET /slicer/process-fields` — serve `process_fields.json` under the slicer namespace | `backend/app/api/routes/slicer_presets.py` |
+| `GET /slicer/process-fields` — curated field metadata, filtered to keys the configured slicer actually has | `backend/app/api/routes/slicer_presets.py` |
+| `GET /schema` on the **sidecar** — the slicer's real key set and defaults from `--export-settings`, plus slicer name and version | `maziggy/orca-slicer-api` |
 | `GET /slicer/resolved-process?source=<local\|cloud\|orca_cloud\|standard>&id=<id>` — the resolved process JSON, so the editor shows real current values instead of field defaults. `PresetRef` is split into two query params rather than encoded as one, matching how the existing preset endpoints take it. | new |
 
 ### Override validation
 
-`process_overrides` keys are validated against `process_fields.json` before patching:
+Two sources, each authoritative for a different thing (see §3a):
 
-- Unknown key → HTTP 422. Not silently dropped, not passed through to the slicer.
-- Numeric value outside the field's `min`/`max` → HTTP 422.
-- `select` value not among the field's options → HTTP 422.
+- **The target slicer's key set** — from a new sidecar `GET /schema`, backed by `--export-settings`. Authoritative for *whether a key exists*.
+- **`process_fields.json`** — authoritative for *label, unit, type, range and category*. The only source for these; the CLI does not emit them.
+
+The editor renders the intersection: curated fields whose key the active slicer actually has. Fields the active slicer lacks are hidden, not shown-and-broken. `process_overrides` is validated as:
+
+- Key absent from the target slicer's schema → HTTP 422. Not silently dropped, not passed to the slicer.
+- Key present in the slicer but absent from `process_fields.json` → HTTP 422. Without metadata there is no range to validate against, so it is not offered.
+- Numeric value outside the curated `min`/`max` → HTTP 422.
+- `select` value not among the curated options → HTTP 422.
 - Type mismatch → HTTP 422.
+
+`/schema` is cached per sidecar URL and slicer version; it changes only when the sidecar image does.
+
+Fixing the 11 bad keys in `process_fields.json` is **step 4a** below — separate from the editor, because it is a data correction that stands on its own and wants its own review.
 
 The patcher is the generalisation of the existing single-key `bed_type` patch at `backend/app/api/routes/library.py:3355`: same position in the pipeline, same resolved-JSON target, N keys instead of one. `bed_type` continues to work as its own field and is not folded into `process_overrides` — existing clients depend on it.
 
@@ -146,9 +188,15 @@ When the file has at least one existing sliced child, the wizard mounts on **Rev
 
 ## 7. Implementation steps
 
-Eight PRs, each independently mergeable and each shipping something demonstrable. Dependencies are strictly backward — no step requires a later one.
+Ten PRs, each independently mergeable and each shipping something demonstrable. Dependencies are strictly backward — no step requires a later one.
 
-Steps 1→2→3 and 4→7 are independent chains and can be started in parallel worktrees immediately.
+Three chains start with no dependencies and can go into parallel worktrees immediately:
+
+- **1 → 2 → 3** — provenance, grouping, inspector panel
+- **4a → 4 → 7** — field-data correction, overrides, placement backend
+- **4b** — the sidecar `/schema` endpoint, alone and in a different repository
+
+Steps 5, 6 and 8 join the chains back together and cannot start until their dependencies land.
 
 ---
 
@@ -195,18 +243,48 @@ Steps 1→2→3 and 4→7 are independent chains and can be started in parallel 
 
 ---
 
+### Step 4a — Correct `process_fields.json`
+
+> As a user, every setting the slicer UI offers me actually does something.
+
+- Fix the 11 keys listed in §3a: rename where an equivalent exists (`fuzzy_skin_point_distance`, `initial_layer_print_height`, `enable_prime_tower`, …), drop where none does (`overhang_speed_classic`).
+- Where a key exists on one slicer but not the other, tag the field with the slicers it applies to rather than deleting it.
+- Add a test that every key in the file is present in at least one of the two committed slicer key-set fixtures.
+
+**Acceptance:** every remaining key resolves on at least one slicer, and the test fails if a future edit introduces one that resolves on neither.
+
+**Depends on:** nothing. Sequence before step 5 so the editor never ships offering dead settings.
+
+**Note:** this repo has no committed key-set fixture yet. Generate the two fixtures by running `--export-settings` in each sidecar image, as §3a describes, and commit them as test data.
+
+---
+
+### Step 4b — Sidecar `/schema` endpoint
+
+> As Bambuddy, I can ask the sidecar what settings its slicer actually supports.
+
+- In `maziggy/orca-slicer-api` @ `bambuddy/profile-resolver`: `GET /schema` runs `--export-settings` against a throwaway model once at startup, caches it, and returns `{slicer, version, keys, defaults}`.
+- Both images build from the same Node source, so one implementation covers both.
+- Bambuddy caches the response per sidecar URL and version.
+
+**Acceptance:** `GET /schema` on each image returns the key counts in §3a (545 for BambuStudio, 572 for OrcaSlicer) and the correct version string. An unreachable or old sidecar makes Bambuddy fall back to the curated file's own key list, degraded but working.
+
+**Depends on:** nothing. **This is the only step in a different repository** — flag it for whoever picks it up, and note the image must be rebuilt and pushed before step 5 can consume it.
+
+---
+
 ### Step 4 — Per-slice setting overrides (backend)
 
 > As a user, I can override individual print settings for one slice without cloning a preset.
 
 - `process_overrides` on `SliceRequest`.
 - Generalise the `bed_type` patcher to N keys.
-- Validation per §5.
-- `GET /slicer/process-fields` and `GET /slicer/resolved-process`.
+- Two-source validation per §5, with the graceful fallback when `/schema` is unavailable.
+- `GET /slicer/process-fields` (filtered to the active slicer) and `GET /slicer/resolved-process`.
 
-**Acceptance:** a slice request carrying `{"sparse_infill_density": 25}` produces G-code sliced at 25% infill. An unknown key and an out-of-range value each return 422. `bed_type` still works unchanged.
+**Acceptance:** a slice request carrying `{"sparse_infill_density": 25}` produces G-code sliced at 25% infill. A key the target slicer does not have, a key with no curated metadata, and an out-of-range value each return 422. `bed_type` still works unchanged. With the sidecar's `/schema` unreachable, overrides still work against the curated key list.
 
-**Depends on:** nothing.
+**Depends on:** step 4a. Consumes step 4b when available, degrades without it.
 
 ---
 
@@ -254,7 +332,7 @@ Steps 1→2→3 and 4→7 are independent chains and can be started in parallel 
 
 **Depends on:** step 4.
 
-**Read the STL risk in §9 before starting.** Verify the STL path against a real sidecar early — the outcome may change the approach.
+**Read §3a item 5 and the STL risk in §9 before starting.** The CLI transform flags are not a shortcut — they are global, and they segfault on OrcaSlicer. Byte-rewriting is the approach.
 
 ---
 
@@ -282,6 +360,9 @@ Steps 1→2→3 and 4→7 are independent chains and can be started in parallel 
 - Override validation: unknown key, out-of-range numeric, bad `select` value, type mismatch.
 - The generalised patcher against a real process-JSON fixture, asserting `bed_type` behaviour is unchanged.
 - `plate_layout` schema validation, including `version` rejection.
+- Every key in `process_fields.json` resolves against at least one committed slicer key-set fixture (step 4a), so a future edit cannot reintroduce a dead setting unnoticed.
+- Override validation with `/schema` mocked as unreachable, proving the degraded path still slices.
+- Byte-rewritten 3MFs exercised against **both** sidecars, not only the configured default — see the OrcaSlicer risk in §9.
 - Transform rewriting round-tripped through `ThreeMFParser`: geometry counts unchanged, transforms updated.
 
 **Frontend** (`vitest`):
@@ -294,9 +375,13 @@ Steps 1→2→3 and 4→7 are independent chains and can be started in parallel 
 
 ## 9. Risks
 
-**STL placement (affects step 7).** 3MF placement is clean: rewrite the build-item matrices, which is the container's purpose. STL has nowhere to hold a transform, so the matrix must be baked into the vertices — and BambuStudio may then re-centre the model on the bed and discard the translation. Verify against a real sidecar before building the rest of the step. If auto-centring wins, the fallback is wrapping the STL in a minimal 3MF on first placement, which also removes the STL special case entirely. This is called out rather than pre-decided because the answer is empirical.
+**STL placement (affects step 7).** 3MF placement is clean: rewrite the build-item matrices, which is the container's purpose. STL has nowhere to hold a transform, so the matrix must be baked into the vertices — and the slicer may then re-centre the model on the bed and discard the translation. §3a ruled out the CLI-flag shortcut but did not answer the re-centring question, which still needs a real slice. If auto-centring wins, the fallback is wrapping the STL in a minimal 3MF on first placement, which removes the STL special case entirely. Still empirical, still worth settling first inside step 7.
 
-**`process_fields.json` coverage (affects steps 4, 5).** 102 fields is a strong subset, not the roughly 400 BambuStudio exposes. Users who search for an absent setting will notice. The editor must state its scope plainly — "102 of the most-used settings" — rather than implying completeness. Growing the file is a separate, additive piece of work.
+**OrcaSlicer transform segfault (affects step 7).** `--scale`/`--rotate` segfaulted on OrcaSlicer under emulated amd64. The design does not depend on those flags, so this is not blocking — but it is a signal that OrcaSlicer's model-transform path is less exercised than BambuStudio's, and byte-rewritten 3MFs should be tested against **both** sidecars, not just the default one. Confirm on real x86_64 before drawing conclusions about the binary itself.
+
+**Settings coverage (affects steps 4, 5).** 102 curated fields against 545 (BambuStudio) and 572 (OrcaSlicer) real settings — roughly a fifth. Users who search for an absent setting will notice. The editor must state its scope plainly rather than implying completeness. Growing the file is additive work, and §3a's `--export-settings` dumps give a ready worklist of what is missing; but each added field needs a hand-written label, unit and range, because no machine-readable source for those exists.
+
+**Per-slicer divergence (affects steps 4, 4a, 5).** Only 394 of the two slicers' settings are common; 151 are BambuStudio-only and 178 OrcaSlicer-only. A user switching `preferred_slicer` will see the available field list change, and any saved override referencing a now-absent key must be reported rather than silently dropped. Step 4's 422-on-unknown-key rule is what makes this visible instead of mysterious.
 
 **`FileManagerPage.tsx` size (affects steps 2, 3).** Already at 2,776 lines. Two UI steps land in it. Extract only what each step touches; resist a general refactor, and resist leaving new code inline.
 
@@ -304,7 +389,8 @@ Steps 1→2→3 and 4→7 are independent chains and can be started in parallel 
 
 - Removing `SliceModal` (later cleanup, after hardware testing).
 - Backfilling provenance for existing sliced files.
-- Expanding `process_fields.json` beyond its current 102 fields.
+- Expanding `process_fields.json` beyond its current 102 fields. Step 4a corrects the existing ones; it does not add new ones.
+- Using the CLI's global `--scale`/`--rotate` flags for placement (see §3a item 5).
 - Filament and printer preset field editors — process only.
 - Archive-to-archive slice provenance and grouping in the archive list (see §4).
 - Multi-object plate composition (adding a second model to a plate). Placement operates on objects the source file already contains.
