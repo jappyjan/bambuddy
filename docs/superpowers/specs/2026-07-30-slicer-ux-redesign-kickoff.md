@@ -1,6 +1,14 @@
 # Kickoff prompts — slicer UX redesign
 
-Ten steps, ten agents. Each prompt is self-contained: paste it into a fresh session, no prior context needed.
+> **Taskbot is the source of truth, not this file.** These steps now live as tickets in the `bambuddy`
+> Taskbot project: epic **#1** with eleven children, dependencies wired via `blocked_by`. Dispatch with
+> "work on ticket #N" — each ticket body is the full brief.
+>
+> This file is kept as the offline copy. It differs in one way: Taskbot splits the `useSlicePresets`
+> extraction out of step 5 into its own ticket (**#5, step-5a**), because it depends on nothing and can
+> start immediately. If the two disagree, Taskbot wins.
+
+Each prompt is self-contained: paste it into a fresh session, no prior context needed.
 
 ## Ground rules for every agent
 
