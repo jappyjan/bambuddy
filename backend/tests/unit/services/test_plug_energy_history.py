@@ -80,14 +80,37 @@ async def test_yesterday_is_none_until_two_midnights_have_passed(db_session):
 
 
 async def test_nothing_derivable_before_the_first_midnight(db_session):
+    # Fixed clock: this case turns on "30 minutes ago" still being on the same
+    # local day, so run it at a fixed mid-morning rather than at whatever time
+    # the suite happens to run. On the real clock it failed between 00:00 and
+    # 00:30 local, where 30 minutes ago is yesterday and is a valid baseline.
+    now = datetime(2026, 3, 15, 9, 0, tzinfo=timezone.utc)  # 10:00 in Berlin
     plug = await _plug(db_session)
-    now = datetime.now(timezone.utc)
     # Snapshot taken this morning, after midnight — no baseline for the day.
     await _snapshot(db_session, plug.id, now - timedelta(minutes=30), 102.0)
 
-    today, yesterday = await derive_today_yesterday(db_session, plug.id, live_total_kwh=103.5)
+    today, yesterday = await derive_today_yesterday(db_session, plug.id, live_total_kwh=103.5, now_utc=now)
 
     assert today is None
+    assert yesterday is None
+
+
+async def test_a_snapshot_from_just_before_midnight_is_a_valid_baseline(db_session):
+    """The counterpart to the test above, and the behaviour its wall-clock
+    version was accidentally exercising just after midnight.
+
+    A snapshot 30 minutes *before* the boundary is the closest reading to it,
+    so Today is derived from it rather than withheld — which is what makes
+    Today available within an hour of the first midnight an install lives
+    through, instead of a day later.
+    """
+    now = datetime(2026, 3, 15, 0, 5, tzinfo=timezone.utc)  # 01:05 in Berlin
+    plug = await _plug(db_session)
+    await _snapshot(db_session, plug.id, local_day_start(now) - timedelta(minutes=30), 102.0)
+
+    today, yesterday = await derive_today_yesterday(db_session, plug.id, live_total_kwh=103.5, now_utc=now)
+
+    assert today == pytest.approx(1.5)
     assert yesterday is None
 
 
