@@ -175,6 +175,13 @@ class FileResponse(BaseModel):
     filament_used_grams: float | None = None
     sliced_for_model: str | None = None
 
+    # Slice provenance. ``sliced_from_file_id`` is the library file this one was
+    # sliced from (null for uploads and for every row predating the column).
+    # ``slice_count`` is derived, not stored: a COUNT of this file's non-trashed
+    # sliced children, so trashing a slice decrements it.
+    sliced_from_file_id: int | None = None
+    slice_count: int = 0
+
     class Config:
         from_attributes = True
 
@@ -215,6 +222,10 @@ class FileListResponse(BaseModel):
     print_time_seconds: int | None = None
     filament_used_grams: float | None = None
     sliced_for_model: str | None = None
+
+    # Slice provenance — see FileResponse for the semantics.
+    sliced_from_file_id: int | None = None
+    slice_count: int = 0
 
     # Tags assigned to this file (#1268). Empty list when the file has none —
     # never null, so the FE can iterate without a guard.

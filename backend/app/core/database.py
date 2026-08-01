@@ -3783,6 +3783,25 @@ async def run_migrations(conn):
         await _safe_execute(conn, "ALTER TABLE library_files ADD COLUMN fs_modified_at TIMESTAMP")
         await _safe_execute(conn, "ALTER TABLE library_folders ADD COLUMN fs_modified_at TIMESTAMP")
 
+    # Migration: slice provenance + saved plate layout (slicer UX redesign step 1).
+    # ``sliced_from_file_id`` links a sliced output back to the file it came from
+    # so the file manager can group them; SET NULL (not CASCADE) so deleting a
+    # source model never destroys a printable G-code. Indexed because the file
+    # listing counts children per parent on every page load. ``plate_layout``
+    # holds the slicer page's arrangement JSON; archives get it too so the page
+    # works when opened from ArchivesPage, but no provenance FK (see design §4).
+    await _safe_execute(
+        conn,
+        "ALTER TABLE library_files ADD COLUMN sliced_from_file_id INTEGER "
+        "REFERENCES library_files(id) ON DELETE SET NULL",
+    )
+    await _safe_execute(
+        conn,
+        "CREATE INDEX IF NOT EXISTS ix_library_files_sliced_from_file_id ON library_files(sliced_from_file_id)",
+    )
+    await _safe_execute(conn, "ALTER TABLE library_files ADD COLUMN plate_layout JSON")
+    await _safe_execute(conn, "ALTER TABLE print_archives ADD COLUMN plate_layout JSON")
+
     # Migration: Disambiguate the four ``user_print_*`` notification template
     # names by appending " Email" (#1792). See ``_migrate_rename_user_print_template_names``.
     await _migrate_rename_user_print_template_names(conn)

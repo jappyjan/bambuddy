@@ -523,6 +523,9 @@ def _make_orchestration_callable(
                     request=slice_request,
                     current_user_id=creator_user_id,
                     job_id=slice_job_id,
+                    # Only library-file sources have provenance to record —
+                    # archive-to-archive slice provenance is not modelled.
+                    sliced_from_file_id=src_id if src_kind == "library_file" else None,
                 )
             except HTTPException as exc:
                 run.status = "failed"

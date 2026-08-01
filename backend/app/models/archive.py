@@ -67,6 +67,13 @@ class PrintArchive(Base):
     # Extended metadata (JSON blob for flexibility)
     extra_data: Mapped[dict | None] = mapped_column(JSON)
 
+    # Saved plate arrangement, same shape as LibraryFile.plate_layout — the
+    # slicer page must work when opened from ArchivesPage, so an archive needs
+    # somewhere to store its arrangement. Deliberately no slice-provenance FK
+    # here: grouping was asked for in the file manager, and the archive list is
+    # a different surface with its own semantics.
+    plate_layout: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
     # MakerWorld info (auto-extracted from 3MF)
     makerworld_url: Mapped[str | None] = mapped_column(String(500))
     designer: Mapped[str | None] = mapped_column(String(255))
