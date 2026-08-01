@@ -317,6 +317,96 @@ class TestSliceLibraryFile:
 
     @pytest.mark.asyncio
     @pytest.mark.integration
+    async def test_process_overrides_reach_the_process_profile(self, async_client: AsyncClient, slice_test_setup):
+        """Step 4 (#20): keys sent in `process_overrides` must be patched onto
+        the resolved process JSON forwarded to the sidecar. This is what makes
+        `{"sparse_infill_density": 25}` slice at 25% infill — an override that
+        never reaches the profile is the silent no-op this feature exists to
+        prevent. (Asserting the outgoing profile, not the returned G-code:
+        checking the actual infill needs a live sidecar.)"""
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["body"] = bytes(request.content)
+            return httpx.Response(
+                status_code=200,
+                content=_make_3mf_with_settings(),
+                headers={
+                    "x-print-time-seconds": "10",
+                    "x-filament-used-g": "0.1",
+                    "x-filament-used-mm": "1.0",
+                },
+            )
+
+        _install_mock_sidecar(handler)
+        response = await async_client.post(
+            f"/api/v1/library/files/{slice_test_setup['src_file_id']}/slice",
+            json={
+                "printer_preset_id": slice_test_setup["printer_id"],
+                "process_preset_id": slice_test_setup["process_id"],
+                "filament_preset_id": slice_test_setup["filament_id"],
+                "process_overrides": {"sparse_infill_density": 25, "wall_loops": 4},
+            },
+        )
+        assert response.status_code == 202, response.text
+        final = await _wait_for_job(async_client, response.json()["job_id"])
+        assert final["status"] == "completed", final
+
+        assert b'"sparse_infill_density": 25' in captured["body"], (
+            "process_overrides must appear in the process JSON sent to the sidecar"
+        )
+        assert b'"wall_loops": 4' in captured["body"], "every override key must be patched, not just the first"
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_bed_type_wins_over_curr_bed_type_in_process_overrides(
+        self, async_client: AsyncClient, slice_test_setup
+    ):
+        """Both may be present in one request. `bed_type` stays its own field
+        and is authoritative for `curr_bed_type`; the other override keys are
+        applied alongside it."""
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["body"] = bytes(request.content)
+            return httpx.Response(
+                status_code=200,
+                content=_make_3mf_with_settings(),
+                headers={
+                    "x-print-time-seconds": "10",
+                    "x-filament-used-g": "0.1",
+                    "x-filament-used-mm": "1.0",
+                },
+            )
+
+        _install_mock_sidecar(handler)
+        response = await async_client.post(
+            f"/api/v1/library/files/{slice_test_setup['src_file_id']}/slice",
+            json={
+                "printer_preset_id": slice_test_setup["printer_id"],
+                "process_preset_id": slice_test_setup["process_id"],
+                "filament_preset_id": slice_test_setup["filament_id"],
+                "bed_type": "Textured PEI Plate",
+                "process_overrides": {
+                    "curr_bed_type": "Engineering Plate",
+                    "sparse_infill_density": 25,
+                },
+            },
+        )
+        assert response.status_code == 202, response.text
+        final = await _wait_for_job(async_client, response.json()["job_id"])
+        assert final["status"] == "completed", final
+
+        assert b'"curr_bed_type": "Textured PEI Plate"' in captured["body"], (
+            "bed_type must win over a curr_bed_type sent in process_overrides"
+        )
+        assert b'"curr_bed_type": "Engineering Plate"' not in captured["body"]
+        assert b'"sparse_infill_density": 25' in captured["body"], (
+            "other override keys must survive alongside the bed_type override"
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
     async def test_invalid_preset_id_surfaces_as_failed_job_with_status_400(
         self, async_client: AsyncClient, slice_test_setup
     ):
