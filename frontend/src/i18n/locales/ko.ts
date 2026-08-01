@@ -3478,6 +3478,8 @@ export default {
     noMatchingFilesDescription: '현재 검색 또는 필터 조건과 일치하는 파일이 없습니다.',
     clearFilters: '필터 초기화',
     printedCount: '{{count}}회 인쇄됨',
+    slicedBadge: '슬라이스됨',
+    sliceCount: '슬라이스된 파일: {{count}}',
     uploadedBy: '업로드한 사람',
     deleteFolder: '폴더 삭제',
     deleteFile: '파일 삭제',

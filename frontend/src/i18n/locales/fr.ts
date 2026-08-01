@@ -3655,6 +3655,8 @@ export default {
     noMatchingFilesDescription: 'Ajustez votre recherche.',
     clearFilters: 'Effacer filtres',
     printedCount: 'Imprimé {{count}}x',
+    slicedBadge: 'TRANCHÉ',
+    sliceCount: 'Sorties tranchées : {{count}}',
     uploadedBy: 'Téléversé par',
     deleteFolder: 'Supprimer dossier',
     deleteFile: 'Supprimer fichier',

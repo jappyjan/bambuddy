@@ -3666,6 +3666,8 @@ export default {
     noMatchingFilesDescription: '現在の検索またはフィルター条件に一致するファイルがありません。',
     clearFilters: 'フィルターをクリア',
     printedCount: '{{count}}回印刷済み',
+    slicedBadge: 'スライス済み',
+    sliceCount: 'スライス済みファイル: {{count}}',
     uploadedBy: 'アップロード者',
     deleteFolder: 'フォルダを削除',
     deleteFile: 'ファイルを削除',

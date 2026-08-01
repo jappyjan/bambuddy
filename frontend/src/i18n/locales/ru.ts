@@ -3470,6 +3470,8 @@ export default {
     noMatchingFilesDescription: "Нет файлов, соответствующих текущему поиску или фильтрам.",
     clearFilters: "Сбросить фильтры",
     printedCount: "Напечатано: {{count}}×",
+    slicedBadge: "НАРЕЗАН",
+    sliceCount: "Нарезанные файлы: {{count}}",
     uploadedBy: "Загрузил",
     deleteFolder: "Удалить папку",
     deleteFile: "Удалить файл",
