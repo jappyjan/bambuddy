@@ -1976,6 +1976,21 @@ async def list_files(
             )
             hash_counts = {h: c - 1 for h, c in dup_result.all()}  # -1 to exclude self
 
+    # Slice counts for the whole page in one grouped query rather than a COUNT
+    # per row. Trashed children are excluded so trashing a slice decrements the
+    # badge; absent keys mean zero.
+    slice_counts: dict[int, int] = {}
+    if files:
+        sc_result = await db.execute(
+            select(LibraryFile.sliced_from_file_id, func.count(LibraryFile.id))
+            .where(
+                LibraryFile.sliced_from_file_id.in_([f.id for f in files]),
+                LibraryFile.deleted_at.is_(None),
+            )
+            .group_by(LibraryFile.sliced_from_file_id)
+        )
+        slice_counts = dict(sc_result.all())
+
     # Prevent browser caching of file list
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
 
@@ -2011,6 +2026,8 @@ async def list_files(
                 print_time_seconds=print_time,
                 filament_used_grams=filament_grams,
                 sliced_for_model=sliced_for_model,
+                sliced_from_file_id=f.sliced_from_file_id,
+                slice_count=slice_counts.get(f.id, 0),
                 tags=[TagSummary(id=t.id, name=t.name) for t in f.tags],
             )
         )
@@ -3924,9 +3941,14 @@ async def slice_and_persist(
     request: SliceRequest,
     current_user_id: int | None,
     job_id: int | None = None,
+    sliced_from_file_id: int | None = None,
 ) -> SliceResponse:
     """Slice a model and save the result as a new ``LibraryFile`` in
     ``folder_id`` (same folder as the source by convention).
+
+    ``sliced_from_file_id`` records which library file the output came from, so
+    the file manager can group slices under their source. None when the source
+    isn't a library file (e.g. a pipeline run over an archive).
 
     Always exports as ``.gcode.3mf`` so the existing library thumbnail
     pipeline works on the new file. Plain ``.gcode`` would have no
@@ -4015,6 +4037,7 @@ async def slice_and_persist(
         thumbnail_path=thumbnail_relative,
         file_metadata=metadata,
         source_type="sliced",
+        sliced_from_file_id=sliced_from_file_id,
         created_by_id=current_user_id,
     )
     db.add(new_file)
@@ -4309,6 +4332,7 @@ async def slice_library_file(
                     request=request,
                     current_user_id=user_id,
                     job_id=job_id,
+                    sliced_from_file_id=source_lib_file_id,
                 )
             except HTTPException as exc:
                 raise http_exception_to_job_error(exc) from exc
@@ -4420,6 +4444,14 @@ async def get_file(
         filament_grams = file.file_metadata.get("filament_used_grams")
         sliced_for_model = file.file_metadata.get("sliced_for_model")
 
+    # Derived, not stored — trashed children don't count (see design §4).
+    slice_count = await db.scalar(
+        select(func.count(LibraryFile.id)).where(
+            LibraryFile.sliced_from_file_id == file.id,
+            LibraryFile.deleted_at.is_(None),
+        )
+    )
+
     return FileResponseSchema(
         id=file.id,
         folder_id=file.folder_id,
@@ -4446,6 +4478,8 @@ async def get_file(
         print_time_seconds=print_time,
         filament_used_grams=filament_grams,
         sliced_for_model=sliced_for_model,
+        sliced_from_file_id=file.sliced_from_file_id,
+        slice_count=slice_count or 0,
     )
 
 

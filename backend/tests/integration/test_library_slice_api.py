@@ -1618,3 +1618,140 @@ class TestNozzleClassGuard:
         if resp.status_code == 400:
             detail = resp.json().get("detail", "")
             assert "isn't supported" not in detail, f"guard still firing on preset path: {detail!r}"
+
+
+# ---------------------------------------------------------------------------
+# Slice provenance — sliced_from_file_id + derived slice_count
+# ---------------------------------------------------------------------------
+
+
+def _ok_slice_response() -> httpx.Response:
+    """Minimal successful sidecar reply — a real 3MF zip plus the usage headers."""
+    return httpx.Response(
+        status_code=200,
+        content=_make_3mf_with_settings(),
+        headers={
+            "x-print-time-seconds": "120",
+            "x-filament-used-g": "1.0",
+            "x-filament-used-mm": "10.0",
+        },
+    )
+
+
+async def _slice_once(client: AsyncClient, setup: dict) -> int:
+    """Run one slice of the fixture's source file, return the new file's id.
+
+    Awaits the dispatcher's task directly instead of polling ``/slice-jobs``.
+    The test engine is a single shared in-memory SQLite connection, so a poll
+    request that opens and closes a session while the background task has an
+    uncommitted INSERT pending rolls that INSERT back — the job still reports
+    ``completed`` but the row is gone. Every assertion below reads the row back,
+    so the poll has to go.
+    """
+    _install_mock_sidecar(lambda r: _ok_slice_response())
+    resp = await client.post(
+        f"/api/v1/library/files/{setup['src_file_id']}/slice",
+        json={
+            "printer_preset_id": setup["printer_id"],
+            "process_preset_id": setup["process_id"],
+            "filament_preset_id": setup["filament_id"],
+        },
+    )
+    assert resp.status_code == 202, resp.text
+    job_id = resp.json()["job_id"]
+    await slice_dispatch._tasks[job_id]
+    job = slice_dispatch.get(job_id)
+    assert job is not None and job.status == "completed", job
+    return job.result["library_file_id"]
+
+
+class TestSliceProvenance:
+    """Sliced outputs must record the file they came from (design §4).
+
+    Before this, the link only existed as a ``sliced_from_library_file_id`` key
+    inside the output's metadata blob — not queryable, not exposed, and not
+    maintained when the source went away.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_slice_records_source_file_id(self, async_client: AsyncClient, slice_test_setup):
+        sliced_id = await _slice_once(async_client, slice_test_setup)
+
+        detail = await async_client.get(f"/api/v1/library/files/{sliced_id}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["sliced_from_file_id"] == slice_test_setup["src_file_id"]
+
+        # And the source side reports the derived count.
+        src = await async_client.get(f"/api/v1/library/files/{slice_test_setup['src_file_id']}")
+        assert src.json()["slice_count"] == 1
+        assert src.json()["sliced_from_file_id"] is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_deleting_source_leaves_slice_with_null_provenance(self, async_client: AsyncClient, slice_test_setup):
+        """SET NULL, not CASCADE — a printable G-code must survive its source."""
+        sliced_id = await _slice_once(async_client, slice_test_setup)
+        src_id = slice_test_setup["src_file_id"]
+
+        # Managed files go to the trash first; permanently delete from there.
+        trashed = await async_client.delete(f"/api/v1/library/files/{src_id}")
+        assert trashed.status_code == 200, trashed.text
+        purged = await async_client.delete(f"/api/v1/library/trash/{src_id}")
+        assert purged.status_code == 200, purged.text
+
+        detail = await async_client.get(f"/api/v1/library/files/{sliced_id}")
+        assert detail.status_code == 200, "the sliced output must outlive its source"
+        assert detail.json()["sliced_from_file_id"] is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_trashing_a_slice_decrements_slice_count(
+        self, async_client: AsyncClient, db_session, slice_test_setup
+    ):
+        """slice_count is a COUNT of non-trashed children, not a stored column."""
+        src_id = slice_test_setup["src_file_id"]
+        first = await _slice_once(async_client, slice_test_setup)
+
+        # Second child inserted directly: the test engine is one shared
+        # in-memory SQLite connection, so two back-to-back background slice jobs
+        # race on it. Slicing is already covered above — here we only need two
+        # children to watch the count come down.
+        db_session.add(
+            LibraryFile(
+                filename="Cube-2.gcode.3mf",
+                file_path="library/files/Cube-2.gcode.3mf",
+                file_type="gcode.3mf",
+                file_size=1,
+                source_type="sliced",
+                sliced_from_file_id=src_id,
+            )
+        )
+        await db_session.commit()
+
+        src = await async_client.get(f"/api/v1/library/files/{src_id}")
+        assert src.json()["slice_count"] == 2
+
+        trashed = await async_client.delete(f"/api/v1/library/files/{first}")
+        assert trashed.status_code == 200, trashed.text
+        assert trashed.json()["trashed"] is True
+
+        src = await async_client.get(f"/api/v1/library/files/{src_id}")
+        assert src.json()["slice_count"] == 1, "a trashed slice must not inflate the badge"
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_file_listing_exposes_provenance_and_count(self, async_client: AsyncClient, slice_test_setup):
+        """The list endpoint carries both fields, so the grid can group without
+        an extra fetch per card."""
+        sliced_id = await _slice_once(async_client, slice_test_setup)
+        src_id = slice_test_setup["src_file_id"]
+
+        listing = await async_client.get("/api/v1/library/files")
+        assert listing.status_code == 200, listing.text
+        by_id = {row["id"]: row for row in listing.json()}
+
+        assert by_id[src_id]["slice_count"] == 1
+        assert by_id[src_id]["sliced_from_file_id"] is None
+        assert by_id[sliced_id]["sliced_from_file_id"] == src_id
+        assert by_id[sliced_id]["slice_count"] == 0

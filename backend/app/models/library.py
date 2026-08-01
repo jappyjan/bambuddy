@@ -98,6 +98,21 @@ class LibraryFile(Base):
     source_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     source_url: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
 
+    # Slice provenance — the library file this one was sliced from. Set by
+    # ``slice_and_persist``; null for uploads, imports and every row created
+    # before this column existed (there is deliberately no backfill — no
+    # recoverable link exists for old rows). ``SET NULL`` rather than
+    # ``CASCADE``: deleting a source model must not destroy a printable
+    # G-code the user may still need. Indexed because the file listing counts
+    # children per parent on every page load.
+    sliced_from_file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("library_files.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    # Saved plate arrangement for the slicer page ({"version": 1, "plates": …}).
+    # Null means "as designed" — the source bytes are never mutated.
+    plate_layout: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
     # User tracking (Issue #206)
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
@@ -128,6 +143,17 @@ class LibraryFile(Base):
     tags: Mapped[list["LibraryTag"]] = relationship(
         secondary="library_file_tags",
         back_populates="files",
+    )
+    # ponytail: relationship exists so an ORM delete nulls the children's FK.
+    # The DB-level ``ON DELETE SET NULL`` only fires on Postgres — SQLite does
+    # not enforce foreign keys unless ``PRAGMA foreign_keys=ON``, which this
+    # app never sets. Ceiling: the two Core bulk deletes (trash sweeper,
+    # user-deletion cleanup) bypass the ORM, so on SQLite they leave a child
+    # pointing at a vanished id. That degrades to "sliced file with no parent",
+    # which the grouping design already treats as a normal case.
+    sliced_children: Mapped[list["LibraryFile"]] = relationship(
+        "LibraryFile",
+        foreign_keys="LibraryFile.sliced_from_file_id",
     )
 
     @classmethod
