@@ -3534,6 +3534,7 @@ async def _run_slicer_with_fallback(
     """
     from backend.app.api.routes.settings import get_setting
     from backend.app.services.preset_resolver import resolve_preset_ref
+    from backend.app.services.process_overrides import validate_process_overrides
     from backend.app.services.slicer_api import (
         SlicerApiServerError,
         SlicerApiService,
@@ -3565,28 +3566,13 @@ async def _run_slicer_with_fallback(
         assert ref is not None, "schema validator guarantees filament list is non-None"
         filament_jsons.append(await resolve_preset_ref(db, user, ref, "filament"))
 
-    # Per-slice overrides: patch the user's picks onto the resolved process
-    # JSON so the slicer's StaticPrintConfig pass sees them instead of
-    # whatever the process preset defaults to.
-    #   - `process_overrides` is the general case (step 4): arbitrary process
-    #     keys, so a setting can be changed for one slice without cloning a
-    #     preset. Validation of these keys/values against the target slicer's
-    #     schema and the curated metadata hooks in right here, before the
-    #     patch — ticket #29.
-    #   - `bed_type` (#1337) stays its own request field because existing
-    #     clients send it. Applied last so it wins over a `curr_bed_type` in
-    #     `process_overrides`. Without it, slicing an STL of ABS onto a
-    #     process preset whose default is "Cool Plate" fails with "Plate 1:
-    #     Cool Plate does not support filament 1" — the reporter's scenario.
-    overrides: dict[str, Any] = dict(request.process_overrides)
-    if request.bed_type:
-        overrides["curr_bed_type"] = request.bed_type
-    presets["process"] = _patch_process_overrides(presets["process"], overrides)
-
     # Slicer routing — pick the sidecar URL by preferred_slicer.
     # The per-install URL setting (Settings UI → Slicer card) wins; an
     # empty value falls back to the SLICER_API_URL / BAMBU_STUDIO_API_URL
     # env defaults defined in core/config.py.
+    #
+    # Resolved before the override patch below because validating an
+    # override needs to know which slicer's key set to check it against.
     preferred = (await get_setting(db, "preferred_slicer")) or "bambu_studio"
     if preferred == "orcaslicer":
         configured = await get_setting(db, "orcaslicer_api_url")
@@ -3599,6 +3585,28 @@ async def _run_slicer_with_fallback(
             status_code=400,
             detail=f"Unknown preferred_slicer setting: '{preferred}'. Expected 'orcaslicer' or 'bambu_studio'.",
         )
+
+    # Per-slice overrides: patch the user's picks onto the resolved process
+    # JSON so the slicer's StaticPrintConfig pass sees them instead of
+    # whatever the process preset defaults to.
+    #   - `process_overrides` is the general case (step 4): arbitrary process
+    #     keys, so a setting can be changed for one slice without cloning a
+    #     preset. Validated against the target slicer's real key set and the
+    #     curated metadata first (#29) — an unknown key or an out-of-range
+    #     value is a 422, never a value the slicer quietly discards. The
+    #     validator also returns the values spelled the way a process profile
+    #     spells them, which is what makes them take effect at all.
+    #   - `bed_type` (#1337) stays its own request field because existing
+    #     clients send it. Applied last so it wins over a `curr_bed_type` in
+    #     `process_overrides`. Without it, slicing an STL of ABS onto a
+    #     process preset whose default is "Cool Plate" fails with "Plate 1:
+    #     Cool Plate does not support filament 1" — the reporter's scenario.
+    overrides: dict[str, Any] = await validate_process_overrides(
+        request.process_overrides, api_url=api_url, slicer=preferred
+    )
+    if request.bed_type:
+        overrides["curr_bed_type"] = request.bed_type
+    presets["process"] = _patch_process_overrides(presets["process"], overrides)
 
     # Note: an earlier version of this code stripped Metadata/project_settings.
     # config + model_settings.config + slice_info.config + cut_information.xml

@@ -18,9 +18,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.app.api.routes.slicer_presets import _load_process_fields
 from backend.app.models.local_preset import LocalPreset
 from backend.app.models.settings import Settings
+from backend.app.services.process_overrides import load_process_fields
 
 FIELDS_URL = "/api/v1/slicer/process-fields"
 RESOLVED_URL = "/api/v1/slicer/resolved-process"
@@ -33,7 +33,7 @@ async def _set_slicer(db_session, slicer: str) -> None:
 
 def _restricted_keys(slicer: str) -> set[str]:
     """Curated keys tagged as NOT available on `slicer`."""
-    return {f["key"] for f in _load_process_fields() if slicer not in f.get("slicers", [slicer])}
+    return {f["key"] for f in load_process_fields() if slicer not in f.get("slicers", [slicer])}
 
 
 class TestProcessFields:

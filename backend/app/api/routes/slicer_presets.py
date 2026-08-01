@@ -15,8 +15,6 @@ import hashlib
 import json
 import logging
 import time
-from functools import lru_cache
-from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -49,6 +47,15 @@ from backend.app.services.bambu_cloud import (
 from backend.app.services.orca_cloud import (
     OrcaCloudAuthError,
     OrcaCloudError,
+)
+
+# Curated process-field metadata — the only source for a field's label, unit,
+# type, range and category (the slicer CLI emits none of these). Loaded from
+# the service that validates overrides against it (#29) so the fields this
+# module *offers* and the fields a slice request *accepts* are read from one
+# place and cannot drift apart.
+from backend.app.services.process_overrides import (
+    curated_fields_for_slicer,
 )
 from backend.app.services.slicer_api import (
     SlicerApiError,
@@ -590,17 +597,6 @@ async def list_unified_presets(
     )
 
 
-# Curated process-field metadata — the only source for a field's label,
-# unit, type, range and category (the slicer CLI emits none of these).
-# Static per release, so it's read once.
-_PROCESS_FIELDS_PATH = Path(__file__).resolve().parents[2] / "data" / "process_fields.json"
-
-
-@lru_cache(maxsize=1)
-def _load_process_fields() -> list[dict[str, Any]]:
-    return json.loads(_PROCESS_FIELDS_PATH.read_text(encoding="utf-8"))["fields"]
-
-
 async def _preferred_slicer(db: AsyncSession) -> str:
     """The slicer this install slices with — decides which fields exist."""
     from backend.app.api.routes.settings import get_setting
@@ -631,8 +627,7 @@ async def list_process_fields(
     anyone who can slice can see what they may override.
     """
     slicer = await _preferred_slicer(db)
-    fields = [f for f in _load_process_fields() if slicer in f.get("slicers", [slicer])]
-    return {"slicer": slicer, "fields": fields}
+    return {"slicer": slicer, "fields": curated_fields_for_slicer(slicer)}
 
 
 @router.get("/resolved-process")
