@@ -17,6 +17,7 @@ import io
 import json
 import zipfile
 from collections.abc import Callable
+from datetime import datetime
 
 import httpx
 import pytest
@@ -1755,3 +1756,107 @@ class TestSliceProvenance:
         assert by_id[src_id]["sliced_from_file_id"] is None
         assert by_id[sliced_id]["sliced_from_file_id"] == src_id
         assert by_id[sliced_id]["slice_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# GET /library/files?group=nested — sliced outputs folded under their source
+# ---------------------------------------------------------------------------
+
+
+class TestGroupedListing:
+    """Design §7 step 2: ``?group=nested`` returns sliced children inside their
+    parent instead of beside it. Rows are inserted directly — grouping is a
+    pure projection over the listing and needs no real slice run.
+    """
+
+    @staticmethod
+    async def _add(db_session, filename: str, **kwargs) -> LibraryFile:
+        f = LibraryFile(
+            filename=filename,
+            file_path=f"library/files/{filename}",
+            file_type="gcode.3mf" if filename.endswith(".gcode.3mf") else "stl",
+            file_size=1,
+            **kwargs,
+        )
+        db_session.add(f)
+        await db_session.commit()
+        await db_session.refresh(f)
+        return f
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_nested_returns_slices_inside_their_source(self, async_client: AsyncClient, db_session):
+        """A source with several slices collapses to one top-level entry whose
+        ``children`` hold the slices, oldest first. The other top-level file
+        keeps its place: sorting applies to parents, children ride along."""
+        # "a_other" sorts before "b_source"; the children sort before both, so
+        # if children leaked into the ordering the assertion below would fail.
+        other = await self._add(db_session, "a_other.stl")
+        source = await self._add(db_session, "b_source.stl")
+        children = []
+        for i, day in enumerate((3, 1, 2)):  # inserted out of chronological order
+            children.append(
+                await self._add(
+                    db_session,
+                    f"a_slice_{i}.gcode.3mf",
+                    source_type="sliced",
+                    sliced_from_file_id=source.id,
+                    created_at=datetime(2026, 7, day, 12, 0, 0),
+                )
+            )
+
+        r = await async_client.get("/api/v1/library/files?group=nested")
+        assert r.status_code == 200, r.text
+        rows = r.json()
+
+        assert [row["id"] for row in rows] == [other.id, source.id]
+        parent = rows[1]
+        assert parent["slice_count"] == 3
+        # created_at ascending among themselves → the day-1, day-2, day-3 rows.
+        assert [c["id"] for c in parent["children"]] == [children[1].id, children[2].id, children[0].id]
+        assert all(c["sliced_from_file_id"] == source.id for c in parent["children"])
+        assert all(c["children"] == [] for c in parent["children"])
+        assert rows[0]["children"] == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_sliced_file_without_parent_stays_top_level(self, async_client: AsyncClient, db_session):
+        """Every row predating ``sliced_from_file_id`` has it NULL and there is
+        deliberately no backfill (design §3) — those stay ordinary top-level
+        cards rather than disappearing or erroring."""
+        orphan = await self._add(db_session, "old_slice.gcode.3mf", source_type="sliced")
+        upload = await self._add(db_session, "model.stl")
+
+        r = await async_client.get("/api/v1/library/files?group=nested")
+        assert r.status_code == 200, r.text
+        rows = r.json()
+
+        assert {row["id"] for row in rows} == {orphan.id, upload.id}
+        assert all(row["children"] == [] for row in rows)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_default_listing_shape_is_unchanged(self, async_client: AsyncClient, db_session):
+        """Without the parameter existing clients must see exactly what they
+        always saw: parent and slice as siblings, ``children`` empty."""
+        source = await self._add(db_session, "source.stl")
+        sliced = await self._add(
+            db_session,
+            "source.gcode.3mf",
+            source_type="sliced",
+            sliced_from_file_id=source.id,
+        )
+
+        r = await async_client.get("/api/v1/library/files")
+        assert r.status_code == 200, r.text
+        rows = r.json()
+
+        assert {row["id"] for row in rows} == {source.id, sliced.id}
+        assert all(row["children"] == [] for row in rows)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_unknown_group_value_is_rejected(self, async_client: AsyncClient, db_session):
+        """A typo must not silently fall back to the flat listing."""
+        r = await async_client.get("/api/v1/library/files?group=flat")
+        assert r.status_code == 422
