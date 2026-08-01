@@ -1,8 +1,10 @@
 """Pydantic schemas for library (File Manager) functionality."""
 
+import math
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ============ Folder Schemas ============
 
@@ -414,3 +416,76 @@ class BatchThumbnailResponse(BaseModel):
     succeeded: int
     failed: int
     results: list[BatchThumbnailResult]
+
+
+# ============ Plate Layout ============
+
+
+class PlateObjectPlacement(BaseModel):
+    """Placement of one 3MF object on a plate.
+
+    ``object_id`` matches the 3MF object id ``ModelViewer`` parses into
+    ``ObjectData.id``. ``position`` is millimetres in bed coordinates,
+    ``rotation`` is degrees XYZ and ``scale`` is a multiplier per axis.
+    Objects absent from a plate's array keep their original transform, so
+    every object listed here must carry a complete transform.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    object_id: str = Field(..., min_length=1, max_length=64)
+    position: list[float] = Field(..., min_length=3, max_length=3)
+    rotation: list[float] = Field(..., min_length=3, max_length=3)
+    scale: list[float] = Field(..., min_length=3, max_length=3)
+
+    @field_validator("position", "rotation", "scale")
+    @classmethod
+    def _finite(cls, v: list[float]) -> list[float]:
+        # JSON proper has no NaN/Infinity, but Python's decoder accepts the
+        # literals — a non-finite component would produce a transform matrix
+        # that silently corrupts the model at slice time.
+        if any(not math.isfinite(c) for c in v):
+            raise ValueError("components must be finite numbers")
+        return v
+
+    @field_validator("scale")
+    @classmethod
+    def _positive_scale(cls, v: list[float]) -> list[float]:
+        # Zero collapses the object and a negative multiplier mirrors it;
+        # neither is something the placement UI can produce, so treat them
+        # as a malformed transform rather than storing them.
+        if any(c <= 0 for c in v):
+            raise ValueError("scale components must be greater than zero")
+        return v
+
+
+class PlateLayout(BaseModel):
+    """Saved plate arrangement for a library file (spec §4).
+
+    ``version`` exists so a future shape change is detectable; readers reject
+    anything other than ``1``. Plate keys are stringified plate numbers,
+    1-indexed, matching the ``plate`` field on ``SliceRequest``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[1]
+    plates: dict[str, list[PlateObjectPlacement]]
+
+    @field_validator("plates")
+    @classmethod
+    def _plate_keys_are_1_indexed(cls, v: dict) -> dict:
+        for key in v:
+            if not key.isdigit() or int(key) < 1:
+                raise ValueError(f"plate key {key!r} must be a 1-indexed plate number as a string")
+        return v
+
+
+class PlateLayoutResponse(BaseModel):
+    """Schema for the layout GET/PUT response.
+
+    ``layout`` is null when the file has no saved arrangement ("as designed").
+    """
+
+    file_id: int
+    layout: PlateLayout | None = None
