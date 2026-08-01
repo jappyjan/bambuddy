@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import time
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -32,6 +33,7 @@ from backend.app.core.database import get_db
 from backend.app.core.permissions import Permission
 from backend.app.models.local_preset import LocalPreset
 from backend.app.models.user import User
+from backend.app.schemas.slicer import PresetRef
 from backend.app.schemas.slicer_presets import (
     UnifiedPreset,
     UnifiedPresetsBySlot,
@@ -45,6 +47,15 @@ from backend.app.services.bambu_cloud import (
 from backend.app.services.orca_cloud import (
     OrcaCloudAuthError,
     OrcaCloudError,
+)
+
+# Curated process-field metadata — the only source for a field's label, unit,
+# type, range and category (the slicer CLI emits none of these). Loaded from
+# the service that validates overrides against it (#29) so the fields this
+# module *offers* and the fields a slice request *accepts* are read from one
+# place and cannot drift apart.
+from backend.app.services.process_overrides import (
+    curated_fields_for_slicer,
 )
 from backend.app.services.slicer_api import (
     SlicerApiError,
@@ -584,6 +595,83 @@ async def list_unified_presets(
         cloud_status=cloud_status,
         orca_cloud_status=orca_cloud_status,
     )
+
+
+async def _preferred_slicer(db: AsyncSession) -> str:
+    """The slicer this install slices with — decides which fields exist."""
+    from backend.app.api.routes.settings import get_setting
+
+    return (await get_setting(db, "preferred_slicer")) or "bambu_studio"
+
+
+@router.get("/process-fields")
+async def list_process_fields(
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = RequirePermissionIfAuthEnabled(Permission.LIBRARY_UPLOAD),
+) -> dict[str, Any]:
+    """Curated process-setting metadata, filtered to the configured slicer.
+
+    Drives the per-slice override editor: it renders one control per field
+    using ``label`` / ``type`` / ``min`` / ``max`` / ``options``, none of
+    which the slicer CLI exposes. Filtering matters because the two
+    supported slicers do not share a key set — a field OrcaSlicer has and
+    BambuStudio doesn't must be hidden rather than shown-and-broken, which
+    is the exact failure this surface exists to prevent.
+
+    A field carries ``slicers`` only when it is *not* valid on every
+    supported slicer; absent means universal (see the file's own header and
+    ``tests/unit/test_process_fields_keys.py``, which pins the tag against
+    the real ``--export-settings`` key sets).
+
+    Permission gate matches the slice action itself (``LIBRARY_UPLOAD``):
+    anyone who can slice can see what they may override.
+    """
+    slicer = await _preferred_slicer(db)
+    return {"slicer": slicer, "fields": curated_fields_for_slicer(slicer)}
+
+
+@router.get("/resolved-process")
+async def get_resolved_process(
+    source: Literal["local", "cloud", "orca_cloud", "standard"] = Query(
+        ..., description="Preset tier the id belongs to."
+    ),
+    id: str = Query(..., description="Preset id within that tier (local DB row id, cloud id, or standard name)."),
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = RequirePermissionIfAuthEnabled(Permission.LIBRARY_UPLOAD),
+    api_key_cloud_owner: User | None = Depends(resolve_api_key_cloud_owner),
+) -> dict[str, Any]:
+    """Return the resolved process JSON for one preset.
+
+    The override editor needs the preset's *current* values to prefill its
+    controls — showing ``process_fields.json`` defaults instead would tell
+    the user their 0.28mm preset prints at whatever the curated default is,
+    and every untouched control would then silently propose a change.
+
+    Resolution goes through the same ``resolve_preset_ref`` the slice route
+    uses, so what the editor shows is what the slicer would be handed. The
+    ``standard`` tier is the one exception: its resolution is an
+    ``{name, inherits, from, type}`` stub that the sidecar flattens against
+    its bundled profiles at slice time, so no concrete values exist on this
+    side of the wire for it.
+
+    ``PresetRef`` arrives as two query params rather than one encoded blob,
+    matching how the rest of the preset surface takes it.
+    """
+    from backend.app.services.preset_resolver import resolve_preset_ref
+
+    raw = await resolve_preset_ref(
+        db,
+        current_user or api_key_cloud_owner,
+        PresetRef(source=source, id=id),
+        "process",
+    )
+    try:
+        profile = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="Resolved process preset is not valid JSON") from None
+    if not isinstance(profile, dict):
+        raise HTTPException(status_code=502, detail="Resolved process preset is not a JSON object")
+    return profile
 
 
 @router.get("/preview-progress/{request_id}")

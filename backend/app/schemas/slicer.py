@@ -1,6 +1,6 @@
 """Pydantic schemas for slice requests."""
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -106,6 +106,17 @@ class SliceRequest(BaseModel):
             "'High Temp Plate', 'Textured PEI Plate', 'Smooth PEI Plate', "
             "'Cool Plate (SuperTack)', 'Supertack Plate'. None ⇒ inherit from the "
             "process preset unchanged (#1337)."
+        ),
+    )
+    process_overrides: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Per-slice print-setting overrides, patched onto the resolved process "
+            "profile before it reaches the slicer, so a user can change individual "
+            "settings for one slice without cloning a preset. Keys are slicer "
+            "setting names as the CLI spells them (e.g. 'sparse_infill_density'). "
+            "``bed_type`` above stays a field of its own and wins over a "
+            "``curr_bed_type`` supplied here."
         ),
     )
 

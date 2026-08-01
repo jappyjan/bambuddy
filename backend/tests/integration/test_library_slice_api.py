@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import pathlib
 import zipfile
 from collections.abc import Callable
 from datetime import datetime
@@ -28,7 +29,7 @@ from backend.app.core.config import settings as app_settings
 from backend.app.models.library import LibraryFile
 from backend.app.models.local_preset import LocalPreset
 from backend.app.models.settings import Settings as SettingsModel
-from backend.app.services import slicer_api as slicer_api_module
+from backend.app.services import process_overrides as process_overrides_module, slicer_api as slicer_api_module
 from backend.app.services.slice_dispatch import slice_dispatch
 
 # ---------------------------------------------------------------------------
@@ -59,6 +60,41 @@ def _make_3mf_with_settings(settings_payload: dict | None = None) -> bytes:
         )
         zf.writestr("Metadata/cut_information.xml", "<cut><part id='1'/></cut>")
     return buf.getvalue()
+
+
+_SLICER_KEYS_DIR = pathlib.Path(__file__).resolve().parents[1] / "_fixtures" / "slicer_keys"
+
+
+def _orcaslicer_schema(*, drop: set[str] | None = None, version: str = "2.3.2") -> dict:
+    """A `GET /schema` body built from the key set captured off the real
+    OrcaSlicer binary. `drop` removes keys to model a slicer that lacks
+    something the curated file knows about."""
+    keys = json.loads((_SLICER_KEYS_DIR / "orcaslicer.json").read_text())["keys"]
+    return {
+        "slicer": "OrcaSlicer",
+        "version": version,
+        "keys": [k for k in keys if k not in (drop or set())],
+        "defaults": {},
+    }
+
+
+def _schema_aware_handler(schema: dict) -> Callable[[httpx.Request], httpx.Response]:
+    """Mock sidecar that serves `/schema` and slices everything else."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/schema":
+            return httpx.Response(200, json=schema)
+        return httpx.Response(
+            status_code=200,
+            content=_make_3mf_with_settings(),
+            headers={
+                "x-print-time-seconds": "10",
+                "x-filament-used-g": "0.1",
+                "x-filament-used-mm": "1.0",
+            },
+        )
+
+    return handler
 
 
 def _install_mock_sidecar(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.AsyncClient:
@@ -125,6 +161,11 @@ async def slice_test_setup(db_session, tmp_path):
 
     db_session.add(SettingsModel(key="preferred_slicer", value="orcaslicer"))
     await db_session.commit()
+
+    # The /schema cache is a module global keyed by sidecar URL, and every
+    # test here shares one URL — leaving an entry behind would let one test's
+    # mocked key set decide another's outcome.
+    process_overrides_module._schema_cache.clear()
 
     for p in presets.values():
         await db_session.refresh(p)
@@ -315,6 +356,199 @@ class TestSliceLibraryFile:
         assert b"curr_bed_type" not in captured["body"], (
             "bed_type must stay out of the process JSON when no override is set"
         )
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_process_overrides_reach_the_process_profile(self, async_client: AsyncClient, slice_test_setup):
+        """Step 4 (#20): keys sent in `process_overrides` must be patched onto
+        the resolved process JSON forwarded to the sidecar. This is what makes
+        `{"sparse_infill_density": 25}` slice at 25% infill — an override that
+        never reaches the profile is the silent no-op this feature exists to
+        prevent. (Asserting the outgoing profile, not the returned G-code:
+        checking the actual infill needs a live sidecar.)
+
+        Values arrive spelled the way a process profile spells them (#29):
+        `25` goes out as `"25%"`. Verified live on 2026-08-01 — the raw JSON
+        number is discarded by the CLI's config parser and the slice comes
+        back at the preset's own default."""
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["body"] = bytes(request.content)
+            return httpx.Response(
+                status_code=200,
+                content=_make_3mf_with_settings(),
+                headers={
+                    "x-print-time-seconds": "10",
+                    "x-filament-used-g": "0.1",
+                    "x-filament-used-mm": "1.0",
+                },
+            )
+
+        _install_mock_sidecar(handler)
+        response = await async_client.post(
+            f"/api/v1/library/files/{slice_test_setup['src_file_id']}/slice",
+            json={
+                "printer_preset_id": slice_test_setup["printer_id"],
+                "process_preset_id": slice_test_setup["process_id"],
+                "filament_preset_id": slice_test_setup["filament_id"],
+                "process_overrides": {"sparse_infill_density": 25, "wall_loops": 4},
+            },
+        )
+        assert response.status_code == 202, response.text
+        final = await _wait_for_job(async_client, response.json()["job_id"])
+        assert final["status"] == "completed", final
+
+        assert b'"sparse_infill_density": "25%"' in captured["body"], (
+            "process_overrides must appear in the process JSON sent to the sidecar"
+        )
+        assert b'"wall_loops": "4"' in captured["body"], "every override key must be patched, not just the first"
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_bed_type_applies_alongside_process_overrides(self, async_client: AsyncClient, slice_test_setup):
+        """Both may be present in one request. `bed_type` stays its own field
+        and is authoritative for `curr_bed_type` — it is applied after the
+        validated overrides, so it wins — and the other override keys are
+        applied alongside it."""
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["body"] = bytes(request.content)
+            return httpx.Response(
+                status_code=200,
+                content=_make_3mf_with_settings(),
+                headers={
+                    "x-print-time-seconds": "10",
+                    "x-filament-used-g": "0.1",
+                    "x-filament-used-mm": "1.0",
+                },
+            )
+
+        _install_mock_sidecar(handler)
+        response = await async_client.post(
+            f"/api/v1/library/files/{slice_test_setup['src_file_id']}/slice",
+            json={
+                "printer_preset_id": slice_test_setup["printer_id"],
+                "process_preset_id": slice_test_setup["process_id"],
+                "filament_preset_id": slice_test_setup["filament_id"],
+                "bed_type": "Textured PEI Plate",
+                "process_overrides": {"sparse_infill_density": 25},
+            },
+        )
+        assert response.status_code == 202, response.text
+        final = await _wait_for_job(async_client, response.json()["job_id"])
+        assert final["status"] == "completed", final
+
+        assert b'"curr_bed_type": "Textured PEI Plate"' in captured["body"]
+        assert b'"sparse_infill_density": "25%"' in captured["body"], (
+            "other override keys must survive alongside the bed_type override"
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_curr_bed_type_in_process_overrides_is_rejected(self, async_client: AsyncClient, slice_test_setup):
+        """`curr_bed_type` has no curated metadata, so it is not part of the
+        override surface (#29) — `bed_type` is the field for it. Rejecting
+        beats accepting a key Bambuddy has no range or type to check."""
+        _install_mock_sidecar(lambda r: httpx.Response(200, content=b""))
+        response = await async_client.post(
+            f"/api/v1/library/files/{slice_test_setup['src_file_id']}/slice",
+            json={
+                "printer_preset_id": slice_test_setup["printer_id"],
+                "process_preset_id": slice_test_setup["process_id"],
+                "filament_preset_id": slice_test_setup["filament_id"],
+                "process_overrides": {"curr_bed_type": "Engineering Plate"},
+            },
+        )
+        assert response.status_code == 202
+        final = await _wait_for_job(async_client, response.json()["job_id"])
+        assert final["status"] == "failed"
+        assert final["error_status"] == 422
+        assert "curr_bed_type" in (final["error_detail"] or "")
+
+    # -- #29: two-source validation, end to end through the slice route -----
+
+    async def _slice_with_overrides(self, client: AsyncClient, setup, overrides: dict) -> dict:
+        response = await client.post(
+            f"/api/v1/library/files/{setup['src_file_id']}/slice",
+            json={
+                "printer_preset_id": setup["printer_id"],
+                "process_preset_id": setup["process_id"],
+                "filament_preset_id": setup["filament_id"],
+                "process_overrides": overrides,
+            },
+        )
+        assert response.status_code == 202, response.text
+        return await _wait_for_job(client, response.json()["job_id"])
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_key_the_slicer_lacks_is_rejected_with_422(self, async_client: AsyncClient, slice_test_setup):
+        """The sidecar's key set is authoritative for whether a key exists.
+        A curated key the *binary* does not have must be refused, because the
+        CLI would drop it and slice happily at the preset's own value."""
+        schema = _orcaslicer_schema(drop={"wall_loops"})
+        _install_mock_sidecar(_schema_aware_handler(schema))
+        final = await self._slice_with_overrides(async_client, slice_test_setup, {"wall_loops": 4})
+        assert final["status"] == "failed"
+        assert final["error_status"] == 422
+        assert "wall_loops" in (final["error_detail"] or "")
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_key_with_no_curated_metadata_is_rejected_with_422(self, async_client: AsyncClient, slice_test_setup):
+        """`bed_exclude_area` is a real OrcaSlicer setting with no curated
+        entry — no label, no range, so it is neither offered nor accepted."""
+        _install_mock_sidecar(_schema_aware_handler(_orcaslicer_schema()))
+        final = await self._slice_with_overrides(async_client, slice_test_setup, {"bed_exclude_area": "0x0"})
+        assert final["status"] == "failed"
+        assert final["error_status"] == 422
+        assert "curated metadata" in (final["error_detail"] or "")
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_out_of_range_value_is_rejected_with_422(self, async_client: AsyncClient, slice_test_setup):
+        _install_mock_sidecar(_schema_aware_handler(_orcaslicer_schema()))
+        final = await self._slice_with_overrides(async_client, slice_test_setup, {"sparse_infill_density": 150})
+        assert final["status"] == "failed"
+        assert final["error_status"] == 422
+        assert "at most 100" in (final["error_detail"] or "")
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_type_mismatch_is_rejected_with_422(self, async_client: AsyncClient, slice_test_setup):
+        _install_mock_sidecar(_schema_aware_handler(_orcaslicer_schema()))
+        final = await self._slice_with_overrides(async_client, slice_test_setup, {"layer_height": "thick"})
+        assert final["status"] == "failed"
+        assert final["error_status"] == 422
+        assert "expects a number" in (final["error_detail"] or "")
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_overrides_still_work_when_schema_is_unreachable(self, async_client: AsyncClient, slice_test_setup):
+        """An old sidecar has no `/schema` route at all. Overrides must keep
+        working against the curated key list — degraded, never a hard fail."""
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/schema":
+                return httpx.Response(404, json={"message": "Not Found"})
+            captured["body"] = bytes(request.content)
+            return httpx.Response(
+                status_code=200,
+                content=_make_3mf_with_settings(),
+                headers={
+                    "x-print-time-seconds": "10",
+                    "x-filament-used-g": "0.1",
+                    "x-filament-used-mm": "1.0",
+                },
+            )
+
+        _install_mock_sidecar(handler)
+        final = await self._slice_with_overrides(async_client, slice_test_setup, {"sparse_infill_density": 25})
+        assert final["status"] == "completed", final
+        assert b'"sparse_infill_density": "25%"' in captured["body"]
 
     @pytest.mark.asyncio
     @pytest.mark.integration

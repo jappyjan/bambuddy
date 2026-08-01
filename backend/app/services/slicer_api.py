@@ -213,6 +213,34 @@ class SlicerApiService:
             raise SlicerApiUnavailableError(f"Slicer sidecar /profiles/bundled returned {response.status_code}")
         return response.json()
 
+    async def schema(self) -> dict:
+        """GET /schema — the slicer's real setting key set, plus its name,
+        version and current defaults.
+
+        Backed by `--export-settings` inside the sidecar, which is the only
+        way to learn which keys a given slicer binary actually has: the two
+        supported slicers disagree on ~330 of them, and a key the binary
+        does not know is dropped with a log line the user never sees. Used
+        to validate per-slice `process_overrides` before they are patched
+        into the process JSON (#29).
+
+        Shape: ``{slicer, version, keys, defaults}`` — `slicer` is the CLI's
+        own spelling ("BambuStudio" / "OrcaSlicer"), not Bambuddy's
+        `preferred_slicer` value.
+
+        Only the fork images serve this endpoint; an older sidecar answers
+        404, which surfaces as `SlicerApiUnavailableError` alongside the
+        genuine connection failures so the caller has one degraded path to
+        handle rather than two.
+        """
+        try:
+            response = await self._client.get(f"{self.base_url}/schema", timeout=30.0)
+        except httpx.RequestError as exc:
+            raise SlicerApiUnavailableError(f"Slicer sidecar unreachable: {exc}") from exc
+        if response.status_code >= 400:
+            raise SlicerApiUnavailableError(f"Slicer sidecar /schema returned {response.status_code}")
+        return response.json()
+
     async def _poll_progress(
         self,
         request_id: str,
