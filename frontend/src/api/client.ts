@@ -6160,6 +6160,7 @@ export const api = {
     scope?: 'internal' | 'external',
     recursive = false,
     tagIds: number[] = [],
+    group?: 'nested',
   ) => {
     const params = new URLSearchParams();
     if (folderId !== undefined && folderId !== null) {
@@ -6182,6 +6183,10 @@ export const api = {
     for (const tagId of tagIds) {
       params.append('tag_ids', String(tagId));
     }
+    // group=nested moves sliced outputs off the top level and into their
+    // source file's `children` (slicer UX redesign, spec §7 step 2). Absent =
+    // today's flat listing, with `children` empty everywhere.
+    if (group) params.set('group', group);
     return request<LibraryFileListItem[]>(`/library/files?${params}`);
   },
   getLibraryFolderReadme: (folderId: number) =>
@@ -6897,6 +6902,13 @@ export interface LibraryFileListItem {
   // legacy code path (or mock) that constructs a LibraryFileListItem without
   // it doesn't crash the renderer. Read sites use `file.tags ?? []`.
   tags?: LibraryTagSummary[];
+  // Number of non-trashed files sliced from this one. Render slice badges from
+  // this, never from `children.length` — a child can be filtered out of the
+  // current view while still existing.
+  slice_count?: number;
+  // Sliced outputs nested under their source. Only populated when the listing
+  // was requested with `group=nested`; `[]` otherwise. One level deep.
+  children?: LibraryFileListItem[];
 }
 
 // Library tag catalog (#1268)

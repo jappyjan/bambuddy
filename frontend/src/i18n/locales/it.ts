@@ -3654,6 +3654,8 @@ export default {
     noMatchingFilesDescription: 'Nessun file corrisponde ai criteri di ricerca o filtro.',
     clearFilters: 'Pulisci filtri',
     printedCount: 'Stampato {{count}}x',
+    slicedBadge: 'AFFETTATO',
+    sliceCount: 'File affettati: {{count}}',
     uploadedBy: 'Caricato da',
     deleteFolder: 'Elimina cartella',
     deleteFile: 'Elimina file',

@@ -3669,6 +3669,8 @@ export default {
     noMatchingFilesDescription: 'Ningún archivo coincide con su búsqueda o los criterios de filtro actuales.',
     clearFilters: 'Borrar filtros',
     printedCount: 'Impreso {{count}} veces',
+    slicedBadge: 'LAMINADO',
+    sliceCount: 'Salidas laminadas: {{count}}',
     uploadedBy: 'Subido por',
     deleteFolder: 'Eliminar carpeta',
     deleteFile: 'Eliminar archivo',
