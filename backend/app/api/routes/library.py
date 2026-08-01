@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse as FastAPIFileResponse
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,6 +58,8 @@ from backend.app.schemas.library import (
     FolderResponse,
     FolderTreeItem,
     FolderUpdate,
+    PlateLayout,
+    PlateLayoutResponse,
     TagSummary,
     ZipExtractError,
     ZipExtractResponse,
@@ -3051,6 +3053,70 @@ async def get_library_file_plate_thumbnail(
         pass  # Archive unreadable or thumbnail missing; fall through to 404
 
     raise HTTPException(status_code=404, detail=f"Thumbnail for plate {plate_index} not found")
+
+
+@router.get("/files/{file_id}/layout", response_model=PlateLayoutResponse)
+async def get_library_file_layout(
+    file_id: int,
+    db: AsyncSession = Depends(get_db),
+    auth_result: tuple[User | None, bool] = Depends(
+        require_ownership_permission(
+            Permission.LIBRARY_READ_ALL,
+            Permission.LIBRARY_READ_OWN,
+        )
+    ),
+):
+    """Get the saved plate arrangement for a library file.
+
+    ``layout`` is null when the file has no stored arrangement — the model is
+    sliced as designed.
+    """
+    user, can_read_all = auth_result
+
+    result = await db.execute(LibraryFile.active().where(LibraryFile.id == file_id))
+    lib_file = _ensure_library_file_visible(result.scalar_one_or_none(), user, can_read_all)
+
+    if not lib_file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return PlateLayoutResponse(file_id=file_id, layout=lib_file.plate_layout)
+
+
+@router.put("/files/{file_id}/layout", response_model=PlateLayoutResponse)
+async def update_library_file_layout(
+    file_id: int,
+    layout: PlateLayout | None = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+    auth_result: tuple[User | None, bool] = Depends(
+        require_ownership_permission(
+            Permission.LIBRARY_UPDATE_ALL,
+            Permission.LIBRARY_UPDATE_OWN,
+        )
+    ),
+):
+    """Save the plate arrangement for a library file.
+
+    The body is validated against the shape in the design spec §4; a
+    ``version`` other than 1 is rejected. A body of ``null`` clears the stored
+    layout, resetting the file to its original arrangement. The file's bytes
+    are never touched — the layout is applied at slice time.
+    """
+    user, can_modify_all = auth_result
+
+    result = await db.execute(LibraryFile.active().where(LibraryFile.id == file_id))
+    lib_file = result.scalar_one_or_none()
+
+    if not lib_file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if not can_modify_all and lib_file.created_by_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only update your own files")
+
+    lib_file.plate_layout = layout.model_dump() if layout is not None else None
+    await db.commit()
+    await db.refresh(lib_file)
+
+    return PlateLayoutResponse(file_id=file_id, layout=lib_file.plate_layout)
 
 
 async def _try_preview_slice_filaments(
