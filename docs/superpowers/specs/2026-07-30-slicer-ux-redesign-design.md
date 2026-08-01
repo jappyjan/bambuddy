@@ -2,7 +2,9 @@
 
 **Date:** 2026-07-30
 **Status:** Approved design, not yet implemented
-**Fork policy:** All work stays on this fork. No PRs to the upstream repository until the owner has manually tested the full flow.
+**Fork policy:** All work happens in forks under `jappyjan` — `jappyjan/bambuddy` and `jappyjan/orca-slicer-api`. **Nothing is pushed or proposed to any `maziggy/*` repository or registry** until the owner has tested the full flow from the forks. Upstream PRs are a single deliberate step at the end, not something individual tickets do.
+
+**Sidecar images:** use `ghcr.io/jappyjan/orca-slicer-api` and `ghcr.io/jappyjan/bambu-studio-api` — these carry the `GET /schema` endpoint of §7 Step 4b. The `ghcr.io/maziggy/*` images are unchanged and **do not** have it. Both fork packages are private; pulling needs `docker login ghcr.io` with a `read:packages` token.
 
 ---
 
@@ -45,7 +47,9 @@ Make slicing in Bambuddy feel like using a desktop slicer next to an operating-s
 
 ## 3a. Verified sidecar behaviour
 
-Run 2026-07-30 against `ghcr.io/maziggy/orca-slicer-api:latest` (OrcaSlicer 2.3.2) and `ghcr.io/maziggy/bambu-studio-api:latest` (BambuStudio 02.07.01.57), both `linux/amd64` under emulation on an arm64 host. The sidecar source is `maziggy/orca-slicer-api` @ `bambuddy/profile-resolver`; only the Compose stack lives in this repo.
+Run 2026-07-30 against `ghcr.io/maziggy/orca-slicer-api:latest` (OrcaSlicer 2.3.2) and `ghcr.io/maziggy/bambu-studio-api:latest` (BambuStudio 02.07.01.57), both `linux/amd64` under emulation on an arm64 host. Only the Compose stack lives in this repo.
+
+> The `maziggy` image names above are what the spike was run against, and the measurements below still hold — the two namespaces differ only by the added `/schema` endpoint. **New work should use the `ghcr.io/jappyjan/*` images** (see the fork policy at the top). Sidecar source now lives in the fork, `jappyjan/orca-slicer-api` @ `bambuddy/profile-resolver`.
 
 Facts established, replacing what was previously guesswork:
 
@@ -122,7 +126,7 @@ Migrations follow the existing `_safe_execute(conn, "ALTER TABLE …")` pattern 
 | `GET /library/files/{id}/layout`, `PUT /library/files/{id}/layout` | new |
 | `process_overrides: dict[str, Any]` on `SliceRequest` | `backend/app/schemas/slicer.py` |
 | `GET /slicer/process-fields` — curated field metadata, filtered to keys the configured slicer actually has | `backend/app/api/routes/slicer_presets.py` |
-| `GET /schema` on the **sidecar** — the slicer's real key set and defaults from `--export-settings`, plus slicer name and version | `maziggy/orca-slicer-api` |
+| `GET /schema` on the **sidecar** — the slicer's real key set and defaults from `--export-settings`, plus slicer name and version | `jappyjan/orca-slicer-api` (fork) |
 | `GET /slicer/resolved-process?source=<local\|cloud\|orca_cloud\|standard>&id=<id>` — the resolved process JSON, so the editor shows real current values instead of field defaults. `PresetRef` is split into two query params rather than encoded as one, matching how the existing preset endpoints take it. | new |
 
 ### Override validation
@@ -263,7 +267,7 @@ Steps 5, 6 and 8 join the chains back together and cannot start until their depe
 
 > As Bambuddy, I can ask the sidecar what settings its slicer actually supports.
 
-- In `maziggy/orca-slicer-api` @ `bambuddy/profile-resolver`: `GET /schema` runs `--export-settings` against a throwaway model once at startup, caches it, and returns `{slicer, version, keys, defaults}`.
+- In the fork `jappyjan/orca-slicer-api` @ `bambuddy/profile-resolver` (**never** upstream `maziggy`): `GET /schema` runs `--export-settings` against a throwaway model once at startup, caches it, and returns `{slicer, version, keys, defaults}`.
 - Both images build from the same Node source, so one implementation covers both.
 - Bambuddy caches the response per sidecar URL and version.
 
