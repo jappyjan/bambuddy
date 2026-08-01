@@ -231,6 +231,12 @@ class FileListResponse(BaseModel):
     # never null, so the FE can iterate without a guard.
     tags: list[TagSummary] = []
 
+    # Sliced outputs nested under their source, populated only by
+    # ``GET /library/files?group=nested`` (design §7 step 2). Additive and
+    # always present, so callers that don't ask for grouping see the exact
+    # same shape they always did — every entry just carries an empty list.
+    children: list["FileListResponse"] = []
+
     class Config:
         from_attributes = True
 

@@ -3662,6 +3662,8 @@ export default {
     noMatchingFilesDescription: 'Mevcut arama veya filtre kriterlerinizle eşleşen dosya yok.',
     clearFilters: 'Filtreleri temizle',
     printedCount: '{{count}}x yazdırıldı',
+    slicedBadge: 'DİLİMLENDİ',
+    sliceCount: 'Dilimlenmiş dosyalar: {{count}}',
     uploadedBy: 'Yükleyen',
     deleteFolder: 'Klasörü Sil',
     deleteFile: 'Dosyayı Sil',

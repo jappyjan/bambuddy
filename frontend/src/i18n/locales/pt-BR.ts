@@ -3654,6 +3654,8 @@ export default {
     noMatchingFilesDescription: 'Nenhum arquivo corresponde aos seus critérios de pesquisa ou filtro.',
     clearFilters: 'Limpar filtros',
     printedCount: 'Impresso {{count}}x',
+    slicedBadge: 'FATIADO',
+    sliceCount: 'Arquivos fatiados: {{count}}',
     uploadedBy: 'Enviado por',
     deleteFolder: 'Excluir pasta',
     deleteFile: 'Excluir arquivo',

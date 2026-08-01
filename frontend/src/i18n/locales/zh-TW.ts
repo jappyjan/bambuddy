@@ -3654,6 +3654,8 @@ export default {
     noMatchingFilesDescription: '沒有檔案匹配您目前的搜尋或篩選條件。',
     clearFilters: '清除篩選',
     printedCount: '已列印 {{count}} 次',
+    slicedBadge: '已切片',
+    sliceCount: '已切片檔案：{{count}}',
     uploadedBy: '上傳者',
     deleteFolder: '刪除資料夾',
     deleteFile: '刪除檔案',

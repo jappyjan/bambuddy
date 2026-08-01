@@ -13,7 +13,7 @@ import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse as FastAPIFileResponse
@@ -1879,6 +1879,7 @@ async def list_files(
     external_only: bool = False,
     recursive: bool = False,
     tag_ids: list[int] = Query(default_factory=list),
+    group: Literal["nested"] | None = None,
     db: AsyncSession = Depends(get_db),
     auth_result: tuple[User | None, bool] = Depends(
         require_ownership_permission(
@@ -1910,6 +1911,10 @@ async def list_files(
                  intentionally bypassed — tags are cross-cutting and the user
                  wants "every file with this tag" regardless of where it lives.
                  ``recursive`` becomes irrelevant in that case.
+        group: ``nested`` folds sliced outputs into their source file's
+               ``children`` instead of returning them as siblings (design
+               §7 step 2). Omitted — the default — the response is exactly
+               what it always was, with ``children`` empty on every entry.
     """
     if internal_only and external_only:
         raise HTTPException(
@@ -2033,7 +2038,46 @@ async def list_files(
             )
         )
 
+    if group == "nested":
+        file_list = _nest_sliced_children(file_list)
+
     return file_list
+
+
+def _nest_sliced_children(rows: list[FileListResponse]) -> list[FileListResponse]:
+    """Fold sliced outputs into their source's ``children`` (design §7 step 2).
+
+    A row moves only when its ``sliced_from_file_id`` names a file that is
+    itself a *top-level* entry of this same page. Everything else stays where
+    it is — in particular a slice whose ``sliced_from_file_id`` is NULL, which
+    is every row predating the column (there is deliberately no backfill,
+    design §3). That is the normal case, not an error.
+
+    Ordering: the caller has already sorted and filtered, and that ordering
+    applies to parents only. Parents keep their relative positions here;
+    children ride along inside their parent, sorted by ``created_at`` so the
+    slice history reads oldest-first.
+
+    Nesting stays exactly one level deep. A slice of a slice (sliced outputs
+    are ``*.gcode.3mf``, which the slice endpoint accepts as input) would
+    otherwise land two levels down and vanish from a UI that renders one level
+    of children — so when the immediate parent is itself nested, the row stays
+    top-level rather than being hidden.
+    """
+    by_id = {r.id: r for r in rows}
+    child_ids = {r.id for r in rows if r.sliced_from_file_id in by_id and r.sliced_from_file_id != r.id}
+
+    top_level: list[FileListResponse] = []
+    for row in rows:
+        parent = by_id.get(row.sliced_from_file_id) if row.sliced_from_file_id else None
+        if parent is not None and parent is not row and parent.id not in child_ids:
+            parent.children.append(row)
+        else:
+            top_level.append(row)
+
+    for row in top_level:
+        row.children.sort(key=lambda c: c.created_at)
+    return top_level
 
 
 @router.post("/files", response_model=FileUploadResponse)

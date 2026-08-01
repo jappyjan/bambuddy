@@ -13,7 +13,6 @@ import {
   ChevronRight,
   FolderPlus,
   FileBox,
-  Clock,
   CalendarClock,
   HardDrive,
   File,
@@ -66,12 +65,13 @@ import { FileUploadModal } from '../components/FileUploadModal';
 import { FolderReadmePanel } from '../components/FolderReadmePanel';
 import { LibraryTagsModal } from '../components/LibraryTagsModal';
 import { PurgeOldFilesModal } from '../components/PurgeOldFilesModal';
+import { FileCard } from '../components/FileCard';
 import { useToast } from '../contexts/ToastContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { usePageFileDrop } from '../hooks/usePageFileDrop';
 import { useAuth } from '../contexts/AuthContext';
-import { formatDuration, parseUTCDate, formatDate } from '../utils/date';
-import { formatFileSize } from '../utils/file';
+import { parseUTCDate, formatDate } from '../utils/date';
+import { formatFileSize, isSlicedFilename, isSliceableFilename } from '../utils/file';
 
 type SortField = 'name' | 'date' | 'size' | 'type' | 'prints';
 type SortDirection = 'asc' | 'desc';
@@ -708,264 +708,10 @@ function FolderTreeItem({ folder, selectedFolderId, onSelect, onDelete, onLink, 
   );
 }
 
-// Helper to check if a file is sliced (printable)
-function isSlicedFilename(filename: string): boolean {
-  const lower = filename.toLowerCase();
-  return lower.endsWith('.gcode') || lower.endsWith('.gcode.3mf');
-}
-
-// Files that can be fed to the slicer sidecar (model geometry inputs).
-// Excludes .gcode.* (already sliced) and any other non-model formats.
-function isSliceableFilename(filename: string): boolean {
-  const lower = filename.toLowerCase();
-  if (lower.endsWith('.gcode') || lower.endsWith('.gcode.3mf')) return false;
-  return lower.endsWith('.stl') || lower.endsWith('.3mf') || lower.endsWith('.step') || lower.endsWith('.stp');
-}
-
-// File Card
-interface FileCardProps {
-  file: LibraryFileListItem;
-  isSelected: boolean;
-  isMobile: boolean;
-  onSelect: (id: number) => void;
-  onDelete: (id: number) => void;
-  onDownload: (id: number) => void;
-  onPrint?: (file: LibraryFileListItem) => void;
-  onSlice?: (file: LibraryFileListItem) => void;
-  onRunPipeline?: (file: LibraryFileListItem) => void;
-  useSlicerApi?: boolean;
-  onPreview3d?: (file: LibraryFileListItem) => void;
-  onRename?: (file: LibraryFileListItem) => void;
-  onGenerateThumbnail?: (file: LibraryFileListItem) => void;
-  onTagClick?: (tagId: number) => void;
-  thumbnailVersion?: number;
-  hasPermission: (permission: Permission) => boolean;
-  canModify: (resource: 'queue' | 'archives' | 'library', action: 'update' | 'delete' | 'reprint', createdById: number | null | undefined) => boolean;
-  authEnabled: boolean;
-  showModified: boolean;
-  t: TFunction;
-}
-
-function FileCard({ file, isSelected, isMobile, onSelect, onDelete, onDownload, onPrint, onSlice, onRunPipeline, useSlicerApi, onPreview3d, onRename, onGenerateThumbnail, onTagClick, thumbnailVersion, hasPermission, canModify, authEnabled, showModified, t }: FileCardProps) {
-  const [showActions, setShowActions] = useState(false);
-
-  return (
-    <div
-      className={`group relative bg-bambu-dark-secondary rounded-lg border transition-all cursor-pointer overflow-hidden ${
-        isSelected
-          ? 'border-bambu-green ring-1 ring-bambu-green'
-          : 'border-bambu-dark-tertiary hover:border-bambu-green/50'
-      }`}
-      onClick={() => onSelect(file.id)}
-    >
-      {/* Thumbnail */}
-      <div className="aspect-square bg-bambu-dark flex items-center justify-center overflow-hidden">
-        {file.thumbnail_path ? (
-          <img
-            src={`${api.getLibraryFileThumbnailUrl(file.id)}${thumbnailVersion ? ((api.getLibraryFileThumbnailUrl(file.id).includes('?') ? '&' : '?') + `v=${thumbnailVersion}`) : ''}`}
-            alt={file.filename}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <FileBox className="w-12 h-12 text-bambu-gray/30" />
-        )}
-        {/* File type badge */}
-        <div className={`absolute top-2 right-2 text-xs px-1.5 py-0.5 rounded font-medium ${
-          file.file_type === '3mf' ? 'bg-bambu-green/90 text-white'
-          // Sliced output — share the gcode blue so users see at a glance
-          // that the file is already sliced and ready to print (#1543).
-          : file.file_type === 'gcode' || file.file_type === 'gcode.3mf' ? 'bg-blue-500/90 text-white'
-          : file.file_type === 'stl' ? 'bg-purple-500/90 text-white'
-          : 'bg-bambu-gray/90 text-white'
-        }`}>
-          {file.file_type.toUpperCase()}
-        </div>
-      </div>
-
-      {/* Info */}
-      <div className="p-3">
-        <h3 className="text-sm font-medium text-white truncate" title={file.print_name || file.filename}>
-          {file.print_name || file.filename}
-        </h3>
-        <div className="flex items-center gap-3 mt-1 text-xs text-bambu-gray">
-          <span>{formatFileSize(file.file_size)}</span>
-          {file.print_time_seconds && (
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {formatDuration(file.print_time_seconds)}
-            </span>
-          )}
-        </div>
-        {file.sliced_for_model && (
-          <div className="mt-1 text-xs text-bambu-gray flex items-center gap-1">
-            <Printer className="w-3 h-3" />
-            {file.sliced_for_model}
-          </div>
-        )}
-        {file.print_count > 0 && (
-          <div className="mt-1 text-xs text-bambu-green">
-            {t('fileManager.printedCount', { count: file.print_count })}
-          </div>
-        )}
-        {authEnabled && file.created_by_username && (
-          <div className="mt-1 text-xs text-bambu-gray flex items-center gap-1">
-            <User className="w-3 h-3" />
-            {file.created_by_username}
-          </div>
-        )}
-        {/* #2680: last-modified date, toggled from the toolbar. Uses the real
-            on-disk mtime when known, else the DB created_at. */}
-        {showModified && (
-          <div className="mt-1 text-xs text-bambu-gray flex items-center gap-1" title={t('fileManager.lastModified')}>
-            <CalendarClock className="w-3 h-3" />
-            {formatDate(file.fs_modified_at ?? file.created_at)}
-          </div>
-        )}
-        {(file.tags?.length ?? 0) > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
-            {file.tags!.map((tg) => (
-              <button
-                key={tg.id}
-                type="button"
-                onClick={() => onTagClick?.(tg.id)}
-                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] bg-bambu-green/10 text-bambu-green hover:bg-bambu-green/20 transition-colors max-w-full"
-                title={tg.name}
-              >
-                <TagIcon className="w-2.5 h-2.5 flex-shrink-0" />
-                <span className="truncate">{tg.name}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Actions - always visible on mobile, hover on desktop */}
-      <div className={`absolute bottom-2 right-2 transition-opacity ${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={() => setShowActions(!showActions)}
-          className="p-1.5 rounded bg-bambu-dark-secondary/90 hover:bg-bambu-dark-tertiary"
-        >
-          <MoreVertical className="w-4 h-4 text-bambu-gray" />
-        </button>
-        {showActions && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setShowActions(false)} />
-            <div className="absolute right-0 bottom-8 z-20 bg-bambu-dark-secondary border border-bambu-dark-tertiary rounded-lg shadow-xl py-1 min-w-[140px]">
-              {onPrint && isSlicedFilename(file.filename) && (
-                <button
-                  className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 ${
-                    hasPermission('queue:create') ? 'text-bambu-green hover:bg-bambu-dark' : 'text-bambu-gray cursor-not-allowed'
-                  }`}
-                  onClick={() => { if (hasPermission('queue:create')) { onPrint(file); setShowActions(false); } }}
-                  disabled={!hasPermission('queue:create')}
-                  title={!hasPermission('queue:create') ? t('fileManager.noPermissionAddToQueue') : undefined}
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  {t('common.print')}
-                </button>
-              )}
-              {onSlice && useSlicerApi && isSliceableFilename(file.filename) && (
-                <button
-                  className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 ${
-                    hasPermission('library:upload') ? 'text-white hover:bg-bambu-dark' : 'text-bambu-gray cursor-not-allowed'
-                  }`}
-                  onClick={() => { if (hasPermission('library:upload')) { onSlice(file); setShowActions(false); } }}
-                  disabled={!hasPermission('library:upload')}
-                  title={!hasPermission('library:upload') ? t('fileManager.noPermissionSlice') : undefined}
-                >
-                  <Cog className="w-3.5 h-3.5" />
-                  {t('slice.action')}
-                </button>
-              )}
-              {onRunPipeline && useSlicerApi && isSliceableFilename(file.filename) && (
-                <button
-                  className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 ${
-                    hasPermission('pipelines:run') ? 'text-white hover:bg-bambu-dark' : 'text-bambu-gray cursor-not-allowed'
-                  }`}
-                  onClick={() => { if (hasPermission('pipelines:run')) { onRunPipeline(file); setShowActions(false); } }}
-                  disabled={!hasPermission('pipelines:run')}
-                  title={!hasPermission('pipelines:run') ? t('library.runWithPipeline.noPermission') : undefined}
-                >
-                  <Play className="w-3.5 h-3.5" />
-                  {t('library.runWithPipeline.actionLabel')}
-                </button>
-              )}
-              {onPreview3d && (file.file_type === '3mf' || file.file_type === 'gcode' || file.file_type === 'stl' || file.file_type === 'gcode.3mf') && (
-                <button
-                  className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 ${
-                    hasPermission('library:read') ? 'text-white hover:bg-bambu-dark' : 'text-bambu-gray cursor-not-allowed'
-                  }`}
-                  onClick={() => { if (hasPermission('library:read')) { onPreview3d(file); setShowActions(false); } }}
-                  disabled={!hasPermission('library:read')}
-                  title={!hasPermission('library:read') ? 'You do not have permission to preview files' : undefined}
-                >
-                  <Box className="w-3.5 h-3.5" />
-                  3D Preview
-                </button>
-              )}
-              <button
-                className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 ${
-                  hasPermission('library:read') ? 'text-white hover:bg-bambu-dark' : 'text-bambu-gray cursor-not-allowed'
-                }`}
-                onClick={() => { if (hasPermission('library:read')) { onDownload(file.id); setShowActions(false); } }}
-                disabled={!hasPermission('library:read')}
-                title={!hasPermission('library:read') ? t('fileManager.noPermissionDownload') : undefined}
-              >
-                <Download className="w-3.5 h-3.5" />
-                {t('common.download')}
-              </button>
-              {onRename && (
-                <button
-                  className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 ${
-                    canModify('library', 'update', file.created_by_id) ? 'text-white hover:bg-bambu-dark' : 'text-bambu-gray cursor-not-allowed'
-                  }`}
-                  onClick={() => { if (canModify('library', 'update', file.created_by_id)) { onRename(file); setShowActions(false); } }}
-                  disabled={!canModify('library', 'update', file.created_by_id)}
-                  title={!canModify('library', 'update', file.created_by_id) ? t('fileManager.noPermissionRenameFile') : undefined}
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  {t('common.rename')}
-                </button>
-              )}
-              {onGenerateThumbnail && file.file_type === 'stl' && (
-                <button
-                  className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 ${
-                    canModify('library', 'update', file.created_by_id) ? 'text-white hover:bg-bambu-dark' : 'text-bambu-gray cursor-not-allowed'
-                  }`}
-                  onClick={() => { if (canModify('library', 'update', file.created_by_id)) { onGenerateThumbnail(file); setShowActions(false); } }}
-                  disabled={!canModify('library', 'update', file.created_by_id)}
-                  title={!canModify('library', 'update', file.created_by_id) ? t('fileManager.noPermissionGenerateThumbnail') : undefined}
-                >
-                  <Image className="w-3.5 h-3.5" />
-                  {t('fileManager.generateThumbnail')}
-                </button>
-              )}
-              <button
-                className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 ${
-                  canModify('library', 'delete', file.created_by_id) ? 'text-red-700 dark:text-red-400 hover:bg-bambu-dark' : 'text-bambu-gray cursor-not-allowed'
-                }`}
-                onClick={() => { if (canModify('library', 'delete', file.created_by_id)) { onDelete(file.id); setShowActions(false); } }}
-                disabled={!canModify('library', 'delete', file.created_by_id)}
-                title={!canModify('library', 'delete', file.created_by_id) ? t('fileManager.noPermissionDeleteFile') : undefined}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                {t('common.delete')}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Selection checkbox - always visible on mobile, hover on desktop */}
-      <div className={`absolute top-2 left-2 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-        isSelected
-          ? 'bg-bambu-green border-bambu-green'
-          : `border-white/30 bg-black/30 ${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`
-      }`}>
-        {isSelected && <div className="w-2 h-2 bg-white rounded-sm" />}
-      </div>
-    </div>
-  );
+// `?group=nested` hands sliced outputs back inside their source's `children`.
+// Selection and the list view work on individual rows, so they flatten first.
+function flattenGrouped(items: LibraryFileListItem[]): LibraryFileListItem[] {
+  return items.flatMap((f) => [f, ...(f.children ?? [])]);
 }
 
 export function FileManagerPage() {
@@ -1222,6 +968,9 @@ export function FileManagerPage() {
         selectedFolderId === null ? topLevelView : undefined,
         searchExpandsSubfolders,
         tagFilterKey,
+        // Sliced outputs come back nested under the file they were sliced
+        // from instead of sitting beside it (spec §7 step 2).
+        'nested',
       ),
   });
 
@@ -1301,6 +1050,10 @@ export function FileManagerPage() {
 
     return result;
   }, [files, searchQuery, filterType, filterUsername, sortField, sortDirection]);
+
+  // Every visible row, nested slices included. The grid nests them inside the
+  // FileCard; the list view and select-all need them flat.
+  const flatFiles = useMemo(() => flattenGrouped(filteredAndSortedFiles), [filteredAndSortedFiles]);
 
   // Check if disk space is low
   const isDiskSpaceLow = useMemo(() => {
@@ -1514,7 +1267,7 @@ export function FileManagerPage() {
   // Get sliced files from selection
   const selectedSlicedFiles = useMemo(() => {
     if (!files) return [];
-    return files.filter(f => selectedFiles.includes(f.id) && isSlicedFile(f.filename));
+    return flattenGrouped(files).filter(f => selectedFiles.includes(f.id) && isSlicedFile(f.filename));
   }, [files, selectedFiles, isSlicedFile]);
 
   // Handlers
@@ -1526,10 +1279,10 @@ export function FileManagerPage() {
   }, []);
 
   const handleSelectAll = useCallback(() => {
-    if (filteredAndSortedFiles.length > 0) {
-      setSelectedFiles(filteredAndSortedFiles.map((f) => f.id));
+    if (flatFiles.length > 0) {
+      setSelectedFiles(flatFiles.map((f) => f.id));
     }
-  }, [filteredAndSortedFiles]);
+  }, [flatFiles]);
 
   const handleDeselectAll = useCallback(() => {
     setSelectedFiles([]);
@@ -2164,7 +1917,7 @@ export function FileManagerPage() {
           {filteredAndSortedFiles.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 mb-4 p-2 bg-bambu-dark-secondary rounded-lg border border-bambu-dark-tertiary sticky top-[52px] z-10 lg:static">
               {/* Select all / Deselect all */}
-              {selectedFiles.length === filteredAndSortedFiles.length && selectedFiles.length > 0 ? (
+              {selectedFiles.length === flatFiles.length && selectedFiles.length > 0 ? (
                 <Button
                   variant="secondary"
                   size="sm"
@@ -2309,7 +2062,7 @@ export function FileManagerPage() {
                   <FileCard
                     key={file.id}
                     file={file}
-                    isSelected={selectedFiles.includes(file.id)}
+                    selectedFiles={selectedFiles}
                     isMobile={isMobile}
                     t={t}
                     onSelect={handleFileSelect}
@@ -2333,7 +2086,7 @@ export function FileManagerPage() {
                     onRename={(f) => setRenameItem({ type: 'file', id: f.id, name: f.filename })}
                     onGenerateThumbnail={(f) => singleThumbnailMutation.mutate(f.id)}
                     onTagClick={toggleTagFilter}
-                    thumbnailVersion={thumbnailVersions[file.id]}
+                    thumbnailVersions={thumbnailVersions}
                     hasPermission={hasPermission}
                     canModify={canModify}
                     authEnabled={authEnabled}
@@ -2366,8 +2119,9 @@ export function FileManagerPage() {
                   <div>{t('fileManager.tags.title')}</div>
                   <div />
                 </div>
-                {/* List rows */}
-                {filteredAndSortedFiles.map((file) => (
+                {/* List rows. Flat — nesting is a grid-only treatment, so a
+                    grouped slice still gets its own row here. */}
+                {flatFiles.map((file) => (
                   <div
                     key={file.id}
                     className={`grid ${authEnabled ? 'grid-cols-[auto_1fr_120px_100px_100px_100px_minmax(0,200px)_220px]' : 'grid-cols-[auto_1fr_100px_100px_100px_minmax(0,200px)_220px]'} gap-4 px-4 py-3 items-center border-b border-bambu-dark-tertiary last:border-b-0 cursor-pointer hover:bg-bambu-dark/50 transition-colors ${

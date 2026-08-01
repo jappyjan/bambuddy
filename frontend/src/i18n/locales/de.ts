@@ -3666,6 +3666,8 @@ export default {
     noMatchingFilesDescription: 'Keine Dateien entsprechen Ihren aktuellen Such- oder Filterkriterien.',
     clearFilters: 'Filter zurücksetzen',
     printedCount: '{{count}}x gedruckt',
+    slicedBadge: 'GESLICED',
+    sliceCount: 'Slice-Ergebnisse: {{count}}',
     uploadedBy: 'Hochgeladen von',
     deleteFolder: 'Ordner löschen',
     deleteFile: 'Datei löschen',
