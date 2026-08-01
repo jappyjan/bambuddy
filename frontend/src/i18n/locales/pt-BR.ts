@@ -3656,6 +3656,14 @@ export default {
     printedCount: 'Impresso {{count}}x',
     slicedBadge: 'FATIADO',
     sliceCount: 'Arquivos fatiados: {{count}}',
+    // Inspector panel (slicer UX redesign, spec §7 step 3).
+    inspector: {
+      slicePrint: 'Fatiar e imprimir',
+      addToQueue: 'Adicionar à fila',
+      preview3d: 'Pré-visualização 3D',
+      dimensions: 'Dimensões',
+      uploaded: 'Enviado em {{date}}',
+    },
     uploadedBy: 'Enviado por',
     deleteFolder: 'Excluir pasta',
     deleteFile: 'Excluir arquivo',

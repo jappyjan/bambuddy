@@ -3668,6 +3668,14 @@ export default {
     printedCount: '{{count}}x gedruckt',
     slicedBadge: 'GESLICED',
     sliceCount: 'Slice-Ergebnisse: {{count}}',
+    // Inspector panel (slicer UX redesign, spec §7 step 3).
+    inspector: {
+      slicePrint: 'Slicen & Drucken',
+      addToQueue: 'Zur Warteschlange hinzufügen',
+      preview3d: '3D-Vorschau',
+      dimensions: 'Abmessungen',
+      uploaded: 'Hochgeladen am {{date}}',
+    },
     uploadedBy: 'Hochgeladen von',
     deleteFolder: 'Ordner löschen',
     deleteFile: 'Datei löschen',

@@ -3656,6 +3656,14 @@ export default {
     printedCount: '已列印 {{count}} 次',
     slicedBadge: '已切片',
     sliceCount: '已切片檔案：{{count}}',
+    // Inspector panel (slicer UX redesign, spec §7 step 3).
+    inspector: {
+      slicePrint: '切片並列印',
+      addToQueue: '加入佇列',
+      preview3d: '3D 預覽',
+      dimensions: '尺寸',
+      uploaded: '上傳於 {{date}}',
+    },
     uploadedBy: '上傳者',
     deleteFolder: '刪除資料夾',
     deleteFile: '刪除檔案',

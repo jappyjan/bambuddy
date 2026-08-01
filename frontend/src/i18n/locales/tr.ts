@@ -3664,6 +3664,14 @@ export default {
     printedCount: '{{count}}x yazdırıldı',
     slicedBadge: 'DİLİMLENDİ',
     sliceCount: 'Dilimlenmiş dosyalar: {{count}}',
+    // Inspector panel (slicer UX redesign, spec §7 step 3).
+    inspector: {
+      slicePrint: 'Dilimle ve yazdır',
+      addToQueue: 'Kuyruğa ekle',
+      preview3d: '3D önizleme',
+      dimensions: 'Boyutlar',
+      uploaded: 'Yüklendi {{date}}',
+    },
     uploadedBy: 'Yükleyen',
     deleteFolder: 'Klasörü Sil',
     deleteFile: 'Dosyayı Sil',

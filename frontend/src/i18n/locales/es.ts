@@ -3671,6 +3671,14 @@ export default {
     printedCount: 'Impreso {{count}} veces',
     slicedBadge: 'LAMINADO',
     sliceCount: 'Salidas laminadas: {{count}}',
+    // Inspector panel (slicer UX redesign, spec §7 step 3).
+    inspector: {
+      slicePrint: 'Laminar e imprimir',
+      addToQueue: 'Añadir a la cola',
+      preview3d: 'Vista previa 3D',
+      dimensions: 'Dimensiones',
+      uploaded: 'Subido el {{date}}',
+    },
     uploadedBy: 'Subido por',
     deleteFolder: 'Eliminar carpeta',
     deleteFile: 'Eliminar archivo',

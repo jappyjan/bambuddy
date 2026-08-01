@@ -3656,6 +3656,14 @@ export default {
     printedCount: 'Stampato {{count}}x',
     slicedBadge: 'AFFETTATO',
     sliceCount: 'File affettati: {{count}}',
+    // Inspector panel (slicer UX redesign, spec §7 step 3).
+    inspector: {
+      slicePrint: 'Affetta e stampa',
+      addToQueue: 'Aggiungi alla coda',
+      preview3d: 'Anteprima 3D',
+      dimensions: 'Dimensioni',
+      uploaded: 'Caricato il {{date}}',
+    },
     uploadedBy: 'Caricato da',
     deleteFolder: 'Elimina cartella',
     deleteFile: 'Elimina file',
