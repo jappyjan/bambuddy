@@ -3472,6 +3472,14 @@ export default {
     printedCount: "Напечатано: {{count}}×",
     slicedBadge: "НАРЕЗАН",
     sliceCount: "Нарезанные файлы: {{count}}",
+    // Inspector panel (slicer UX redesign, spec §7 step 3).
+    inspector: {
+      slicePrint: "Нарезать и печатать",
+      addToQueue: "Добавить в очередь",
+      preview3d: "3D-просмотр",
+      dimensions: "Размеры",
+      uploaded: "Загружено {{date}}",
+    },
     uploadedBy: "Загрузил",
     deleteFolder: "Удалить папку",
     deleteFile: "Удалить файл",

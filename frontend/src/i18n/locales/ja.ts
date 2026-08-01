@@ -3668,6 +3668,14 @@ export default {
     printedCount: '{{count}}回印刷済み',
     slicedBadge: 'スライス済み',
     sliceCount: 'スライス済みファイル: {{count}}',
+    // Inspector panel (slicer UX redesign, spec §7 step 3).
+    inspector: {
+      slicePrint: 'スライスして印刷',
+      addToQueue: 'キューに追加',
+      preview3d: '3Dプレビュー',
+      dimensions: 'サイズ（寸法）',
+      uploaded: 'アップロード日 {{date}}',
+    },
     uploadedBy: 'アップロード者',
     deleteFolder: 'フォルダを削除',
     deleteFile: 'ファイルを削除',

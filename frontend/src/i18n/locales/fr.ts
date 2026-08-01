@@ -3657,6 +3657,14 @@ export default {
     printedCount: 'Imprimé {{count}}x',
     slicedBadge: 'TRANCHÉ',
     sliceCount: 'Sorties tranchées : {{count}}',
+    // Inspector panel (slicer UX redesign, spec §7 step 3).
+    inspector: {
+      slicePrint: 'Trancher et imprimer',
+      addToQueue: 'Ajouter à la file',
+      preview3d: 'Aperçu 3D',
+      dimensions: 'Dimensions du modèle',
+      uploaded: 'Téléversé le {{date}}',
+    },
     uploadedBy: 'Téléversé par',
     deleteFolder: 'Supprimer dossier',
     deleteFile: 'Supprimer fichier',
