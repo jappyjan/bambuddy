@@ -67,6 +67,7 @@ import { LibraryTagsModal } from '../components/LibraryTagsModal';
 import { PurgeOldFilesModal } from '../components/PurgeOldFilesModal';
 import { FileCard } from '../components/FileCard';
 import { FileInspectorPanel } from '../components/FileInspectorPanel';
+import { BottomSheet } from '../components/BottomSheet';
 import { useToast } from '../contexts/ToastContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { usePageFileDrop } from '../hooks/usePageFileDrop';
@@ -1381,6 +1382,40 @@ export function FileManagerPage() {
     return findFolder(folders);
   }, [selectedFolderId, folders]);
 
+  // One inspector, two presentations: a rail beside the grid on a desktop, a
+  // drag-to-resize bottom sheet on a phone (spec §7 step 3, mockup screen 1
+  // option A). The element is built once here and mounted in exactly one of the
+  // two places below, so there is no second panel and no second selection state
+  // to keep in sync — only `className` differs.
+  const inspectorPanel = inspectedFile ? (
+    <FileInspectorPanel
+      file={inspectedFile}
+      plateCount={inspectedPlates?.plates.length || null}
+      onClose={handleCloseInspector}
+      onPrint={setPrintFile}
+      onSlice={setSliceFile}
+      useSlicerApi={settings?.use_slicer_api ?? false}
+      onDownload={handleDownload}
+      onRename={(f) => setRenameItem({ type: 'file', id: f.id, name: f.filename })}
+      onDelete={(id) => setDeleteConfirm({ type: 'file', id })}
+      onPreview3d={(f) => {
+        if (isSlicedFilename(f.filename)) {
+          navigate(`/gcode-viewer?library_file=${f.id}`);
+        } else {
+          setViewerFile(f);
+        }
+      }}
+      onTagClick={toggleTagFilter}
+      thumbnailVersions={thumbnailVersions}
+      hasPermission={hasPermission}
+      canModify={canModify}
+      t={t}
+      className={
+        isMobile ? 'w-full h-full min-h-0' : 'w-full lg:w-80 lg:flex-shrink-0 lg:max-h-full'
+      }
+    />
+  ) : null;
+
   return (
     <div
       className="p-4 md:p-8 min-h-[calc(100vh-64px)] lg:h-[calc(100vh-64px)] flex flex-col relative"
@@ -2401,38 +2436,25 @@ export function FileManagerPage() {
               row, not a route. Rendered from `inspectedFile` with no `key`, so
               clicking another file re-renders this same instance with a new
               `file` prop; React never unmounts it and the panel updates in
-              place. That is the whole reason for this layout (spec §3). */}
-          {inspectedFile && (
-            <FileInspectorPanel
-              file={inspectedFile}
-              plateCount={inspectedPlates?.plates.length || null}
-              onClose={handleCloseInspector}
-              onPrint={setPrintFile}
-              onSlice={setSliceFile}
-              useSlicerApi={settings?.use_slicer_api ?? false}
-              onDownload={handleDownload}
-              onRename={(f) => setRenameItem({ type: 'file', id: f.id, name: f.filename })}
-              onDelete={(id) => setDeleteConfirm({ type: 'file', id })}
-              onPreview3d={(f) => {
-                if (isSlicedFilename(f.filename)) {
-                  navigate(`/gcode-viewer?library_file=${f.id}`);
-                } else {
-                  setViewerFile(f);
-                }
-              }}
-              onTagClick={toggleTagFilter}
-              thumbnailVersions={thumbnailVersions}
-              hasPermission={hasPermission}
-              canModify={canModify}
-              t={t}
-              className="w-full lg:w-80 lg:flex-shrink-0 lg:max-h-full"
-            />
-          )}
+              place. That is the whole reason for this layout (spec §3).
+              On a phone the same element goes into the bottom sheet below
+              instead, where it would only be squeezed into this row. */}
+          {!isMobile && inspectorPanel}
           {/* README rail — collapsible right column on lg+, stacks on top
               on mobile. See the files-area wrapper comment above (#2520). */}
           {selectedFolderId !== null && <FolderReadmePanel folderId={selectedFolderId} />}
         </div>
       </div>
+
+      {/* Phone presentation of the inspector: the same element as the desktop
+          rail, in a sheet you drag up to full height and down to dismiss
+          (mockup screen 1 option A, phone column). Mounted out here rather than
+          in the files row because it is fixed to the viewport, not laid out. */}
+      {isMobile && inspectorPanel && (
+        <BottomSheet onDismiss={handleCloseInspector} closeLabel={t('common.close')}>
+          {inspectorPanel}
+        </BottomSheet>
+      )}
 
       {/* Modals */}
       {showNewFolderModal && (
