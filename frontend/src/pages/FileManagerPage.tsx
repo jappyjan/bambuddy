@@ -66,6 +66,7 @@ import { FolderReadmePanel } from '../components/FolderReadmePanel';
 import { LibraryTagsModal } from '../components/LibraryTagsModal';
 import { PurgeOldFilesModal } from '../components/PurgeOldFilesModal';
 import { FileCard } from '../components/FileCard';
+import { FileInspectorPanel } from '../components/FileInspectorPanel';
 import { useToast } from '../contexts/ToastContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { usePageFileDrop } from '../hooks/usePageFileDrop';
@@ -755,6 +756,12 @@ export function FileManagerPage() {
   const [renameItem, setRenameItem] = useState<{ type: 'file' | 'folder'; id: number; name: string } | null>(null);
   const [thumbnailVersions, setThumbnailVersions] = useState<Record<number, number>>({});
   const [viewerFile, setViewerFile] = useState<LibraryFileListItem | null>(null);
+  // Inspector panel (spec §7 step 3). Only the *id* is held: the panel is fed
+  // from the live list, so a rename or a thumbnail refresh flows straight into
+  // it, and a file that disappears from the listing closes it on its own.
+  // Keeping this as a plain id also lets the mobile bottom sheet (#28) present
+  // the same selection without a second source of truth.
+  const [inspectedFileId, setInspectedFileId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     return (localStorage.getItem('library-view-mode') as 'grid' | 'list') || 'grid';
   });
@@ -1055,6 +1062,26 @@ export function FileManagerPage() {
   // FileCard; the list view and select-all need them flat.
   const flatFiles = useMemo(() => flattenGrouped(filteredAndSortedFiles), [filteredAndSortedFiles]);
 
+  // Resolved against the flat list so a nested sliced child inspects exactly
+  // like a top-level file does. Null (panel closed) once the id stops matching
+  // anything visible — a delete or a filter change therefore closes the panel.
+  const inspectedFile = useMemo(
+    () => flatFiles.find((f) => f.id === inspectedFileId) ?? null,
+    [flatFiles, inspectedFileId],
+  );
+
+  // Plate count for the inspector. The list endpoint doesn't carry it, and it
+  // is the one extra metadata row that is cheap to fetch. `dimensions` has no
+  // source at all today, so the panel's dimensions row stays hidden.
+  // `plates.length || null` at the call site: an empty or failed read is
+  // "unknown", not "zero plates", so the row is hidden rather than misleading.
+  const { data: inspectedPlates } = useQuery({
+    queryKey: ['library-file-plates', inspectedFileId],
+    queryFn: () => api.getLibraryFilePlates(inspectedFileId!),
+    enabled: inspectedFileId !== null,
+    retry: false,
+  });
+
   // Check if disk space is low
   const isDiskSpaceLow = useMemo(() => {
     if (!stats || !settings) return false;
@@ -1276,7 +1303,13 @@ export function FileManagerPage() {
     setSelectedFiles((prev) => {
       return prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
     });
+    // ...and point the inspector at the clicked file (spec §7 step 3). Set
+    // rather than toggled: clicking through a folder must update the panel in
+    // place, never flicker it shut and open again. Closing is the X's job.
+    setInspectedFileId(id);
   }, []);
+
+  const handleCloseInspector = useCallback(() => setInspectedFileId(null), []);
 
   const handleSelectAll = useCallback(() => {
     if (flatFiles.length > 0) {
@@ -2057,7 +2090,17 @@ export function FileManagerPage() {
             </div>
           ) : viewMode === 'grid' ? (
             <div className="flex-1 lg:overflow-y-auto">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+              {/* Column count drops while the inspector is docked beside the
+                  grid so the cards keep a sane width instead of being squeezed
+                  (mockup screen 1 option A: 5 columns → 3). */}
+              <div
+                data-testid="file-grid"
+                className={
+                  inspectedFile
+                    ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4'
+                    : 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4'
+                }
+              >
                 {filteredAndSortedFiles.map((file) => (
                   <FileCard
                     key={file.id}
@@ -2354,6 +2397,37 @@ export function FileManagerPage() {
             </div>
           )}
         </div>
+          {/* File inspector — a sibling of the grid inside the same lg:flex-row
+              row, not a route. Rendered from `inspectedFile` with no `key`, so
+              clicking another file re-renders this same instance with a new
+              `file` prop; React never unmounts it and the panel updates in
+              place. That is the whole reason for this layout (spec §3). */}
+          {inspectedFile && (
+            <FileInspectorPanel
+              file={inspectedFile}
+              plateCount={inspectedPlates?.plates.length || null}
+              onClose={handleCloseInspector}
+              onPrint={setPrintFile}
+              onSlice={setSliceFile}
+              useSlicerApi={settings?.use_slicer_api ?? false}
+              onDownload={handleDownload}
+              onRename={(f) => setRenameItem({ type: 'file', id: f.id, name: f.filename })}
+              onDelete={(id) => setDeleteConfirm({ type: 'file', id })}
+              onPreview3d={(f) => {
+                if (isSlicedFilename(f.filename)) {
+                  navigate(`/gcode-viewer?library_file=${f.id}`);
+                } else {
+                  setViewerFile(f);
+                }
+              }}
+              onTagClick={toggleTagFilter}
+              thumbnailVersions={thumbnailVersions}
+              hasPermission={hasPermission}
+              canModify={canModify}
+              t={t}
+              className="w-full lg:w-80 lg:flex-shrink-0 lg:max-h-full"
+            />
+          )}
           {/* README rail — collapsible right column on lg+, stacks on top
               on mobile. See the files-area wrapper comment above (#2520). */}
           {selectedFolderId !== null && <FolderReadmePanel folderId={selectedFolderId} />}

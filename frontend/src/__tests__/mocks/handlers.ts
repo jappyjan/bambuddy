@@ -471,6 +471,17 @@ export const handlers = [
   http.get('/api/v1/inventory/spools', () => HttpResponse.json([])),
   http.get('/api/v1/library/folders', () => HttpResponse.json([])),
   http.get('/api/v1/library/folders/by-archive/:id', () => HttpResponse.json([])),
+  // Plate metadata for a library file — the file inspector panel asks for this
+  // whenever a file is selected, so every page test that clicks a card hits it.
+  http.get('/api/v1/library/files/:id/plates', ({ params }) => {
+    const fileId = Number(params.id);
+    return HttpResponse.json({
+      file_id: Number.isFinite(fileId) ? fileId : 0,
+      filename: 'sample.3mf',
+      plates: [],
+      is_multi_plate: false,
+    });
+  }),
   http.get('/api/v1/maintenance/overview', () => HttpResponse.json([])),
   http.get('/api/v1/makerworld/recent-imports', () => HttpResponse.json([])),
   http.get('/api/v1/notification-templates', () => HttpResponse.json([])),
