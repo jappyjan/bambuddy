@@ -13,6 +13,7 @@ import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse as FastAPIFileResponse
@@ -3367,26 +3368,29 @@ def _sanitize_project_settings_sentinels(zip_bytes: bytes) -> bytes:
         return zip_bytes
 
 
-def _patch_process_bed_type(process_json: str, bed_type: str) -> str:
-    """Overwrite ``curr_bed_type`` in a process-profile JSON before forwarding
-    to the slicer sidecar.
+def _patch_process_overrides(process_json: str, overrides: dict[str, Any]) -> str:
+    """Overlay per-slice setting overrides onto a process-profile JSON before
+    forwarding it to the slicer sidecar.
 
-    The slicer CLI reads the build-plate type from the process profile's
-    ``curr_bed_type`` field. When the user picks a non-default plate in the
-    SliceModal (#1337), we patch the resolved JSON in place rather than
-    asking them to clone the preset just to switch a plate. Returns the
-    original string unchanged when the JSON can't be parsed or isn't a
-    dict — the slicer will then run with whatever the preset originally
-    specified, which is the safe fall-back path.
+    The slicer CLI takes its print settings from the process profile, so a
+    one-off change is applied by patching the resolved JSON in place rather
+    than asking the user to clone the preset. Started life as the single-key
+    ``curr_bed_type`` patch for #1337 and is now the general N-key path for
+    ``SliceRequest.process_overrides``; the plate type is just one more key
+    the caller passes in. Returns the original string unchanged when the JSON
+    can't be parsed or isn't a dict — the slicer will then run with whatever
+    the preset originally specified, which is the safe fall-back path.
     """
+    if not overrides:
+        return process_json
     try:
         profile = json.loads(process_json)
     except json.JSONDecodeError:
-        logger.warning("Bed-type override skipped: process profile is not valid JSON")
+        logger.warning("Process overrides skipped: process profile is not valid JSON")
         return process_json
     if not isinstance(profile, dict):
         return process_json
-    profile["curr_bed_type"] = bed_type
+    profile.update(overrides)
     return json.dumps(profile)
 
 
@@ -3561,14 +3565,23 @@ async def _run_slicer_with_fallback(
         assert ref is not None, "schema validator guarantees filament list is non-None"
         filament_jsons.append(await resolve_preset_ref(db, user, ref, "filament"))
 
-    # Bed-type override (#1337): patch curr_bed_type onto the resolved
-    # process JSON so the slicer's StaticPrintConfig pass picks up the
-    # user's pick instead of whatever the process preset defaults to.
-    # Without this, slicing an STL of ABS onto a process preset whose
-    # default is "Cool Plate" fails with "Plate 1: Cool Plate does not
-    # support filament 1" — the reporter's exact scenario.
+    # Per-slice overrides: patch the user's picks onto the resolved process
+    # JSON so the slicer's StaticPrintConfig pass sees them instead of
+    # whatever the process preset defaults to.
+    #   - `process_overrides` is the general case (step 4): arbitrary process
+    #     keys, so a setting can be changed for one slice without cloning a
+    #     preset. Validation of these keys/values against the target slicer's
+    #     schema and the curated metadata hooks in right here, before the
+    #     patch — ticket #29.
+    #   - `bed_type` (#1337) stays its own request field because existing
+    #     clients send it. Applied last so it wins over a `curr_bed_type` in
+    #     `process_overrides`. Without it, slicing an STL of ABS onto a
+    #     process preset whose default is "Cool Plate" fails with "Plate 1:
+    #     Cool Plate does not support filament 1" — the reporter's scenario.
+    overrides: dict[str, Any] = dict(request.process_overrides)
     if request.bed_type:
-        presets["process"] = _patch_process_bed_type(presets["process"], request.bed_type)
+        overrides["curr_bed_type"] = request.bed_type
+    presets["process"] = _patch_process_overrides(presets["process"], overrides)
 
     # Slicer routing — pick the sidecar URL by preferred_slicer.
     # The per-install URL setting (Settings UI → Slicer card) wins; an

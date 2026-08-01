@@ -14,8 +14,15 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from backend.app.api.routes.library import _patch_process_bed_type
+from backend.app.api.routes.library import _patch_process_overrides
 from backend.app.schemas.slicer import PresetRef, SliceRequest
+
+
+def _patch_process_bed_type(process_json: str, bed_type: str) -> str:
+    """The bed-type patch as the route applies it, now that the patcher takes
+    N keys (#20). Keeps these regression tests asserting the #1337 behaviour
+    itself rather than the shape of the helper it happens to go through."""
+    return _patch_process_overrides(process_json, {"curr_bed_type": bed_type})
 
 
 class TestSliceRequestBedTypeField:
