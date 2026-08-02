@@ -4115,9 +4115,65 @@ export default {
         saveFailed: '保存に失敗しました',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: '印刷設定',
+      subsetNote: '厳選した {{shown}} 項目 — スライサーの {{total}}+ 項目のうちの一部で、全項目ではありません。',
+      searchLabel: '設定を検索',
+      searchPlaceholder: '{{total}} 項目から検索…',
+      tierLabel: '表示レベル',
+      tier: {
+        basic: '基本',
+        advanced: '詳細',
+      },
+      allCategories: 'すべて',
+      overrideCount: '{{changed}} 件変更',
+      noOverrides: 'プリセットの値',
+      reset: 'リセット',
+      resetTitle: 'すべての変更を消してプリセットの値に戻す',
+      revertField: 'プリセットの値に戻す',
+      revertFieldTo: 'プリセットの値に戻す（{{value}}）',
+      revertFieldAria: '{{field}} をプリセットの値に戻す',
+      unset: 'このプリセットでは未設定',
+      loading: '設定を読み込み中…',
+      noFields: 'このスライサーには変更できる設定がありません。',
+      noResults: '該当する設定はありません。',
+      categories: {
+        quality: '品質',
+        strength: '強度',
+        speed: '速度',
+        support: 'サポート',
+        infill: 'インフィル',
+        adhesion: '定着',
+        acceleration: '加速度',
+        multimaterial: 'マルチマテリアル',
+        advanced: '詳細',
+        special: '特殊',
+      },
+    },
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'スライサー',
+    back: '戻る',
+    backToFiles: 'ファイル一覧に戻る',
+    noSource: 'スライスするファイルがありません。ファイルマネージャーでファイルを開き、スライスを選択してください。',
+    railLabel: 'スライス設定',
+    presetsHeading: 'プロファイル',
+    saveLayout: '配置を保存',
+    saveLayoutComingSoon: 'プレート上でのモデル配置は後のステップで対応します。まだ保存するものはありません。',
+    printNow: 'すぐに印刷',
+    printNowTitle: 'スライス済みのファイルをプリンターへ直接送信します',
+    printNowStale: '前回のスライス以降に設定が変更されました。印刷する前に再度スライスしてください。',
+    printNowNeedsSlice: '先にモデルをスライスしてください。',
+    noEstimate: '見積もりはまだありません',
+    printQueued: '印刷をキューに追加しました',
+    processFieldsFailed: '設定一覧を読み込めませんでした。',
+  },
+
   spoolman: {
     title: 'Spoolman連携',
     enabled: 'Spoolman有効',
@@ -5235,6 +5291,18 @@ export default {
       noMeshes: '3MFファイルにメッシュが見つかりません',
       unsupportedFormat: 'サポートされていないファイル形式です',
     },
+  },
+
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'オブジェクト',
+    objectFallback: 'オブジェクト {{id}}',
+    transform: '変形',
+    position: '位置',
+    rotation: '回転',
+    scale: '拡大縮小',
+    noSelection: 'オブジェクトが選択されていません',
+    emptyPlate: 'このプレートにはオブジェクトがありません',
   },
 
   // Maintenance type descriptions (built-in)

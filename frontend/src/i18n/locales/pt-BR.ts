@@ -4103,9 +4103,65 @@ export default {
         saveFailed: 'Falha ao salvar',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: 'Configurações de impressão',
+      subsetNote: '{{shown}} configurações selecionadas — um subconjunto das {{total}}+ do fatiador, não a lista completa.',
+      searchLabel: 'Buscar configurações',
+      searchPlaceholder: 'Buscar entre {{total}} configurações…',
+      tierLabel: 'Nível de detalhe',
+      tier: {
+        basic: 'Básico',
+        advanced: 'Avançado',
+      },
+      allCategories: 'Todas',
+      overrideCount: '{{changed}} alteradas',
+      noOverrides: 'Valores do perfil',
+      reset: 'Redefinir',
+      resetTitle: 'Limpar todas as alterações e voltar aos valores do perfil',
+      revertField: 'Voltar ao valor do perfil',
+      revertFieldTo: 'Voltar ao valor do perfil ({{value}})',
+      revertFieldAria: 'Restaurar {{field}} para o valor do perfil',
+      unset: 'Não definido por este perfil',
+      loading: 'Carregando configurações…',
+      noFields: 'Este fatiador não expõe configurações editáveis.',
+      noResults: 'Nenhuma configuração corresponde a essa busca.',
+      categories: {
+        quality: 'Qualidade',
+        strength: 'Resistência',
+        speed: 'Velocidade',
+        support: 'Suportes',
+        infill: 'Preenchimento',
+        adhesion: 'Aderência',
+        acceleration: 'Aceleração',
+        multimaterial: 'Multimaterial',
+        advanced: 'Avançado',
+        special: 'Especial',
+      },
+    },
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'Fatiador',
+    back: 'Voltar',
+    backToFiles: 'Voltar para os arquivos',
+    noSource: 'Nenhum arquivo para fatiar. Abra um arquivo no gerenciador de arquivos e escolha Fatiar.',
+    railLabel: 'Configurações de fatiamento',
+    presetsHeading: 'Perfis',
+    saveLayout: 'Salvar disposição',
+    saveLayoutComingSoon: 'Organizar os modelos na mesa chega em uma etapa posterior — ainda não há nada para salvar.',
+    printNow: 'Imprimir agora',
+    printNowTitle: 'Enviar o arquivo fatiado direto para uma impressora',
+    printNowStale: 'As configurações mudaram desde o último fatiamento — fatie novamente antes de imprimir.',
+    printNowNeedsSlice: 'Fatie o modelo primeiro.',
+    noEstimate: 'Ainda sem estimativa',
+    printQueued: 'Impressão na fila',
+    processFieldsFailed: 'Não foi possível carregar a lista de configurações.',
+  },
+
   spoolman: {
     title: 'Integração com Spoolman',
     enabled: 'Spoolman Ativado',
@@ -5223,6 +5279,18 @@ export default {
       noMeshes: 'Nenhuma malha encontrada no arquivo 3MF',
       unsupportedFormat: 'Formato de arquivo não suportado',
     },
+  },
+
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'Objetos',
+    objectFallback: 'Objeto {{id}}',
+    transform: 'Transformação',
+    position: 'Posição',
+    rotation: 'Rotação',
+    scale: 'Escala',
+    noSelection: 'Nenhum objeto selecionado',
+    emptyPlate: 'Esta placa não tem objetos',
   },
 
   // Maintenance type descriptions (built-in)

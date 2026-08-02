@@ -4103,9 +4103,65 @@ export default {
         saveFailed: '儲存失敗',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: '列印設定',
+      subsetNote: '精選 {{shown}} 項設定 — 只是切片軟體 {{total}}+ 項中的一部分，並非完整清單。',
+      searchLabel: '搜尋設定',
+      searchPlaceholder: '在 {{total}} 項設定中搜尋…',
+      tierLabel: '顯示層級',
+      tier: {
+        basic: '基本',
+        advanced: '進階',
+      },
+      allCategories: '全部',
+      overrideCount: '已變更 {{changed}} 項',
+      noOverrides: '預設值',
+      reset: '重設',
+      resetTitle: '清除所有變更並回到預設值',
+      revertField: '回到預設值',
+      revertFieldTo: '回到預設值（{{value}}）',
+      revertFieldAria: '將{{field}}回復為預設值',
+      unset: '此預設未設定',
+      loading: '正在載入設定…',
+      noFields: '此切片軟體沒有可修改的設定。',
+      noResults: '沒有符合的設定。',
+      categories: {
+        quality: '品質',
+        strength: '強度',
+        speed: '速度',
+        support: '支撐',
+        infill: '填充',
+        adhesion: '附著',
+        acceleration: '加速度',
+        multimaterial: '多材料',
+        advanced: '進階',
+        special: '特殊',
+      },
+    },
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: '切片器',
+    back: '返回',
+    backToFiles: '返回檔案列表',
+    noSource: '沒有可切片的檔案。請在檔案管理員中開啟檔案並選擇「切片」。',
+    railLabel: '切片設定',
+    presetsHeading: '設定檔',
+    saveLayout: '儲存排列',
+    saveLayoutComingSoon: '在列印板上排列模型將於後續步驟提供，目前尚無可儲存的內容。',
+    printNow: '立即列印',
+    printNowTitle: '將切片後的檔案直接傳送至印表機',
+    printNowStale: '自上次切片後設定已變更，請重新切片後再列印。',
+    printNowNeedsSlice: '請先為模型進行切片。',
+    noEstimate: '尚無預估',
+    printQueued: '列印已加入佇列',
+    processFieldsFailed: '無法載入設定清單。',
+  },
+
   spoolman: {
     title: 'Spoolman 整合',
     enabled: 'Spoolman 已啟用',
@@ -5223,6 +5279,18 @@ export default {
       noMeshes: '3MF 檔案中未找到網格',
       unsupportedFormat: '不支援的檔案格式',
     },
+  },
+
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: '物件',
+    objectFallback: '物件 {{id}}',
+    transform: '變換',
+    position: '位置',
+    rotation: '旋轉',
+    scale: '縮放',
+    noSelection: '未選取物件',
+    emptyPlate: '此列印板上沒有物件',
   },
 
   // Maintenance type descriptions (built-in)

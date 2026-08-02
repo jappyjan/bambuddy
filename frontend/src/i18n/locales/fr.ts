@@ -4104,9 +4104,65 @@ export default {
         saveFailed: 'Échec de l\'enregistrement',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: "Paramètres d'impression",
+      subsetNote: '{{shown}} paramètres sélectionnés — un sous-ensemble des {{total}}+ du trancheur, pas la liste complète.',
+      searchLabel: 'Rechercher un paramètre',
+      searchPlaceholder: 'Rechercher parmi {{total}} paramètres…',
+      tierLabel: 'Niveau de détail',
+      tier: {
+        basic: 'Essentiel',
+        advanced: 'Avancé',
+      },
+      allCategories: 'Tout',
+      overrideCount: '{{changed}} modifiés',
+      noOverrides: 'Valeurs du profil',
+      reset: 'Réinitialiser',
+      resetTitle: 'Effacer toutes les modifications et revenir aux valeurs du profil',
+      revertField: 'Revenir à la valeur du profil',
+      revertFieldTo: 'Revenir à la valeur du profil ({{value}})',
+      revertFieldAria: 'Rétablir {{field}} à la valeur du profil',
+      unset: 'Non défini par ce profil',
+      loading: 'Chargement des paramètres…',
+      noFields: 'Ce trancheur ne propose aucun paramètre modifiable.',
+      noResults: 'Aucun paramètre ne correspond à cette recherche.',
+      categories: {
+        quality: 'Qualité',
+        strength: 'Résistance',
+        speed: 'Vitesse',
+        support: 'Supports',
+        infill: 'Remplissage',
+        adhesion: 'Adhérence',
+        acceleration: 'Accélération',
+        multimaterial: 'Multi-matériaux',
+        advanced: 'Avancé',
+        special: 'Spécial',
+      },
+    },
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'Trancheur',
+    back: 'Retour',
+    backToFiles: 'Retour aux fichiers',
+    noSource: 'Aucun fichier à trancher. Ouvrez un fichier dans le gestionnaire de fichiers et choisissez Trancher.',
+    railLabel: 'Paramètres de tranchage',
+    presetsHeading: 'Profils',
+    saveLayout: 'Enregistrer la disposition',
+    saveLayoutComingSoon: 'L’agencement des modèles sur le plateau arrivera à une étape ultérieure — il n’y a encore rien à enregistrer.',
+    printNow: 'Imprimer maintenant',
+    printNowTitle: 'Envoyer le fichier tranché directement à une imprimante',
+    printNowStale: 'Les paramètres ont changé depuis le dernier tranchage — retranchez avant d’imprimer.',
+    printNowNeedsSlice: 'Tranchez d’abord le modèle.',
+    noEstimate: 'Pas encore d’estimation',
+    printQueued: 'Impression mise en file d’attente',
+    processFieldsFailed: 'Impossible de charger la liste des paramètres.',
+  },
+
   spoolman: {
     title: 'Intégration Spoolman',
     enabled: 'Spoolman Activé',
@@ -5224,6 +5280,18 @@ export default {
       noMeshes: 'Aucun maillage trouvé dans le 3MF',
       unsupportedFormat: 'Format non supporté',
     },
+  },
+
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'Objets',
+    objectFallback: 'Objet {{id}}',
+    transform: 'Transformation',
+    position: 'Position',
+    rotation: 'Rotation',
+    scale: 'Échelle',
+    noSelection: 'Aucun objet sélectionné',
+    emptyPlate: 'Cette plaque ne contient aucun objet',
   },
 
   // Maintenance type descriptions (built-in)

@@ -4149,9 +4149,67 @@ export default {
         saveFailed: 'Save failed',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: 'Print settings',
+      subsetNote: "{{shown}} curated settings — a subset of the slicer's {{total}}+, not the full list.",
+      searchLabel: 'Search settings',
+      searchPlaceholder: 'Search {{total}} settings…',
+      tierLabel: 'Detail level',
+      tier: {
+        basic: 'Basic',
+        advanced: 'Advanced',
+      },
+      allCategories: 'All',
+      overrideCount: '{{changed}} changed',
+      noOverrides: 'Preset values',
+      reset: 'Reset',
+      resetTitle: 'Clear every override and go back to the preset values',
+      revertField: 'Back to the preset value',
+      revertFieldTo: 'Back to the preset value ({{value}})',
+      revertFieldAria: 'Revert {{field}} to the preset value',
+      unset: 'Not set by this preset',
+      loading: 'Loading settings…',
+      noFields: 'This slicer exposes no overridable settings.',
+      noResults: 'No setting matches that search.',
+      categories: {
+        quality: 'Quality',
+        strength: 'Strength',
+        speed: 'Speed',
+        support: 'Support',
+        infill: 'Infill',
+        adhesion: 'Adhesion',
+        acceleration: 'Acceleration',
+        multimaterial: 'Multi-material',
+        advanced: 'Advanced',
+        special: 'Special',
+      },
+    },
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5) — the /slicer route shell, its rail and
+  // the Slice / Print-now action bar. `slice.*` above stays with the SliceModal
+  // and the shared preset controls; these are the page's own strings.
+  slicer: {
+    title: 'Slicer',
+    back: 'Back',
+    backToFiles: 'Back to files',
+    noSource: 'No file to slice. Open a file in the File Manager and choose Slice.',
+    railLabel: 'Slice settings',
+    presetsHeading: 'Profiles',
+    saveLayout: 'Save layout',
+    saveLayoutComingSoon: 'Arranging models on the plate arrives in a later step — there is nothing to save yet.',
+    printNow: 'Print now',
+    printNowTitle: 'Send the sliced file straight to a printer',
+    printNowStale: 'Settings changed since the last slice — slice again before printing.',
+    printNowNeedsSlice: 'Slice the model first.',
+    noEstimate: 'No estimate yet',
+    printQueued: 'Print queued',
+    processFieldsFailed: 'Could not load the settings list.',
+  },
+
   spoolman: {
     title: 'Spoolman Integration',
     enabled: 'Spoolman Enabled',
@@ -5278,6 +5336,18 @@ export default {
       noMeshes: 'No meshes found in 3MF file',
       unsupportedFormat: 'Unsupported file format',
     },
+  },
+
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'Objects',
+    objectFallback: 'Object {{id}}',
+    transform: 'Transform',
+    position: 'Position',
+    rotation: 'Rotation',
+    scale: 'Scale',
+    noSelection: 'No object selected',
+    emptyPlate: 'This plate has no objects',
   },
 
   // Maintenance type descriptions (built-in)

@@ -4103,9 +4103,65 @@ export default {
         saveFailed: '保存失败',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: '打印设置',
+      subsetNote: '精选 {{shown}} 项设置 — 只是切片软件 {{total}}+ 项中的一部分，并非完整列表。',
+      searchLabel: '搜索设置',
+      searchPlaceholder: '在 {{total}} 项设置中搜索…',
+      tierLabel: '显示层级',
+      tier: {
+        basic: '基础',
+        advanced: '高级',
+      },
+      allCategories: '全部',
+      overrideCount: '已改 {{changed}} 项',
+      noOverrides: '预设值',
+      reset: '重置',
+      resetTitle: '清除所有改动并恢复为预设值',
+      revertField: '恢复为预设值',
+      revertFieldTo: '恢复为预设值（{{value}}）',
+      revertFieldAria: '将{{field}}恢复为预设值',
+      unset: '该预设未设置',
+      loading: '正在加载设置…',
+      noFields: '此切片软件没有可修改的设置。',
+      noResults: '没有匹配的设置。',
+      categories: {
+        quality: '质量',
+        strength: '强度',
+        speed: '速度',
+        support: '支撑',
+        infill: '填充',
+        adhesion: '附着',
+        acceleration: '加速度',
+        multimaterial: '多材料',
+        advanced: '高级',
+        special: '特殊',
+      },
+    },
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: '切片器',
+    back: '返回',
+    backToFiles: '返回文件列表',
+    noSource: '没有可切片的文件。请在文件管理器中打开文件并选择“切片”。',
+    railLabel: '切片设置',
+    presetsHeading: '配置文件',
+    saveLayout: '保存布局',
+    saveLayoutComingSoon: '在热床上排布模型将在后续步骤中提供，目前还没有可保存的内容。',
+    printNow: '立即打印',
+    printNowTitle: '将切片后的文件直接发送到打印机',
+    printNowStale: '自上次切片后设置已更改，请重新切片后再打印。',
+    printNowNeedsSlice: '请先对模型进行切片。',
+    noEstimate: '暂无预估',
+    printQueued: '打印已加入队列',
+    processFieldsFailed: '无法加载设置列表。',
+  },
+
   spoolman: {
     title: 'Spoolman 集成',
     enabled: 'Spoolman 已启用',
@@ -5223,6 +5279,18 @@ export default {
       noMeshes: '3MF 文件中未找到网格',
       unsupportedFormat: '不支持的文件格式',
     },
+  },
+
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: '对象',
+    objectFallback: '对象 {{id}}',
+    transform: '变换',
+    position: '位置',
+    rotation: '旋转',
+    scale: '缩放',
+    noSelection: '未选择对象',
+    emptyPlate: '此打印板上没有对象',
   },
 
   // Maintenance type descriptions (built-in)

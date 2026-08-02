@@ -3908,7 +3908,63 @@ export default {
         saveFailed: '저장 실패',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: '출력 설정',
+      subsetNote: '엄선한 {{shown}}개 설정 — 슬라이서의 {{total}}개 이상 중 일부이며 전체 목록이 아닙니다.',
+      searchLabel: '설정 검색',
+      searchPlaceholder: '{{total}}개 설정에서 검색…',
+      tierLabel: '표시 수준',
+      tier: {
+        basic: '기본',
+        advanced: '고급',
+      },
+      allCategories: '전체',
+      overrideCount: '{{changed}}개 변경됨',
+      noOverrides: '프리셋 값',
+      reset: '초기화',
+      resetTitle: '모든 변경을 지우고 프리셋 값으로 되돌리기',
+      revertField: '프리셋 값으로 되돌리기',
+      revertFieldTo: '프리셋 값으로 되돌리기({{value}})',
+      revertFieldAria: '{{field}}을(를) 프리셋 값으로 되돌리기',
+      unset: '이 프리셋에는 지정되지 않음',
+      loading: '설정을 불러오는 중…',
+      noFields: '이 슬라이서에는 변경할 수 있는 설정이 없습니다.',
+      noResults: '검색과 일치하는 설정이 없습니다.',
+      categories: {
+        quality: '품질',
+        strength: '강도',
+        speed: '속도',
+        support: '서포트',
+        infill: '내부 채움',
+        adhesion: '안착',
+        acceleration: '가속도',
+        multimaterial: '멀티머티리얼',
+        advanced: '고급',
+        special: '특수',
+      },
+    },
   },
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: '슬라이서',
+    back: '뒤로',
+    backToFiles: '파일 목록으로 돌아가기',
+    noSource: '슬라이스할 파일이 없습니다. 파일 관리자에서 파일을 열고 슬라이스를 선택하세요.',
+    railLabel: '슬라이스 설정',
+    presetsHeading: '프로필',
+    saveLayout: '배치 저장',
+    saveLayoutComingSoon: '플레이트 위 모델 배치는 이후 단계에서 지원됩니다. 아직 저장할 내용이 없습니다.',
+    printNow: '지금 인쇄',
+    printNowTitle: '슬라이스된 파일을 프린터로 바로 보냅니다',
+    printNowStale: '마지막 슬라이스 이후 설정이 변경되었습니다. 인쇄하기 전에 다시 슬라이스하세요.',
+    printNowNeedsSlice: '먼저 모델을 슬라이스하세요.',
+    noEstimate: '아직 예상치가 없습니다',
+    printQueued: '인쇄를 대기열에 추가했습니다',
+    processFieldsFailed: '설정 목록을 불러오지 못했습니다.',
+  },
+
   spoolman: {
     title: 'Spoolman 통합',
     enabled: 'Spoolman 활성화됨',
@@ -4970,6 +5026,18 @@ export default {
       noMeshes: '3MF 파일에서 메쉬를 찾을 수 없음',
       unsupportedFormat: '지원되지 않는 파일 형식'
     }
+  },
+
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: '오브젝트',
+    objectFallback: '오브젝트 {{id}}',
+    transform: '변형',
+    position: '위치',
+    rotation: '회전',
+    scale: '크기 조절',
+    noSelection: '선택된 오브젝트가 없습니다',
+    emptyPlate: '이 플레이트에는 오브젝트가 없습니다',
   },
   maintenanceDescriptions: {
     lubricateCarbonRods: '부드러운 움직임을 위해 카본 로드에 윤활유 도포',

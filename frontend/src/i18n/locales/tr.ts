@@ -4105,9 +4105,65 @@ export default {
         saveFailed: 'Kaydetme başarısız',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: 'Baskı ayarları',
+      subsetNote: '{{shown}} seçilmiş ayar — dilimleyicinin {{total}}+ ayarının bir bölümü, tamamı değil.',
+      searchLabel: 'Ayarlarda ara',
+      searchPlaceholder: '{{total}} ayar içinde ara…',
+      tierLabel: 'Ayrıntı düzeyi',
+      tier: {
+        basic: 'Temel',
+        advanced: 'Gelişmiş',
+      },
+      allCategories: 'Tümü',
+      overrideCount: '{{changed}} değişti',
+      noOverrides: 'Profil değerleri',
+      reset: 'Sıfırla',
+      resetTitle: 'Tüm değişiklikleri temizle ve profil değerlerine dön',
+      revertField: 'Profil değerine dön',
+      revertFieldTo: 'Profil değerine dön ({{value}})',
+      revertFieldAria: '{{field}} ayarını profil değerine döndür',
+      unset: 'Bu profilde tanımlı değil',
+      loading: 'Ayarlar yükleniyor…',
+      noFields: 'Bu dilimleyici değiştirilebilir ayar sunmuyor.',
+      noResults: 'Bu aramaya uyan ayar yok.',
+      categories: {
+        quality: 'Kalite',
+        strength: 'Dayanım',
+        speed: 'Hız',
+        support: 'Destekler',
+        infill: 'Dolgu',
+        adhesion: 'Yapışma',
+        acceleration: 'İvme',
+        multimaterial: 'Çoklu malzeme',
+        advanced: 'Gelişmiş',
+        special: 'Özel',
+      },
+    },
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'Dilimleyici',
+    back: 'Geri',
+    backToFiles: 'Dosyalara dön',
+    noSource: 'Dilimlenecek dosya yok. Dosya yöneticisinden bir dosya açıp Dilimle seçeneğini kullanın.',
+    railLabel: 'Dilimleme ayarları',
+    presetsHeading: 'Profiller',
+    saveLayout: 'Yerleşimi kaydet',
+    saveLayoutComingSoon: 'Modelleri tabla üzerinde düzenleme sonraki bir adımda gelecek; henüz kaydedilecek bir şey yok.',
+    printNow: 'Şimdi yazdır',
+    printNowTitle: 'Dilimlenmiş dosyayı doğrudan bir yazıcıya gönder',
+    printNowStale: 'Son dilimlemeden bu yana ayarlar değişti — yazdırmadan önce yeniden dilimleyin.',
+    printNowNeedsSlice: 'Önce modeli dilimleyin.',
+    noEstimate: 'Henüz tahmin yok',
+    printQueued: 'Yazdırma kuyruğa alındı',
+    processFieldsFailed: 'Ayar listesi yüklenemedi.',
+  },
+
   spoolman: {
     title: 'Spoolman Entegrasyonu',
     enabled: 'Spoolman Etkin',
@@ -5199,6 +5255,18 @@ export default {
       noMeshes: '3MF dosyasında ağ bulunamadı',
       unsupportedFormat: 'Desteklenmeyen dosya formatı',
     },
+  },
+
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'Nesneler',
+    objectFallback: 'Nesne {{id}}',
+    transform: 'Dönüşüm',
+    position: 'Konum',
+    rotation: 'Döndürme',
+    scale: 'Ölçek',
+    noSelection: 'Seçili nesne yok',
+    emptyPlate: 'Bu tablada nesne yok',
   },
 
   // Bakım türü açıklamaları (yerleşik)

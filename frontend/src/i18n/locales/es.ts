@@ -4118,9 +4118,65 @@ export default {
         saveFailed: 'Error al guardar',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: 'Ajustes de impresión',
+      subsetNote: '{{shown}} ajustes seleccionados — un subconjunto de los {{total}}+ del laminador, no la lista completa.',
+      searchLabel: 'Buscar ajustes',
+      searchPlaceholder: 'Buscar entre {{total}} ajustes…',
+      tierLabel: 'Nivel de detalle',
+      tier: {
+        basic: 'Básico',
+        advanced: 'Avanzado',
+      },
+      allCategories: 'Todos',
+      overrideCount: '{{changed}} cambiados',
+      noOverrides: 'Valores del perfil',
+      reset: 'Restablecer',
+      resetTitle: 'Borrar todos los cambios y volver a los valores del perfil',
+      revertField: 'Volver al valor del perfil',
+      revertFieldTo: 'Volver al valor del perfil ({{value}})',
+      revertFieldAria: 'Restaurar {{field}} al valor del perfil',
+      unset: 'No definido por este perfil',
+      loading: 'Cargando ajustes…',
+      noFields: 'Este laminador no expone ajustes modificables.',
+      noResults: 'Ningún ajuste coincide con esa búsqueda.',
+      categories: {
+        quality: 'Calidad',
+        strength: 'Resistencia',
+        speed: 'Velocidad',
+        support: 'Soportes',
+        infill: 'Relleno',
+        adhesion: 'Adherencia',
+        acceleration: 'Aceleración',
+        multimaterial: 'Multimaterial',
+        advanced: 'Avanzado',
+        special: 'Especial',
+      },
+    },
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'Laminador',
+    back: 'Atrás',
+    backToFiles: 'Volver a archivos',
+    noSource: 'No hay ningún archivo que laminar. Abre un archivo en el gestor de archivos y elige Laminar.',
+    railLabel: 'Ajustes de laminado',
+    presetsHeading: 'Perfiles',
+    saveLayout: 'Guardar disposición',
+    saveLayoutComingSoon: 'Colocar los modelos en la placa llegará en un paso posterior; todavía no hay nada que guardar.',
+    printNow: 'Imprimir ahora',
+    printNowTitle: 'Enviar el archivo laminado directamente a una impresora',
+    printNowStale: 'Los ajustes han cambiado desde el último laminado: vuelve a laminar antes de imprimir.',
+    printNowNeedsSlice: 'Lamina primero el modelo.',
+    noEstimate: 'Todavía sin estimación',
+    printQueued: 'Impresión en cola',
+    processFieldsFailed: 'No se pudo cargar la lista de ajustes.',
+  },
+
   spoolman: {
     title: 'Integración con Spoolman',
     enabled: 'Spoolman activado',
@@ -5243,6 +5299,18 @@ export default {
       noMeshes: 'No se encontraron mallas en el archivo 3MF',
       unsupportedFormat: 'Formato de archivo no compatible',
     },
+  },
+
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'Objetos',
+    objectFallback: 'Objeto {{id}}',
+    transform: 'Transformación',
+    position: 'Posición',
+    rotation: 'Rotación',
+    scale: 'Escala',
+    noSelection: 'Ningún objeto seleccionado',
+    emptyPlate: 'Esta placa no tiene objetos',
   },
 
   // Maintenance type descriptions (built-in)

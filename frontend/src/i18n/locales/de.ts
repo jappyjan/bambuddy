@@ -4115,9 +4115,65 @@ export default {
         saveFailed: 'Speichern fehlgeschlagen',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: 'Druckeinstellungen',
+      subsetNote: '{{shown}} kuratierte Einstellungen — ein Ausschnitt aus den {{total}}+ des Slicers, nicht die vollständige Liste.',
+      searchLabel: 'Einstellungen durchsuchen',
+      searchPlaceholder: '{{total}} Einstellungen durchsuchen…',
+      tierLabel: 'Detailgrad',
+      tier: {
+        basic: 'Einfach',
+        advanced: 'Erweitert',
+      },
+      allCategories: 'Alle',
+      overrideCount: '{{changed}} geändert',
+      noOverrides: 'Profilwerte',
+      reset: 'Zurücksetzen',
+      resetTitle: 'Alle Überschreibungen verwerfen und zu den Profilwerten zurückkehren',
+      revertField: 'Zurück zum Profilwert',
+      revertFieldTo: 'Zurück zum Profilwert ({{value}})',
+      revertFieldAria: '{{field}} auf den Profilwert zurücksetzen',
+      unset: 'Von diesem Profil nicht gesetzt',
+      loading: 'Einstellungen werden geladen…',
+      noFields: 'Dieser Slicer bietet keine überschreibbaren Einstellungen.',
+      noResults: 'Keine Einstellung passt zu dieser Suche.',
+      categories: {
+        quality: 'Qualität',
+        strength: 'Festigkeit',
+        speed: 'Geschwindigkeit',
+        support: 'Stützen',
+        infill: 'Füllung',
+        adhesion: 'Haftung',
+        acceleration: 'Beschleunigung',
+        multimaterial: 'Multimaterial',
+        advanced: 'Erweitert',
+        special: 'Spezial',
+      },
+    },
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'Slicer',
+    back: 'Zurück',
+    backToFiles: 'Zurück zu den Dateien',
+    noSource: 'Keine Datei zum Slicen. Öffne eine Datei im Dateimanager und wähle „Slicen“.',
+    railLabel: 'Slice-Einstellungen',
+    presetsHeading: 'Profile',
+    saveLayout: 'Anordnung speichern',
+    saveLayoutComingSoon: 'Das Anordnen der Modelle auf der Platte kommt in einem späteren Schritt – es gibt noch nichts zu speichern.',
+    printNow: 'Jetzt drucken',
+    printNowTitle: 'Die geslicete Datei direkt an einen Drucker senden',
+    printNowStale: 'Die Einstellungen haben sich seit dem letzten Slice geändert – bitte erneut slicen.',
+    printNowNeedsSlice: 'Slice zuerst das Modell.',
+    noEstimate: 'Noch keine Schätzung',
+    printQueued: 'Druck eingereiht',
+    processFieldsFailed: 'Die Einstellungsliste konnte nicht geladen werden.',
+  },
+
   spoolman: {
     title: 'Spoolman-Integration',
     enabled: 'Spoolman aktiviert',
@@ -5234,6 +5290,18 @@ export default {
       noMeshes: 'Keine Meshes in 3MF-Datei gefunden',
       unsupportedFormat: 'Nicht unterstütztes Dateiformat',
     },
+  },
+
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'Objekte',
+    objectFallback: 'Objekt {{id}}',
+    transform: 'Transformation',
+    position: 'Position',
+    rotation: 'Drehung',
+    scale: 'Skalierung',
+    noSelection: 'Kein Objekt ausgewählt',
+    emptyPlate: 'Diese Platte enthält keine Objekte',
   },
 
   // Maintenance type descriptions (built-in)
