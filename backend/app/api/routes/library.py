@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse as FastAPIFileResponse
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,6 +58,8 @@ from backend.app.schemas.library import (
     FolderResponse,
     FolderTreeItem,
     FolderUpdate,
+    PlateLayout,
+    PlateLayoutResponse,
     TagSummary,
     ZipExtractError,
     ZipExtractResponse,
@@ -3053,6 +3055,70 @@ async def get_library_file_plate_thumbnail(
     raise HTTPException(status_code=404, detail=f"Thumbnail for plate {plate_index} not found")
 
 
+@router.get("/files/{file_id}/layout", response_model=PlateLayoutResponse)
+async def get_library_file_layout(
+    file_id: int,
+    db: AsyncSession = Depends(get_db),
+    auth_result: tuple[User | None, bool] = Depends(
+        require_ownership_permission(
+            Permission.LIBRARY_READ_ALL,
+            Permission.LIBRARY_READ_OWN,
+        )
+    ),
+):
+    """Get the saved plate arrangement for a library file.
+
+    ``layout`` is null when the file has no stored arrangement — the model is
+    sliced as designed.
+    """
+    user, can_read_all = auth_result
+
+    result = await db.execute(LibraryFile.active().where(LibraryFile.id == file_id))
+    lib_file = _ensure_library_file_visible(result.scalar_one_or_none(), user, can_read_all)
+
+    if not lib_file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return PlateLayoutResponse(file_id=file_id, layout=lib_file.plate_layout)
+
+
+@router.put("/files/{file_id}/layout", response_model=PlateLayoutResponse)
+async def update_library_file_layout(
+    file_id: int,
+    layout: PlateLayout | None = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+    auth_result: tuple[User | None, bool] = Depends(
+        require_ownership_permission(
+            Permission.LIBRARY_UPDATE_ALL,
+            Permission.LIBRARY_UPDATE_OWN,
+        )
+    ),
+):
+    """Save the plate arrangement for a library file.
+
+    The body is validated against the shape in the design spec §4; a
+    ``version`` other than 1 is rejected. A body of ``null`` clears the stored
+    layout, resetting the file to its original arrangement. The file's bytes
+    are never touched — the layout is applied at slice time.
+    """
+    user, can_modify_all = auth_result
+
+    result = await db.execute(LibraryFile.active().where(LibraryFile.id == file_id))
+    lib_file = result.scalar_one_or_none()
+
+    if not lib_file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if not can_modify_all and lib_file.created_by_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only update your own files")
+
+    lib_file.plate_layout = layout.model_dump() if layout is not None else None
+    await db.commit()
+    await db.refresh(lib_file)
+
+    return PlateLayoutResponse(file_id=file_id, layout=lib_file.plate_layout)
+
+
 async def _try_preview_slice_filaments(
     db: AsyncSession,
     *,
@@ -3559,6 +3625,7 @@ async def _run_slicer_with_fallback(
     request: SliceRequest,
     current_user_id: int | None = None,
     job_id: int | None = None,
+    plate_layout: dict | None = None,
 ):
     """Validate presets, dispatch to the right sidecar, run the slicer with
     the auto-fallback for 3MF inputs whose `--load-settings` path crashes the
@@ -3568,6 +3635,12 @@ async def _run_slicer_with_fallback(
     `current_user_id` is needed to resolve **cloud** presets — the cloud token
     is per-user when auth is enabled. For the legacy / local-only path it can
     be left ``None``.
+
+    `plate_layout`: the source row's saved arrangement (spec §4), applied to
+    the model bytes here rather than at the call site because it needs the
+    resolved sidecar — a model that isn't already a project 3MF has to be
+    converted by the same slicer that will slice it (see
+    ``services/plate_layout``).
 
     `job_id`: when set, a request_id is generated and a parallel poller
     pushes the sidecar's --pipe-fed progress events onto
@@ -3652,6 +3725,43 @@ async def _run_slicer_with_fallback(
         overrides["curr_bed_type"] = request.bed_type
     presets["process"] = _patch_process_overrides(presets["process"], overrides)
 
+    service = SlicerApiService(api_url)
+
+    # Saved plate arrangement (step 7): put the user's placement into the
+    # bytes the CLI loads. It has to happen here — after the sidecar is
+    # resolved, before anything reads the model — because a model that isn't
+    # already a *project* 3MF (a plain STL, or a core-spec 3MF out of Fusion /
+    # Blender) gets silently re-centred by both slicers, so it is first
+    # converted to a project 3MF by the same sidecar that will slice it. The
+    # CLI's global --scale/--rotate flags are deliberately not used: §3a item
+    # 5 measured them as global-only (so they cannot express per-object
+    # placement) and segfaulting on OrcaSlicer.
+    if plate_layout:
+        from backend.app.services.plate_layout import (
+            PlateLayoutError,
+            apply_plate_layout,
+            ensure_project_3mf,
+            layout_placements,
+        )
+
+        try:
+            if layout_placements(plate_layout):
+                model_bytes, model_filename = await ensure_project_3mf(
+                    service,
+                    model_bytes=model_bytes,
+                    model_filename=model_filename,
+                    printer_profile_json=presets["printer"],
+                    process_profile_json=presets["process"],
+                    filament_profile_jsons=filament_jsons,
+                )
+                model_bytes = apply_plate_layout(model_bytes, plate_layout)
+        except PlateLayoutError as exc:
+            # Surfaced, not swallowed. A layout we can't apply means the slice
+            # would come out arranged differently from what the user saved and
+            # sees in the viewer — the exact silent-mismatch this step exists
+            # to prevent.
+            raise HTTPException(status_code=400, detail=f"Couldn't apply the saved plate layout: {exc}") from exc
+
     # Note: an earlier version of this code stripped Metadata/project_settings.
     # config + model_settings.config + slice_info.config + cut_information.xml
     # before forwarding the 3MF, the theory being that --load-settings would
@@ -3695,7 +3805,6 @@ async def _run_slicer_with_fallback(
     # gates the toggle on the picked printer matching the design's target,
     # so this path never re-targets across printer models.
     embedded_mode = bool(request.use_embedded_settings and is_3mf)
-    service = SlicerApiService(api_url)
 
     # #1493: cross-nozzle-class re-slice (single <-> dual). Without
     # intervention the slicer rejects with either "G-code in unprintable
@@ -4007,6 +4116,7 @@ async def slice_and_persist(
     current_user_id: int | None,
     job_id: int | None = None,
     sliced_from_file_id: int | None = None,
+    plate_layout: dict | None = None,
 ) -> SliceResponse:
     """Slice a model and save the result as a new ``LibraryFile`` in
     ``folder_id`` (same folder as the source by convention).
@@ -4014,6 +4124,9 @@ async def slice_and_persist(
     ``sliced_from_file_id`` records which library file the output came from, so
     the file manager can group slices under their source. None when the source
     isn't a library file (e.g. a pipeline run over an archive).
+
+    ``plate_layout`` is the source row's saved arrangement, applied to the
+    model bytes before dispatch.
 
     Always exports as ``.gcode.3mf`` so the existing library thumbnail
     pipeline works on the new file. Plain ``.gcode`` would have no
@@ -4030,6 +4143,7 @@ async def slice_and_persist(
         request=library_request,
         current_user_id=current_user_id,
         job_id=job_id,
+        plate_layout=plate_layout,
     )
 
     base_name = model_filename.rsplit(".", 1)[0]
@@ -4130,6 +4244,7 @@ async def slice_and_persist_as_archive(
     source_archive,  # PrintArchive — hint kept loose to avoid cyclic import
     current_user_id: int | None,
     job_id: int | None = None,
+    plate_layout: dict | None = None,
 ):
     """Slice a model and save the result as a new ``PrintArchive`` row,
     inheriting printer / project / makerworld metadata from the source
@@ -4152,6 +4267,7 @@ async def slice_and_persist_as_archive(
         request=archive_request,
         job_id=job_id,
         current_user_id=current_user_id,
+        plate_layout=plate_layout,
     )
 
     base_name = model_filename.rsplit(".", 1)[0]
@@ -4354,6 +4470,10 @@ async def slice_library_file(
     model_bytes = src_path.read_bytes()
     folder_id = lib_file.folder_id
     source_lib_file_id = lib_file.id
+    # Saved plate arrangement, captured with the rest of the inputs — the
+    # request session is closed before the background task runs. None means
+    # "as designed"; the slicer sees the file's original placement.
+    source_plate_layout = lib_file.plate_layout
     # API-keyed callers get None from the auth gate (auth.py keeps that
     # behaviour to avoid a wider scope expansion). Fall back to the API
     # key's owner so cloud-preset resolution can read the stored
@@ -4398,6 +4518,7 @@ async def slice_library_file(
                     current_user_id=user_id,
                     job_id=job_id,
                     sliced_from_file_id=source_lib_file_id,
+                    plate_layout=source_plate_layout,
                 )
             except HTTPException as exc:
                 raise http_exception_to_job_error(exc) from exc

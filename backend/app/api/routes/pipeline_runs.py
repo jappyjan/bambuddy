@@ -504,10 +504,15 @@ def _make_orchestration_callable(
             model_bytes = src_path.read_bytes()
 
             folder_id: int | None = None
+            # The source's saved plate arrangement travels with the slice —
+            # a pipeline run of a file the user arranged should print what
+            # they arranged, same as slicing it by hand.
+            plate_layout: dict | None = None
             if src_kind == "library_file":
                 lib = (await session.execute(select(LibraryFile).where(LibraryFile.id == src_id))).scalar_one_or_none()
                 if lib is not None:
                     folder_id = lib.folder_id
+                    plate_layout = lib.plate_layout
 
             try:
                 slice_response = await slice_and_persist(
@@ -526,6 +531,7 @@ def _make_orchestration_callable(
                     # Only library-file sources have provenance to record —
                     # archive-to-archive slice provenance is not modelled.
                     sliced_from_file_id=src_id if src_kind == "library_file" else None,
+                    plate_layout=plate_layout,
                 )
             except HTTPException as exc:
                 run.status = "failed"

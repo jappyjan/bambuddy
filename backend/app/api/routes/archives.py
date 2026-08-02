@@ -4050,6 +4050,7 @@ async def slice_archive(
                     source_archive=src_archive,
                     current_user_id=user_id,
                     job_id=job_id,
+                    plate_layout=src_archive.plate_layout,
                 )
             except HTTPException as exc:
                 raise http_exception_to_job_error(exc) from exc
