@@ -8,6 +8,9 @@ import type { TFunction } from '../../pages/FileManagerPage';
 interface MoveFilesModalProps {
   folders: LibraryFolderTree[];
   selectedFiles: number[];
+  // Selected files that are not in the current listing (#37) — recoverable
+  // action, so a plain note rather than the delete dialog's named list.
+  offscreenSelectedCount: number;
   currentFolderId: number | null;
   onClose: () => void;
   onMove: (folderId: number | null) => void;
@@ -15,7 +18,7 @@ interface MoveFilesModalProps {
   t: TFunction;
 }
 
-export function MoveFilesModal({ folders, selectedFiles, currentFolderId, onClose, onMove, isLoading, t }: MoveFilesModalProps) {
+export function MoveFilesModal({ folders, selectedFiles, offscreenSelectedCount, currentFolderId, onClose, onMove, isLoading, t }: MoveFilesModalProps) {
   const [targetFolder, setTargetFolder] = useState<number | null>(null);
 
   const flattenFolders = (items: LibraryFolderTree[], depth = 0): { id: number | null; name: string; depth: number }[] => {
@@ -36,6 +39,11 @@ export function MoveFilesModal({ folders, selectedFiles, currentFolderId, onClos
       <div className="bg-bambu-dark-secondary rounded-lg w-full max-w-sm border border-bambu-dark-tertiary">
         <div className="p-4 border-b border-bambu-dark-tertiary">
           <h2 className="text-lg font-semibold text-white">{t('fileManager.moveFiles', { count: selectedFiles.length })}</h2>
+          {offscreenSelectedCount > 0 && (
+            <p className="mt-1 text-sm text-amber-500">
+              {t('fileManager.selectionOffscreen', { count: offscreenSelectedCount })}
+            </p>
+          )}
         </div>
         <div className="p-4 space-y-4">
           <div className="max-h-64 overflow-y-auto space-y-1">
