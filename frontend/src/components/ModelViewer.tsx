@@ -2,18 +2,33 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import JSZip from 'jszip';
 import { Loader2, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { Button } from './Button';
 import { getAuthToken } from '../api/client';
+import type { ObjectTransform } from '../types/plateStage';
+import { linkGizmoToOrbit } from './slicer/gizmoOrbit';
+import {
+  identityTransform,
+  objectNodeToTransform,
+  swapYZ,
+  transformToObjectNode,
+  transformsEqual,
+  type ObjectMetrics,
+  type Vec3,
+} from './slicer/transformMath';
 
 interface BuildVolume {
   x: number;
   y: number;
   z: number;
 }
+
+/** Gizmo modes offered by the stage toolbar (#25). `null` hides the gizmo. */
+export type GizmoMode = 'translate' | 'rotate' | 'scale';
 
 interface ModelViewerProps {
   url: string;
@@ -22,7 +37,54 @@ interface ModelViewerProps {
   filamentColors?: string[];
   selectedPlateId?: number | null;
   className?: string;
+
+  // ---- Interactive placement (#25, step-8.1) --------------------------------
+  // All optional and all inert unless `interactive` is set, so the modal and
+  // inspector viewports keep exactly the behaviour they had.
+
+  /**
+   * Stand up `TransformControls` and object picking. A stable boolean: it is
+   * read in the scene-setup effect, so flipping it rebuilds the scene.
+   */
+  interactive?: boolean;
+  /**
+   * Per-object placement deltas, keyed by 3MF object id. Absent ids are left
+   * as designed. 3MF only — an STL has no object ids to key on, and its
+   * placement is rewritten server-side after a sidecar conversion.
+   */
+  objectTransforms?: Record<string, ObjectTransform>;
+  /** Which object the gizmo is attached to. */
+  selectedObjectId?: string | null;
+  /** Active gizmo; `null` leaves the objects unhandled (orbit only). */
+  gizmoMode?: GizmoMode | null;
+  /** Enlarge the gizmo handles for finger-sized targets (#11 renders this). */
+  touchTargets?: boolean;
+  /** Fired throughout a gizmo drag with the object's new delta. */
+  onObjectTransform?: (objectId: string, transform: ObjectTransform) => void;
+  /** Fired when an object is clicked in the viewport. */
+  onObjectPick?: (objectId: string) => void;
+  /**
+   * Fired once per parse with each object's as-designed anchor and size in bed
+   * millimetres. The anchor is what a persisted `position` is measured from
+   * (#32) and what rotation and scale pivot about.
+   */
+  onObjectMetrics?: (metrics: Record<string, ObjectMetrics>) => void;
 }
+
+/**
+ * Module-level so the default is referentially stable. As a default *parameter*
+ * it was a fresh object on every render, and it is in the scene-setup effect's
+ * dependency list — every render of a caller that omits `buildVolume` tore the
+ * WebGL context down and rebuilt it, which no gizmo can survive.
+ */
+const DEFAULT_BUILD_VOLUME: BuildVolume = { x: 256, y: 256, z: 256 };
+
+/** Handle scale for pointer vs finger. 1 is three.js's desktop default. */
+const GIZMO_SIZE_POINTER = 1;
+const GIZMO_SIZE_TOUCH = 1.75;
+
+/** A click that moves further than this is an orbit, not a selection. */
+const PICK_SLOP_PX = 5;
 
 interface MeshData {
   vertices: number[];
@@ -35,6 +97,15 @@ interface ObjectData {
   meshes: MeshData[];
   defaultExtruder: number; // Default extruder for object (used if mesh doesn't have specific one)
   plateId?: number | null;
+  /**
+   * Translation of this object's first `<component>` transform, in 3MF space.
+   *
+   * This is where a slicer-authored 3MF actually records placement — real
+   * exports leave `<build><item>` on identity — so it is the anchor
+   * `backend/app/services/plate_layout.py` measures a saved `position` from,
+   * and the point the step-8 gizmo pivots rotation and scale about.
+   */
+  componentAnchor?: Vec3;
 }
 
 interface BuildItem {
@@ -368,6 +439,7 @@ async function parse3MF(arrayBuffer: ArrayBuffer): Promise<Parsed3MFData> {
     }
 
     const meshes: MeshData[] = [];
+    let componentAnchor: Vec3 | undefined;
 
     // Check for direct mesh in this object
     const objMeshElements = objEl.getElementsByTagName('mesh');
@@ -435,6 +507,13 @@ async function parse3MF(arrayBuffer: ArrayBuffer): Promise<Parsed3MFData> {
           const compTransformStr = compEl.getAttribute('transform');
           const compTransform = parseTransform(compTransformStr);
 
+          // First component wins: that is the one the backend's placement
+          // contract names as the object's anchor.
+          if (componentAnchor === undefined) {
+            const t = new THREE.Vector3().setFromMatrixPosition(compTransform);
+            componentAnchor = [t.x, t.y, t.z];
+          }
+
           for (const mesh of extMeshes) {
             if (compTransformStr) {
               // Apply transform to vertices (in 3MF coordinate space, before Y/Z swap)
@@ -454,7 +533,13 @@ async function parse3MF(arrayBuffer: ArrayBuffer): Promise<Parsed3MFData> {
     }
 
     if (meshes.length > 0) {
-      objects.set(objectId, { id: objectId, meshes, defaultExtruder, plateId: objectPlateId });
+      objects.set(objectId, {
+        id: objectId,
+        meshes,
+        defaultExtruder,
+        plateId: objectPlateId,
+        componentAnchor,
+      });
     }
   }
 
@@ -515,11 +600,28 @@ function disposeGroup(group: THREE.Group) {
   });
 }
 
+/**
+ * One placeable object in the scene graph.
+ *
+ * `node` is what `TransformControls` attaches to, and its local transform *is*
+ * the object's placement delta. Its single child holds the geometry offset by
+ * `-pivot`, so a node parked at `pivot` renders the object exactly as designed
+ * and rotation and scale turn about the anchor — matching how the backend
+ * composes the same numbers onto the 3MF build item.
+ */
+interface ObjectNode {
+  objectId: string;
+  node: THREE.Group;
+  /** The anchor in three.js space (`swapYZ` of the bed-space anchor). */
+  pivot: Vec3;
+  metrics: ObjectMetrics;
+}
+
 function buildModelGroup(
   parsedData: Parsed3MFData,
   selectedPlateId: number | null,
   filamentColors?: string[],
-): THREE.Group {
+): { group: THREE.Group; nodes: ObjectNode[] } {
   const { objects, buildItems } = parsedData;
   const group = new THREE.Group();
 
@@ -536,20 +638,48 @@ function buildModelGroup(
     });
   };
 
-  // Group geometries by extruder index (using per-mesh extruder)
-  const geometriesByExtruder = new Map<number, THREE.BufferGeometry[]>();
-
   const hasPlateAssignments = buildItems.some((item) => item.plateId != null);
   const plateFilteredItems = selectedPlateId == null || !hasPlateAssignments
     ? buildItems
     : buildItems.filter((item) => item.plateId === selectedPlateId);
   const activeBuildItems = plateFilteredItems.length > 0 ? plateFilteredItems : buildItems;
 
+  // Geometry is bucketed per (object, extruder) rather than per extruder alone,
+  // so every object keeps its own node for the gizmo to grab. Objects still
+  // merge internally, so the draw-call count is per object rather than per
+  // triangle soup — the visual result is identical to the pre-#25 single merge.
+  const geometriesByObject = new Map<string, Map<number, THREE.BufferGeometry[]>>();
+  const anchorByObject = new Map<string, Vec3>();
+
+  const bucket = (objectId: string, extruder: number, geometry: THREE.BufferGeometry) => {
+    let byExtruder = geometriesByObject.get(objectId);
+    if (!byExtruder) {
+      byExtruder = new Map();
+      geometriesByObject.set(objectId, byExtruder);
+    }
+    const list = byExtruder.get(extruder);
+    if (list) list.push(geometry);
+    else byExtruder.set(extruder, [geometry]);
+  };
+
   // If we have build items, use them for positioning
   if (activeBuildItems.length > 0) {
     for (const item of activeBuildItems) {
       const objectData = objects.get(item.objectId);
       if (!objectData) continue;
+
+      if (!anchorByObject.has(item.objectId)) {
+        // The backend's contract: component translation plus the build item's
+        // own translation. Real slicer exports carry identity on the item, so
+        // this is normally just the component's.
+        const itemTranslation = new THREE.Vector3().setFromMatrixPosition(item.transform);
+        const componentAnchor = objectData.componentAnchor ?? [0, 0, 0];
+        anchorByObject.set(item.objectId, [
+          componentAnchor[0] + itemTranslation.x,
+          componentAnchor[1] + itemTranslation.y,
+          componentAnchor[2] + itemTranslation.z,
+        ]);
+      }
 
       for (const meshData of objectData.meshes) {
         // Use mesh's extruder, or item override, or object default
@@ -573,59 +703,92 @@ function buildModelGroup(
           extruder: extruder,
         });
 
-        if (!geometriesByExtruder.has(extruder)) {
-          geometriesByExtruder.set(extruder, []);
-        }
-        geometriesByExtruder.get(extruder)!.push(geometry);
+        bucket(item.objectId, extruder, geometry);
       }
     }
   } else {
     // Fallback: just add all objects without transforms
     for (const objectData of objects.values()) {
+      anchorByObject.set(objectData.id, objectData.componentAnchor ?? [0, 0, 0]);
       for (const meshData of objectData.meshes) {
         // Use per-mesh extruder
         const extruder = meshData.extruder;
-        const geometry = createGeometryFromMesh(meshData);
-        if (!geometriesByExtruder.has(extruder)) {
-          geometriesByExtruder.set(extruder, []);
+        bucket(objectData.id, extruder, createGeometryFromMesh(meshData));
+      }
+    }
+  }
+
+  const nodes: ObjectNode[] = [];
+
+  for (const [objectId, byExtruder] of geometriesByObject) {
+    const inner = new THREE.Group();
+
+    for (const [extruder, geometries] of byExtruder) {
+      if (geometries.length === 0) continue;
+
+      const mergedGeometry = geometries.length === 1
+        ? geometries[0]
+        : mergeGeometries(geometries, false);
+
+      if (mergedGeometry) {
+        const material = getMaterial(extruder);
+        const mesh = new THREE.Mesh(mergedGeometry, material);
+        mesh.userData.objectId = objectId;
+        inner.add(mesh);
+      }
+
+      // Dispose individual geometries if merged
+      if (geometries.length > 1) {
+        for (const geom of geometries) {
+          geom.dispose();
         }
-        geometriesByExtruder.get(extruder)!.push(geometry);
       }
     }
+
+    if (inner.children.length === 0) continue;
+
+    const box = new THREE.Box3().setFromObject(inner);
+    const sizeThree = box.getSize(new THREE.Vector3());
+    const pivot = swapYZ(anchorByObject.get(objectId) ?? [0, 0, 0]);
+
+    inner.position.set(-pivot[0], -pivot[1], -pivot[2]);
+
+    const node = new THREE.Group();
+    node.name = `object-${objectId}`;
+    node.userData.objectId = objectId;
+    node.position.set(pivot[0], pivot[1], pivot[2]);
+    node.add(inner);
+    group.add(node);
+
+    nodes.push({
+      objectId,
+      node,
+      pivot,
+      metrics: {
+        anchor: anchorByObject.get(objectId) ?? [0, 0, 0],
+        size: swapYZ([sizeThree.x, sizeThree.y, sizeThree.z]),
+      },
+    });
   }
 
-  // Create meshes for each extruder group
-  for (const [extruder, geometries] of geometriesByExtruder) {
-    if (geometries.length === 0) continue;
-
-    const mergedGeometry = geometries.length === 1
-      ? geometries[0]
-      : mergeGeometries(geometries, false);
-
-    if (mergedGeometry) {
-      const material = getMaterial(extruder);
-      const mesh = new THREE.Mesh(mergedGeometry, material);
-      group.add(mesh);
-    }
-
-    // Dispose individual geometries if merged
-    if (geometries.length > 1) {
-      for (const geom of geometries) {
-        geom.dispose();
-      }
-    }
-  }
-
-  return group;
+  return { group, nodes };
 }
 
 export function ModelViewer({
   url,
   fileType,
-  buildVolume = { x: 256, y: 256, z: 256 },
+  buildVolume = DEFAULT_BUILD_VOLUME,
   filamentColors,
   selectedPlateId = null,
   className = '',
+  interactive = false,
+  objectTransforms,
+  selectedObjectId = null,
+  gizmoMode = null,
+  touchTargets = false,
+  onObjectTransform,
+  onObjectPick,
+  onObjectMetrics,
 }: ModelViewerProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -640,6 +803,21 @@ export function ModelViewer({
   const [error, setError] = useState<string | null>(null);
   const [parsedData, setParsedData] = useState<Parsed3MFData | null>(null);
   const [stlGeometry, setStlGeometry] = useState<THREE.BufferGeometry | null>(null);
+
+  // ---- Interactive placement (#25) ------------------------------------------
+  const transformControlsRef = useRef<TransformControls | null>(null);
+  const objectNodesRef = useRef<ObjectNode[]>([]);
+  // Bumped whenever the model group is rebuilt, so the effects that reach into
+  // the scene graph re-run without depending on the mutable refs themselves.
+  const [sceneGeneration, setSceneGeneration] = useState(0);
+
+  // Callbacks live in refs: callers pass inline arrows, and putting them in a
+  // dependency array would tear down the WebGL scene on every parent render.
+  const callbacksRef = useRef({ onObjectTransform, onObjectPick, onObjectMetrics });
+  callbacksRef.current = { onObjectTransform, onObjectPick, onObjectMetrics };
+  // Read inside the pointer handler, which is bound once for the scene's life.
+  const objectTransformsRef = useRef(objectTransforms);
+  objectTransformsRef.current = objectTransforms;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -670,6 +848,84 @@ export function ModelViewer({
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controlsRef.current = controls;
+
+    // Placement gizmo (#25). Only stood up for interactive viewports so the
+    // read-only ones keep exactly the listener set they had before.
+    const teardown: Array<() => void> = [];
+    if (interactive) {
+      const transformControls = new TransformControls(camera, renderer.domElement);
+      transformControls.setSize(touchTargets ? GIZMO_SIZE_TOUCH : GIZMO_SIZE_POINTER);
+      transformControlsRef.current = transformControls;
+      scene.add(transformControls.getHelper());
+
+      teardown.push(linkGizmoToOrbit(transformControls, controls));
+
+      const onObjectChange = () => {
+        const node = transformControls.object;
+        if (!node) return;
+        const objectId = node.userData.objectId as string | undefined;
+        const entry = objectNodesRef.current.find((candidate) => candidate.objectId === objectId);
+        if (!objectId || !entry) return;
+        const next = objectNodeToTransform(node, entry.pivot);
+        const current = objectTransformsRef.current?.[objectId] ?? identityTransform();
+        // Rounded first, so a drag that ends where it started does not report a
+        // change — a reported change would keep Print now disabled for nothing.
+        if (transformsEqual(next, current)) return;
+        callbacksRef.current.onObjectTransform?.(objectId, next);
+      };
+      transformControls.addEventListener('objectChange', onObjectChange);
+      teardown.push(() => transformControls.removeEventListener('objectChange', onObjectChange));
+
+      // Click-to-select. Distinguished from an orbit by distance, and skipped
+      // outright while the gizmo has the pointer, so grabbing a handle that
+      // happens to sit over another object cannot steal the selection.
+      const raycaster = new THREE.Raycaster();
+      const pointerDownAt = { x: 0, y: 0, valid: false };
+
+      const onPointerDown = (event: PointerEvent) => {
+        pointerDownAt.x = event.clientX;
+        pointerDownAt.y = event.clientY;
+        pointerDownAt.valid = !transformControls.dragging && !transformControls.axis;
+      };
+      const onPointerUp = (event: PointerEvent) => {
+        if (!pointerDownAt.valid || transformControls.dragging) return;
+        if (
+          Math.abs(event.clientX - pointerDownAt.x) > PICK_SLOP_PX ||
+          Math.abs(event.clientY - pointerDownAt.y) > PICK_SLOP_PX
+        ) {
+          return;
+        }
+        const rect = renderer.domElement.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+        raycaster.setFromCamera(
+          new THREE.Vector2(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1,
+          ),
+          camera,
+        );
+        const hits = raycaster.intersectObjects(
+          objectNodesRef.current.map((entry) => entry.node),
+          true,
+        );
+        const picked = hits[0]?.object?.userData?.objectId as string | undefined;
+        if (picked) callbacksRef.current.onObjectPick?.(picked);
+      };
+
+      renderer.domElement.addEventListener('pointerdown', onPointerDown);
+      renderer.domElement.addEventListener('pointerup', onPointerUp);
+      teardown.push(() => {
+        renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+        renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      });
+
+      teardown.push(() => {
+        transformControls.detach();
+        scene.remove(transformControls.getHelper());
+        transformControls.dispose();
+        transformControlsRef.current = null;
+      });
+    }
 
     // Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -786,36 +1042,48 @@ export function ModelViewer({
       window.removeEventListener('resize', handleResize);
       resizeObserver.disconnect();
       cancelAnimationFrame(animationId);
+      for (const undo of teardown) undo();
       controls.dispose();
       renderer.dispose();
       container.removeChild(renderer.domElement);
       modelGroupRef.current = null;
+      objectNodesRef.current = [];
       plateRef.current = null;
       gridRef.current = null;
     };
-  }, [url, buildVolume, fileType, t]);
+  }, [url, buildVolume, fileType, t, interactive, touchTargets]);
 
   useEffect(() => {
     if (!sceneRef.current || !cameraRef.current || !controlsRef.current) return;
     if (!parsedData && !stlGeometry) return;
 
     if (modelGroupRef.current) {
+      // Detach first: the gizmo is holding a node that is about to leave the
+      // scene graph, and three.js logs an error every frame it is asked to
+      // track an object that is no longer in it.
+      transformControlsRef.current?.detach();
       sceneRef.current.remove(modelGroupRef.current);
       disposeGroup(modelGroupRef.current);
     }
 
     const isStlModel = !!stlGeometry;
-    const group = isStlModel
+    // An STL has no object ids, so it gets no placeable nodes: its placement is
+    // rewritten server-side after the sidecar converts it to a project 3MF
+    // (see `backend/app/services/plate_layout.py`), and there is nothing here
+    // to key a transform on.
+    const built = isStlModel
       ? (() => {
           const materialColor = filamentColors?.[0] || '#00ae42';
           const material = new THREE.MeshPhongMaterial({ color: new THREE.Color(materialColor), shininess: 30 });
           const mesh = new THREE.Mesh(stlGeometry!, material);
           const stlGroup = new THREE.Group();
           stlGroup.add(mesh);
-          return stlGroup;
+          return { group: stlGroup, nodes: [] as ObjectNode[] };
         })()
       : buildModelGroup(parsedData!, selectedPlateId ?? null, filamentColors);
+    const group = built.group;
     modelGroupRef.current = group;
+    objectNodesRef.current = built.nodes;
     sceneRef.current.add(group);
 
     // Get bounding box to position model
@@ -888,8 +1156,52 @@ export function ModelViewer({
     controlsRef.current.target.copy(finalCenter);
     controlsRef.current.update();
 
+    const metrics: Record<string, ObjectMetrics> = {};
+    for (const entry of built.nodes) metrics[entry.objectId] = entry.metrics;
+    callbacksRef.current.onObjectMetrics?.(metrics);
+
+    setSceneGeneration((generation) => generation + 1);
     setLoading(false);
   }, [parsedData, stlGeometry, selectedPlateId, filamentColors, buildVolume]);
+
+  /**
+   * Push the caller's placement deltas onto the scene graph.
+   *
+   * Skipped mid-drag: `TransformControls` is authoring the node's transform
+   * while the pointer is down, and writing the round-tripped value back on
+   * every `objectChange` would fight the drag by a fraction of a millimetre
+   * per frame.
+   */
+  useEffect(() => {
+    if (transformControlsRef.current?.dragging) return;
+    for (const entry of objectNodesRef.current) {
+      const transform = objectTransforms?.[entry.objectId] ?? identityTransform();
+      const next = transformToObjectNode(transform, entry.pivot);
+      entry.node.position.set(next.position[0], next.position[1], next.position[2]);
+      entry.node.quaternion.copy(next.quaternion);
+      entry.node.scale.set(next.scale[0], next.scale[1], next.scale[2]);
+    }
+  }, [objectTransforms, sceneGeneration]);
+
+  /** Attach the gizmo to the selected object, in the selected mode. */
+  useEffect(() => {
+    const transformControls = transformControlsRef.current;
+    if (!transformControls) return;
+
+    const entry = gizmoMode
+      ? objectNodesRef.current.find((candidate) => candidate.objectId === selectedObjectId)
+      : undefined;
+
+    if (!entry) {
+      transformControls.detach();
+      return;
+    }
+    transformControls.setMode(gizmoMode as GizmoMode);
+    transformControls.attach(entry.node);
+    return () => {
+      transformControls.detach();
+    };
+  }, [selectedObjectId, gizmoMode, sceneGeneration]);
 
   const resetView = () => {
     if (cameraRef.current && controlsRef.current) {

@@ -4152,7 +4152,7 @@ export default {
     railLabel: 'Impostazioni di slicing',
     presetsHeading: 'Profili',
     saveLayout: 'Salva disposizione',
-    saveLayoutComingSoon: 'La disposizione dei modelli sul piatto arriverà in un passaggio successivo: non c’è ancora nulla da salvare.',
+    saveLayoutComingSoon: 'La tua disposizione è attiva sul piatto, ma il salvataggio arriverà nel passaggio successivo.',
     printNow: 'Stampa ora',
     printNowTitle: 'Invia il file elaborato direttamente a una stampante',
     printNowStale: 'Le impostazioni sono cambiate dall’ultima elaborazione: rielabora prima di stampare.',
@@ -5291,6 +5291,11 @@ export default {
     scale: 'Scala',
     noSelection: 'Nessun oggetto selezionato',
     emptyPlate: 'Questo piatto non contiene oggetti',
+    tools: 'Strumenti di posizionamento',
+    move: 'Sposta',
+    rotate: 'Ruota',
+    layFlat: 'Appoggia sul piano',
+    autoArrange: 'Disponi automaticamente',
   },
 
   // Maintenance type descriptions (built-in)

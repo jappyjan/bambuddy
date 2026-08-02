@@ -4164,7 +4164,7 @@ export default {
     railLabel: 'スライス設定',
     presetsHeading: 'プロファイル',
     saveLayout: '配置を保存',
-    saveLayoutComingSoon: 'プレート上でのモデル配置は後のステップで対応します。まだ保存するものはありません。',
+    saveLayoutComingSoon: '配置はプレート上に反映されていますが、保存は次のステップで対応します。',
     printNow: 'すぐに印刷',
     printNowTitle: 'スライス済みのファイルをプリンターへ直接送信します',
     printNowStale: '前回のスライス以降に設定が変更されました。印刷する前に再度スライスしてください。',
@@ -5303,6 +5303,11 @@ export default {
     scale: '拡大縮小',
     noSelection: 'オブジェクトが選択されていません',
     emptyPlate: 'このプレートにはオブジェクトがありません',
+    tools: '配置ツール',
+    move: '移動',
+    rotate: '回転',
+    layFlat: '平らに置く',
+    autoArrange: '自動配置',
   },
 
   // Maintenance type descriptions (built-in)

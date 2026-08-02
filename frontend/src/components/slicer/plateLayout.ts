@@ -72,6 +72,49 @@ export function buildStagePlates(
 }
 
 /**
+ * The gizmos' pending edits, `{plateIndex: {objectId: transform}}` (#25).
+ *
+ * Kept apart from the plates the layout query produced so a refetch does not
+ * silently discard what the user has just arranged, and so "has anything
+ * moved?" — which is what #32's Save layout turns on — is a lookup rather than
+ * a deep comparison against a moving baseline.
+ */
+export type PlateTransformEdits = Record<number, Record<string, ObjectTransform>>;
+
+/** Merge pending gizmo edits over the plates the stored layout produced. */
+export function applyTransformEdits(
+  plates: StagePlate[],
+  edits: PlateTransformEdits,
+): StagePlate[] {
+  if (Object.keys(edits).length === 0) return plates;
+
+  return plates.map((plate) => {
+    const forPlate = edits[plate.index];
+    if (!forPlate) return plate;
+    return {
+      ...plate,
+      objects: plate.objects.map((object) => {
+        const transform = forPlate[object.id];
+        return transform ? { ...object, transform: cloneTransform(transform) } : object;
+      }),
+    };
+  });
+}
+
+/** Immutably record one object's new transform. */
+export function withTransformEdit(
+  edits: PlateTransformEdits,
+  plateIndex: number,
+  objectId: string,
+  transform: ObjectTransform,
+): PlateTransformEdits {
+  return {
+    ...edits,
+    [plateIndex]: { ...(edits[plateIndex] ?? {}), [objectId]: cloneTransform(transform) },
+  };
+}
+
+/**
  * Deep-copy a transform. The arrays matter: a shallow spread would hand
  * every "as designed" object the same three arrays as
  * {@link IDENTITY_TRANSFORM}, and the first gizmo drag (#12) would move all

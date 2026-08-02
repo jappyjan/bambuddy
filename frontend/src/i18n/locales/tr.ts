@@ -4154,7 +4154,7 @@ export default {
     railLabel: 'Dilimleme ayarları',
     presetsHeading: 'Profiller',
     saveLayout: 'Yerleşimi kaydet',
-    saveLayoutComingSoon: 'Modelleri tabla üzerinde düzenleme sonraki bir adımda gelecek; henüz kaydedilecek bir şey yok.',
+    saveLayoutComingSoon: 'Düzenlemen tablada geçerli, ancak kaydetme sonraki adımda gelecek.',
     printNow: 'Şimdi yazdır',
     printNowTitle: 'Dilimlenmiş dosyayı doğrudan bir yazıcıya gönder',
     printNowStale: 'Son dilimlemeden bu yana ayarlar değişti — yazdırmadan önce yeniden dilimleyin.',
@@ -5267,6 +5267,11 @@ export default {
     scale: 'Ölçek',
     noSelection: 'Seçili nesne yok',
     emptyPlate: 'Bu tablada nesne yok',
+    tools: 'Yerleştirme araçları',
+    move: 'Taşı',
+    rotate: 'Döndür',
+    layFlat: 'Düz yatır',
+    autoArrange: 'Otomatik yerleştir',
   },
 
   // Bakım türü açıklamaları (yerleşik)

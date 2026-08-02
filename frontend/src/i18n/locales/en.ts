@@ -4200,7 +4200,7 @@ export default {
     railLabel: 'Slice settings',
     presetsHeading: 'Profiles',
     saveLayout: 'Save layout',
-    saveLayoutComingSoon: 'Arranging models on the plate arrives in a later step — there is nothing to save yet.',
+    saveLayoutComingSoon: 'Your arrangement is live on the plate, but saving it arrives in the next step.',
     printNow: 'Print now',
     printNowTitle: 'Send the sliced file straight to a printer',
     printNowStale: 'Settings changed since the last slice — slice again before printing.',
@@ -5348,6 +5348,11 @@ export default {
     scale: 'Scale',
     noSelection: 'No object selected',
     emptyPlate: 'This plate has no objects',
+    tools: 'Placement tools',
+    move: 'Move',
+    rotate: 'Rotate',
+    layFlat: 'Lay flat',
+    autoArrange: 'Auto-arrange',
   },
 
   // Maintenance type descriptions (built-in)

@@ -51,7 +51,13 @@ import { useSlicePresets } from '../hooks/useSlicePresets';
 import { PlateStage } from '../components/slicer/PlateStage';
 import { SliceActionBar } from '../components/slicer/SliceActionBar';
 import { SlicerRail } from '../components/slicer/SlicerRail';
-import { buildStagePlates } from '../components/slicer/plateLayout';
+import {
+  applyTransformEdits,
+  buildStagePlates,
+  withTransformEdit,
+  type PlateTransformEdits,
+} from '../components/slicer/plateLayout';
+import type { ObjectTransform } from '../types/plateStage';
 import {
   resolveDefaults,
   sanitizeOverrides,
@@ -136,9 +142,35 @@ export function SlicerPage() {
     staleTime: 60_000,
   });
 
-  const stagePlates = useMemo(
+  // What the gizmos have moved since the page loaded (#25). Held here, not in
+  // `PlateStage`, because it has to reach `selection.plates` — that is what
+  // makes a placement change invalidate a completed slice and disable Print
+  // now. See the module header in `sliceSelection.ts`.
+  const [transformEdits, setTransformEdits] = useState<PlateTransformEdits>({});
+
+  // A different file is a different arrangement. Dropping the edits on the
+  // source change rather than merging them stops one file's moves reappearing
+  // on the next, which would be invisible until it was sliced.
+  useEffect(() => {
+    setTransformEdits({});
+  }, [source?.kind, source?.id]);
+
+  const basePlates = useMemo(
     () => buildStagePlates(platesMeta, layoutQuery.data?.layout ?? null),
     [platesMeta, layoutQuery.data],
+  );
+  const stagePlates = useMemo(
+    () => applyTransformEdits(basePlates, transformEdits),
+    [basePlates, transformEdits],
+  );
+
+  const handleTransformChange = useCallback(
+    (plateIndex: number, objectId: string, transform: ObjectTransform) => {
+      setTransformEdits((current) =>
+        withTransformEdit(current, plateIndex, objectId, transform),
+      );
+    },
+    [],
   );
 
   // `plate` mirrors SliceModal exactly: omitted for single-plate 3MFs, STLs and
@@ -450,6 +482,7 @@ export function SlicerPage() {
           plates={stagePlates}
           initialPlate={activePlate}
           onActivePlateChange={setActivePlate}
+          onTransformChange={handleTransformChange}
           actionBar={
             <SliceActionBar
               estimate={estimate}
@@ -460,11 +493,11 @@ export function SlicerPage() {
               onPrintNow={() => setPrintOpen(true)}
               canPrintNow={canPrintNow}
               hasCompletedSlice={lastSlice != null}
-              // Read-only stage this ticket — nothing on screen can move an
-              // object yet, so there is nothing to save. Writing the current
-              // identity transforms back would be worse than leaving it
-              // disabled: it converts "as designed" into an explicit
-              // arrangement the backend would then apply. #12 enables this.
+              // The gizmos move objects (#25) but persisting the result is
+              // #32: turning this on now would need the delta-to-absolute
+              // conversion described in `PlateStage`'s header, and writing a
+              // half-converted layout is worse than not writing one — the
+              // save appears to succeed and the slice comes out wrong.
               canSaveLayout={false}
               saveLayoutHint={t('slicer.saveLayoutComingSoon')}
             />

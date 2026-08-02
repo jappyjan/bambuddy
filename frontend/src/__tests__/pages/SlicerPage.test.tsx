@@ -23,18 +23,34 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { render } from '../utils';
 import { SlicerPage } from '../../pages/SlicerPage';
 import { SliceModal } from '../../components/SliceModal';
 import { SliceJobTrackerProvider } from '../../contexts/SliceJobTrackerContext';
 import { api, type SliceRequest, type UnifiedPresetsResponse } from '../../api/client';
+import type { ObjectTransform } from '../../types/plateStage';
+
+/**
+ * The mock keeps the viewport's placement callback so a gizmo drag can be
+ * simulated (#25). A real drag needs a canvas and a raycast; what this page is
+ * responsible for begins at the transform the viewport reports.
+ */
+let viewerProps: {
+  onObjectTransform?: (objectId: string, transform: ObjectTransform) => void;
+} = {};
 
 vi.mock('../../components/ModelViewer', () => ({
-  ModelViewer: ({ selectedPlateId }: { selectedPlateId?: number | null }) => (
-    <div data-testid="model-viewer" data-selected-plate={String(selectedPlateId ?? '')} />
-  ),
+  ModelViewer: (props: {
+    selectedPlateId?: number | null;
+    onObjectTransform?: (objectId: string, transform: ObjectTransform) => void;
+  }) => {
+    viewerProps = props;
+    return (
+      <div data-testid="model-viewer" data-selected-plate={String(props.selectedPlateId ?? '')} />
+    );
+  },
 }));
 
 vi.mock('../../components/PrintModal', () => ({
@@ -395,6 +411,70 @@ describe('SlicerPage', () => {
       await waitFor(() => expect(printNowButton().disabled).toBe(false));
     });
 
+    it('disables again when an object is moved after the slice', async () => {
+      // **The one thing step-8 can break silently.** A transform kept inside
+      // `PlateStage` would still move the model on screen, and the fingerprint
+      // would never see it: Print now would stay lit and dispatch a print of
+      // the arrangement the user had *before* they moved anything. Nothing
+      // else in the suite would fail. Hence this test, at the level where the
+      // button can actually dispatch.
+      mockApi.getLibraryFilePlates.mockResolvedValue({
+        file_id: 100,
+        filename: 'Two.3mf',
+        plates: [
+          { index: 1, name: null, objects: ['2', '3'], has_thumbnail: false, thumbnail_url: null, print_time_seconds: null, filament_used_grams: null, filaments: [] },
+        ],
+        is_multi_plate: false,
+      });
+      const user = userEvent.setup();
+      renderSlicerPage('?file=100');
+      await waitForReady();
+      await user.click(sliceButton());
+      await waitFor(() => expect(printNowButton().disabled).toBe(false));
+
+      act(() => {
+        viewerProps.onObjectTransform?.('2', {
+          position: [40, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [1, 1, 1],
+        });
+      });
+
+      await waitFor(() => expect(printNowButton().disabled).toBe(true));
+      expect(screen.getByTestId('print-now-stale')).toBeDefined();
+    });
+
+    it('comes back when the object is moved back', async () => {
+      mockApi.getLibraryFilePlates.mockResolvedValue({
+        file_id: 100,
+        filename: 'Two.3mf',
+        plates: [
+          { index: 1, name: null, objects: ['2'], has_thumbnail: false, thumbnail_url: null, print_time_seconds: null, filament_used_grams: null, filaments: [] },
+        ],
+        is_multi_plate: false,
+      });
+      const user = userEvent.setup();
+      renderSlicerPage('?file=100');
+      await waitForReady();
+      await user.click(sliceButton());
+      await waitFor(() => expect(printNowButton().disabled).toBe(false));
+
+      const move = (position: [number, number, number]) =>
+        act(() => {
+          viewerProps.onObjectTransform?.('2', {
+            position,
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1],
+          });
+        });
+
+      move([40, 0, 0]);
+      await waitFor(() => expect(printNowButton().disabled).toBe(true));
+
+      move([0, 0, 0]);
+      await waitFor(() => expect(printNowButton().disabled).toBe(false));
+    });
+
     it('does not enable when the slice job fails', async () => {
       mockApi.getSliceJob.mockResolvedValue({
         ...COMPLETED_JOB,
@@ -412,12 +492,13 @@ describe('SlicerPage', () => {
     });
   });
 
-  it('leaves Save layout disabled while the stage is read-only', async () => {
+  it('leaves Save layout disabled until #32 can persist an arrangement', async () => {
     renderSlicerPage('?file=100');
     await waitForReady();
-    // #12 (step-8) adds the gizmos that make an arrangement editable. Until
-    // then there is nothing to save, and writing identity transforms back would
-    // turn "as designed" into an explicit arrangement the backend would apply.
+    // #25 makes the arrangement editable; #32 makes it savable. Enabling the
+    // button in between would write the gizmos' deltas straight into a
+    // `plate_layout` whose `position` the backend reads as an *absolute* bed
+    // coordinate — the save would succeed and drag every object to the corner.
     const save = screen.getByRole('button', { name: /Save layout/i }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
   });

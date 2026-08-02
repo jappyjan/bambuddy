@@ -4152,7 +4152,7 @@ export default {
     railLabel: 'Configurações de fatiamento',
     presetsHeading: 'Perfis',
     saveLayout: 'Salvar disposição',
-    saveLayoutComingSoon: 'Organizar os modelos na mesa chega em uma etapa posterior — ainda não há nada para salvar.',
+    saveLayoutComingSoon: 'Sua organização já está ativa na mesa, mas salvá-la chega na próxima etapa.',
     printNow: 'Imprimir agora',
     printNowTitle: 'Enviar o arquivo fatiado direto para uma impressora',
     printNowStale: 'As configurações mudaram desde o último fatiamento — fatie novamente antes de imprimir.',
@@ -5291,6 +5291,11 @@ export default {
     scale: 'Escala',
     noSelection: 'Nenhum objeto selecionado',
     emptyPlate: 'Esta placa não tem objetos',
+    tools: 'Ferramentas de posicionamento',
+    move: 'Mover',
+    rotate: 'Girar',
+    layFlat: 'Assentar na mesa',
+    autoArrange: 'Organizar automaticamente',
   },
 
   // Maintenance type descriptions (built-in)

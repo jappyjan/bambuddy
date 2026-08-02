@@ -4153,7 +4153,7 @@ export default {
     railLabel: 'Paramètres de tranchage',
     presetsHeading: 'Profils',
     saveLayout: 'Enregistrer la disposition',
-    saveLayoutComingSoon: 'L’agencement des modèles sur le plateau arrivera à une étape ultérieure — il n’y a encore rien à enregistrer.',
+    saveLayoutComingSoon: 'Votre agencement est actif sur le plateau, mais son enregistrement arrivera à l’étape suivante.',
     printNow: 'Imprimer maintenant',
     printNowTitle: 'Envoyer le fichier tranché directement à une imprimante',
     printNowStale: 'Les paramètres ont changé depuis le dernier tranchage — retranchez avant d’imprimer.',
@@ -5292,6 +5292,11 @@ export default {
     scale: 'Échelle',
     noSelection: 'Aucun objet sélectionné',
     emptyPlate: 'Cette plaque ne contient aucun objet',
+    tools: 'Outils de placement',
+    move: 'Déplacer',
+    rotate: 'Pivoter',
+    layFlat: 'Poser à plat',
+    autoArrange: 'Agencement automatique',
   },
 
   // Maintenance type descriptions (built-in)

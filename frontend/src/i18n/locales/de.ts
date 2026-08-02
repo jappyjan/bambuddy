@@ -4164,7 +4164,7 @@ export default {
     railLabel: 'Slice-Einstellungen',
     presetsHeading: 'Profile',
     saveLayout: 'Anordnung speichern',
-    saveLayoutComingSoon: 'Das Anordnen der Modelle auf der Platte kommt in einem späteren Schritt – es gibt noch nichts zu speichern.',
+    saveLayoutComingSoon: 'Deine Anordnung ist auf der Platte aktiv, das Speichern kommt aber erst im nächsten Schritt.',
     printNow: 'Jetzt drucken',
     printNowTitle: 'Die geslicete Datei direkt an einen Drucker senden',
     printNowStale: 'Die Einstellungen haben sich seit dem letzten Slice geändert – bitte erneut slicen.',
@@ -5302,6 +5302,11 @@ export default {
     scale: 'Skalierung',
     noSelection: 'Kein Objekt ausgewählt',
     emptyPlate: 'Diese Platte enthält keine Objekte',
+    tools: 'Platzierungswerkzeuge',
+    move: 'Verschieben',
+    rotate: 'Drehen',
+    layFlat: 'Flach ablegen',
+    autoArrange: 'Automatisch anordnen',
   },
 
   // Maintenance type descriptions (built-in)

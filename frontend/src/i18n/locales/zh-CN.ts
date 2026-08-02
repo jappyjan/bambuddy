@@ -4152,7 +4152,7 @@ export default {
     railLabel: '切片设置',
     presetsHeading: '配置文件',
     saveLayout: '保存布局',
-    saveLayoutComingSoon: '在热床上排布模型将在后续步骤中提供，目前还没有可保存的内容。',
+    saveLayoutComingSoon: '你的排布已应用到热床上，但保存功能将在下一步提供。',
     printNow: '立即打印',
     printNowTitle: '将切片后的文件直接发送到打印机',
     printNowStale: '自上次切片后设置已更改，请重新切片后再打印。',
@@ -5291,6 +5291,11 @@ export default {
     scale: '缩放',
     noSelection: '未选择对象',
     emptyPlate: '此打印板上没有对象',
+    tools: '摆放工具',
+    move: '移动',
+    rotate: '旋转',
+    layFlat: '平放',
+    autoArrange: '自动排列',
   },
 
   // Maintenance type descriptions (built-in)

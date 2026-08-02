@@ -4167,7 +4167,7 @@ export default {
     railLabel: 'Ajustes de laminado',
     presetsHeading: 'Perfiles',
     saveLayout: 'Guardar disposición',
-    saveLayoutComingSoon: 'Colocar los modelos en la placa llegará en un paso posterior; todavía no hay nada que guardar.',
+    saveLayoutComingSoon: 'Tu disposición ya está en la placa, pero guardarla llegará en el siguiente paso.',
     printNow: 'Imprimir ahora',
     printNowTitle: 'Enviar el archivo laminado directamente a una impresora',
     printNowStale: 'Los ajustes han cambiado desde el último laminado: vuelve a laminar antes de imprimir.',
@@ -5311,6 +5311,11 @@ export default {
     scale: 'Escala',
     noSelection: 'Ningún objeto seleccionado',
     emptyPlate: 'Esta placa no tiene objetos',
+    tools: 'Herramientas de colocación',
+    move: 'Mover',
+    rotate: 'Rotar',
+    layFlat: 'Apoyar en la base',
+    autoArrange: 'Organizar automáticamente',
   },
 
   // Maintenance type descriptions (built-in)

@@ -4152,7 +4152,7 @@ export default {
     railLabel: '切片設定',
     presetsHeading: '設定檔',
     saveLayout: '儲存排列',
-    saveLayoutComingSoon: '在列印板上排列模型將於後續步驟提供，目前尚無可儲存的內容。',
+    saveLayoutComingSoon: '你的排列已套用到列印板上，但儲存功能將於下一步提供。',
     printNow: '立即列印',
     printNowTitle: '將切片後的檔案直接傳送至印表機',
     printNowStale: '自上次切片後設定已變更，請重新切片後再列印。',
@@ -5291,6 +5291,11 @@ export default {
     scale: '縮放',
     noSelection: '未選取物件',
     emptyPlate: '此列印板上沒有物件',
+    tools: '擺放工具',
+    move: '移動',
+    rotate: '旋轉',
+    layFlat: '平放',
+    autoArrange: '自動排列',
   },
 
   // Maintenance type descriptions (built-in)
