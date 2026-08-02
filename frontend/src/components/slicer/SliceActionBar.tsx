@@ -1,7 +1,8 @@
 /**
- * The bar under the stage: estimate, Save layout, Slice, Print now
- * (#15, step-5.3; mockup screen 2 — "Bottom bar: estimate, then Slice, then
- * Print now lights up once a slice exists").
+ * The bar under the stage: estimate, Reset layout, Save layout, Slice, Print
+ * now (#15, step-5.3; mockup screen 2 — "Bottom bar: estimate, then Slice, then
+ * Print now lights up once a slice exists"). Reset arrived with persistence
+ * (#32).
  *
  * Presentational. It is handed `canPrintNow` rather than deciding it, because
  * the decision is the ticket's one correctness rule and belongs next to the
@@ -12,7 +13,7 @@
  */
 
 import { useTranslation } from 'react-i18next';
-import { Loader2, Play, Printer, Save } from 'lucide-react';
+import { Loader2, Play, Printer, RotateCcw, Save } from 'lucide-react';
 
 export interface SliceEstimate {
   printTimeSeconds: number | null;
@@ -38,9 +39,17 @@ export interface SliceActionBarProps {
   hasCompletedSlice: boolean;
 
   onSaveLayout?: () => void;
-  /** Read-only stage this ticket; #12 (step-8) turns this on. */
+  /** True only when the plate differs from the stored arrangement (#32). */
   canSaveLayout?: boolean;
   saveLayoutHint?: string;
+
+  /** Clear the stored arrangement and put every object back as designed. */
+  onResetLayout?: () => void;
+  canResetLayout?: boolean;
+  resetLayoutHint?: string;
+
+  /** A layout write is in flight; both layout buttons wait it out. */
+  isSavingLayout?: boolean;
 
   className?: string;
 }
@@ -57,6 +66,10 @@ export function SliceActionBar({
   onSaveLayout,
   canSaveLayout = false,
   saveLayoutHint,
+  onResetLayout,
+  canResetLayout = false,
+  resetLayoutHint,
+  isSavingLayout = false,
   className = '',
 }: SliceActionBarProps) {
   const { t } = useTranslation();
@@ -96,12 +109,27 @@ export function SliceActionBar({
       <div className="ml-auto flex items-center gap-2">
         <button
           type="button"
+          onClick={onResetLayout}
+          disabled={!canResetLayout || isSavingLayout}
+          title={resetLayoutHint ?? t('slicer.resetLayout')}
+          className="inline-flex items-center gap-1.5 rounded-md border border-bambu-dark-tertiary px-2.5 py-1.5 text-xs text-bambu-gray transition-colors hover:border-bambu-gray hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-bambu-dark-tertiary disabled:hover:text-bambu-gray"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          {t('slicer.resetLayout')}
+        </button>
+
+        <button
+          type="button"
           onClick={onSaveLayout}
-          disabled={!canSaveLayout}
+          disabled={!canSaveLayout || isSavingLayout}
           title={saveLayoutHint ?? t('slicer.saveLayout')}
           className="inline-flex items-center gap-1.5 rounded-md border border-bambu-dark-tertiary px-2.5 py-1.5 text-xs text-bambu-gray transition-colors hover:border-bambu-gray hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-bambu-dark-tertiary disabled:hover:text-bambu-gray"
         >
-          <Save className="h-3.5 w-3.5" />
+          {isSavingLayout ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Save className="h-3.5 w-3.5" />
+          )}
           {t('slicer.saveLayout')}
         </button>
 

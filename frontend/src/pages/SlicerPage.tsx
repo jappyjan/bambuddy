@@ -24,6 +24,27 @@
  * records the fingerprint at dispatch time, keeps it with the job's result, and
  * compares against the live fingerprint on every render.
  *
+ * ## The saved arrangement (#32, step-8.2)
+ *
+ * The gizmos in `PlateStage` produce **deltas from as-designed**; the persisted
+ * `plate_layout` holds **absolute bed coordinates**. The two are bridged by the
+ * per-object anchors the viewport measures off the 3MF and reports on
+ * `onObjectMetricsChange`, which is why this page consumes them —
+ * `components/slicer/plateLayout.ts` holds the conversion and the reasons.
+ *
+ * Two things about that arrangement are easy to get wrong and impossible to
+ * see afterwards:
+ *
+ * 1. **The slicer only ever reads the stored column.** There is no layout field
+ *    on `SliceRequest`; the backend applies `LibraryFile.plate_layout` to the
+ *    model bytes at slice time. So an unsaved move would slice the *previous*
+ *    arrangement while the viewport showed the new one. Slicing therefore
+ *    flushes a pending layout first — see `handleSlice`.
+ * 2. **Archives have no layout endpoint.** Rather than offer gizmos whose
+ *    output can never reach the slicer, the stage is left read-only for an
+ *    archive source (`PlateStage` is read-only exactly when it is given no
+ *    `onTransformChange`).
+ *
  * ## Coexistence with SliceModal
  *
  * `SliceModal` stays reachable — the file grid's per-card Slice button still
@@ -37,7 +58,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, FileQuestion } from 'lucide-react';
 import {
   api,
@@ -51,7 +72,15 @@ import { useSlicePresets } from '../hooks/useSlicePresets';
 import { PlateStage } from '../components/slicer/PlateStage';
 import { SliceActionBar } from '../components/slicer/SliceActionBar';
 import { SlicerRail } from '../components/slicer/SlicerRail';
-import { buildStagePlates } from '../components/slicer/plateLayout';
+import {
+  applyTransformEdits,
+  buildStagePlates,
+  toPlateLayout,
+  withTransformEdit,
+  type PlateTransformEdits,
+} from '../components/slicer/plateLayout';
+import type { ObjectMetrics } from '../components/slicer/transformMath';
+import type { ObjectTransform, PlateLayout } from '../types/plateStage';
 import {
   resolveDefaults,
   sanitizeOverrides,
@@ -77,12 +106,22 @@ interface CompletedSlice {
   target: { kind: 'libraryFile'; id: number; name: string } | { kind: 'archive'; id: number; name: string };
 }
 
+/** Anchors and footprints are as-designed constants; equal means "no news". */
+function sameMetrics(a: ObjectMetrics | undefined, b: ObjectMetrics): boolean {
+  return (
+    a != null &&
+    a.anchor.every((value, index) => value === b.anchor[index]) &&
+    a.size.every((value, index) => value === b.size[index])
+  );
+}
+
 export function SlicerPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { trackJob } = useSliceJobTracker();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
 
   // Deep-linkable and refresh-proof: the source lives entirely in the URL, so
   // a reload, a bookmark and the browser Back button all behave without any
@@ -136,10 +175,117 @@ export function SlicerPage() {
     staleTime: 60_000,
   });
 
-  const stagePlates = useMemo(
-    () => buildStagePlates(platesMeta, layoutQuery.data?.layout ?? null),
-    [platesMeta, layoutQuery.data],
+  // What the gizmos have moved since the page loaded (#25). Held here, not in
+  // `PlateStage`, because it has to reach `selection.plates` — that is what
+  // makes a placement change invalidate a completed slice and disable Print
+  // now. See the module header in `sliceSelection.ts`.
+  const [transformEdits, setTransformEdits] = useState<PlateTransformEdits>({});
+  // Whether those edits are still unwritten. A separate flag rather than
+  // "are there any edits", because a successful save deliberately *keeps* the
+  // edits: they are then identical to the saved baseline, and dropping them
+  // would re-derive every transform through `anchor + delta - anchor` and move
+  // the fingerprint by a rounding step, staling a slice that is still valid.
+  const [layoutDirty, setLayoutDirty] = useState(false);
+  // Per-object anchors, measured off the parsed 3MF. **Accumulated, not
+  // replaced:** the viewport only measures the plate it is rendering, and a
+  // plate switch would otherwise drop the anchors for every plate the user has
+  // already visited — taking their saved arrangement with it.
+  const [objectMetrics, setObjectMetrics] = useState<Record<string, ObjectMetrics>>({});
+
+  // A different file is a different arrangement. Dropping the edits on the
+  // source change rather than merging them stops one file's moves reappearing
+  // on the next, which would be invisible until it was sliced. The anchors go
+  // with them — another file's anchors would place this one's objects wrongly.
+  useEffect(() => {
+    setTransformEdits({});
+    setObjectMetrics({});
+    setLayoutDirty(false);
+  }, [source?.kind, source?.id]);
+
+  const storedLayout = layoutQuery.data?.layout ?? null;
+
+  const basePlates = useMemo(
+    () => buildStagePlates(platesMeta, storedLayout, objectMetrics),
+    [platesMeta, storedLayout, objectMetrics],
   );
+  const stagePlates = useMemo(
+    () => applyTransformEdits(basePlates, transformEdits),
+    [basePlates, transformEdits],
+  );
+
+  const handleTransformChange = useCallback(
+    (plateIndex: number, objectId: string, transform: ObjectTransform) => {
+      setTransformEdits((current) =>
+        withTransformEdit(current, plateIndex, objectId, transform),
+      );
+      setLayoutDirty(true);
+    },
+    [],
+  );
+
+  const handleObjectMetrics = useCallback((next: Record<string, ObjectMetrics>) => {
+    setObjectMetrics((current) => {
+      let changed = false;
+      const merged = { ...current };
+      for (const [objectId, metrics] of Object.entries(next)) {
+        if (sameMetrics(current[objectId], metrics)) continue;
+        merged[objectId] = metrics;
+        changed = true;
+      }
+      // Returning the same object when nothing is new keeps this off the
+      // render → re-measure → render treadmill.
+      return changed ? merged : current;
+    });
+  }, []);
+
+  // Only library files have a layout endpoint. Handing the stage no
+  // `onTransformChange` for an archive makes it read-only, which is the honest
+  // state: a gizmo whose result can be neither saved nor sliced moves the
+  // model on screen and changes nothing about the print.
+  const layoutEditable = source?.kind === 'libraryFile';
+
+  // What a save would write. Merged over what is stored, so plates the
+  // viewport has never rendered keep their arrangement — see `toPlateLayout`.
+  const pendingLayout = useCallback(
+    () => toPlateLayout(stagePlates, objectMetrics, storedLayout),
+    [stagePlates, objectMetrics, storedLayout],
+  );
+
+  const layoutMutation = useMutation({
+    mutationFn: async (layout: PlateLayout | null) => {
+      if (source?.kind !== 'libraryFile') throw new Error('layout: source has no layout endpoint');
+      return api.updateLibraryFileLayout(source.id, layout);
+    },
+    onSuccess: (response) => {
+      // Seed the cache from the response rather than refetching: the stage
+      // reads `storedLayout` on the very next render, and a round trip would
+      // show the pre-save arrangement in between.
+      queryClient.setQueryData(['libraryFileLayout', source?.id], response);
+      setLayoutDirty(false);
+    },
+    onError: (err: unknown) => {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    },
+  });
+
+  const handleSaveLayout = useCallback(() => {
+    setErrorMessage(null);
+    layoutMutation.mutate(pendingLayout(), {
+      onSuccess: () => showToast(t('slicer.layoutSaved'), 'success'),
+    });
+  }, [layoutMutation, pendingLayout, showToast, t]);
+
+  const handleResetLayout = useCallback(() => {
+    setErrorMessage(null);
+    // `null` clears the stored column; dropping the pending edits with it is
+    // what puts the objects back as designed on screen.
+    layoutMutation.mutate(null, {
+      onSuccess: () => {
+        setTransformEdits({});
+        showToast(t('slicer.layoutReset'), 'success');
+      },
+    });
+  }, [layoutMutation, showToast, t]);
 
   // `plate` mirrors SliceModal exactly: omitted for single-plate 3MFs, STLs and
   // anything whose metadata failed to load, so the backend's own default takes
@@ -267,6 +413,16 @@ export function SlicerPage() {
     mutationFn: async () => {
       const body = buildSliceBody(selection);
       if (!source) throw new Error('no source');
+      // **The arrangement reaches the slicer only through the stored column.**
+      // `SliceRequest` carries no layout; the backend applies
+      // `LibraryFile.plate_layout` to the model bytes. Slicing with an unsaved
+      // move would therefore slice the *previous* arrangement while the
+      // viewport showed the new one — the exact silent mismatch this epic is
+      // about. A failed write aborts the slice rather than quietly slicing
+      // something else.
+      if (source.kind === 'libraryFile' && layoutDirty) {
+        await layoutMutation.mutateAsync(pendingLayout());
+      }
       return source.kind === 'libraryFile'
         ? api.sliceLibraryFile(source.id, body)
         : api.sliceArchive(source.id, body);
@@ -355,6 +511,24 @@ export function SlicerPage() {
       : null;
 
   const contextLabel = [selectedPrinterName, bedType].filter(Boolean).join(' · ') || null;
+
+  // Save is offered while the plate differs from what is stored. Reset is
+  // offered while there is anything to go back *from* — pending edits or a
+  // layout already on the file — so a file arranged in an earlier session can
+  // be put back without touching it first.
+  const canSaveLayout = layoutEditable && layoutDirty && !layoutMutation.isPending;
+  const canResetLayout =
+    layoutEditable && (layoutDirty || storedLayout != null) && !layoutMutation.isPending;
+  const saveLayoutHint = !layoutEditable
+    ? t('slicer.layoutArchiveUnsupported')
+    : canSaveLayout
+      ? t('slicer.saveLayoutTitle')
+      : t('slicer.saveLayoutClean');
+  const resetLayoutHint = !layoutEditable
+    ? t('slicer.layoutArchiveUnsupported')
+    : canResetLayout
+      ? t('slicer.resetLayoutTitle')
+      : t('slicer.resetLayoutClean');
 
   const handleBack = useCallback(() => {
     if (window.history.length > 1) navigate(-1);
@@ -450,6 +624,8 @@ export function SlicerPage() {
           plates={stagePlates}
           initialPlate={activePlate}
           onActivePlateChange={setActivePlate}
+          onTransformChange={layoutEditable ? handleTransformChange : undefined}
+          onObjectMetricsChange={handleObjectMetrics}
           actionBar={
             <SliceActionBar
               estimate={estimate}
@@ -460,13 +636,13 @@ export function SlicerPage() {
               onPrintNow={() => setPrintOpen(true)}
               canPrintNow={canPrintNow}
               hasCompletedSlice={lastSlice != null}
-              // Read-only stage this ticket — nothing on screen can move an
-              // object yet, so there is nothing to save. Writing the current
-              // identity transforms back would be worse than leaving it
-              // disabled: it converts "as designed" into an explicit
-              // arrangement the backend would then apply. #12 enables this.
-              canSaveLayout={false}
-              saveLayoutHint={t('slicer.saveLayoutComingSoon')}
+              onSaveLayout={handleSaveLayout}
+              canSaveLayout={canSaveLayout}
+              saveLayoutHint={saveLayoutHint}
+              onResetLayout={handleResetLayout}
+              canResetLayout={canResetLayout}
+              resetLayoutHint={resetLayoutHint}
+              isSavingLayout={layoutMutation.isPending}
             />
           }
         />

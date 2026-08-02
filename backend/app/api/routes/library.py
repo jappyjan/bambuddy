@@ -2883,6 +2883,28 @@ async def get_library_file_plates(
                 except Exception:
                     pass  # model_settings.config is optional; skip if missing or malformed
 
+            # Fallback source for the 3MF object ids: the build items in
+            # `3D/3dmodel.model`. Only used when `model_settings.config` did
+            # not supply them, and only for a single-plate file — that config
+            # is the *only* place a 3MF records which plate an object sits on,
+            # so with several plates there is nothing to assign them by, and
+            # guessing would put an object's placement on the wrong plate.
+            model_object_ids_by_plate: dict[int, list[str]] = {}
+            if not plate_object_ids and len(plate_indices) == 1 and "3D/3dmodel.model" in namelist:
+                try:
+                    model_xml = zf.read("3D/3dmodel.model").decode("utf-8", "replace")
+                    build_match = re.search(r"<build\b.*?</build>", model_xml, re.DOTALL)
+                    if build_match:
+                        ids: list[str] = []
+                        for item in re.findall(r"<item\b[^>]*?/?>", build_match.group(0), re.DOTALL):
+                            id_match = re.search(r'\bobjectid="([^"]*)"', item)
+                            if id_match and id_match.group(1) not in ids:
+                                ids.append(id_match.group(1))
+                        if ids:
+                            model_object_ids_by_plate[plate_indices[0]] = ids
+                except Exception:
+                    pass  # Unparseable model part: the ids stay empty, no placement UI
+
             # Parse slice_info.config for plate metadata
             plate_metadata = {}
             if "Metadata/slice_info.config" in namelist:
@@ -2994,11 +3016,22 @@ async def get_library_file_plates(
                 if not plate_name and objects:
                     plate_name = objects[0]
 
+                # `objects` above is a list of display *names* ("part_0.stl"),
+                # assembled from slice_info / plate_*.json for the file grid.
+                # `object_ids` is the 3MF `<object id>` — the key the saved
+                # `plate_layout` uses and the only thing
+                # `services/plate_layout.py` can match a placement on. The two
+                # are different strings for the same thing, and handing the
+                # placement UI the names would look exactly right until a
+                # slice came out unarranged (step-8 / #32).
+                object_ids = plate_object_ids.get(idx) or model_object_ids_by_plate.get(idx, [])
+
                 plates.append(
                     {
                         "index": idx,
                         "name": plate_name,
                         "objects": objects,
+                        "object_ids": object_ids,
                         "object_count": len(objects),
                         "has_thumbnail": has_thumbnail,
                         "thumbnail_url": f"/api/v1/library/files/{file_id}/plate-thumbnail/{idx}"

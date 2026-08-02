@@ -6527,11 +6527,21 @@ export const api = {
     ),
 
   // Saved plate arrangement (spec §4). `layout` is null when the file has
-  // never been arranged — the model slices as designed. Writing it is #12's
-  // (step-8) job; the slicer page only reads it so the stage shows what the
-  // slice will actually do.
+  // never been arranged — the model slices as designed. The slicer page reads
+  // it so the stage shows what the slice will actually do.
   getLibraryFileLayout: (fileId: number) =>
     request<{ file_id: number; layout: PlateLayout | null }>(`/library/files/${fileId}/layout`),
+
+  // Write the arrangement (#32, step-8.2). A `null` body clears the stored
+  // layout — that is Reset to original, not "leave it alone", so the argument
+  // is required rather than optional. `position` is an **absolute** bed
+  // coordinate here, not the delta the viewport works in; the conversion lives
+  // in `components/slicer/plateLayout.ts`.
+  updateLibraryFileLayout: (fileId: number, layout: PlateLayout | null) =>
+    request<{ file_id: number; layout: PlateLayout | null }>(`/library/files/${fileId}/layout`, {
+      method: 'PUT',
+      body: JSON.stringify(layout),
+    }),
 
   // Unified slicer-preset listing — cloud + local + standard, deduped by name.
   // Used by the SliceModal; see UnifiedPresetsResponse for the shape and
