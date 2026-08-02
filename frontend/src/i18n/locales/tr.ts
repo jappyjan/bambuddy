@@ -4169,6 +4169,18 @@ export default {
     noEstimate: 'Henüz tahmin yok',
     printQueued: 'Yazdırma kuyruğa alındı',
     processFieldsFailed: 'Ayar listesi yüklenemedi.',
+    wizardStepOf: 'Adım {{current}} / {{total}}',
+    wizardPrinterTitle: 'Hangi yazıcı?',
+    wizardFilamentsTitle: 'Hangi filamentler?',
+    wizardSettingsTitle: 'Bir ayar gerekiyor mu?',
+    wizardReviewTitle: 'Dilimlemeye hazır',
+    wizardNext: 'İleri',
+    wizardNeedsPrinter: 'Devam etmek için bir yazıcı ve bir işlem profili seçin.',
+    wizardNeedsFilaments: 'Devam etmek için her yuvaya bir filament profili seçin.',
+    wizardOpenViewport: '3B görünümü aç',
+    wizardCloseViewport: '3B görünümü kapat',
+    wizardViewportLabel: '3B görünüm',
+    wizardModelPreview: 'Model önizlemesi',
   },
 
   spoolman: {

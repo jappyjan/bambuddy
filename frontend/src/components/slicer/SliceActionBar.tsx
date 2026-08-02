@@ -51,6 +51,15 @@ export interface SliceActionBarProps {
   /** A layout write is in flight; both layout buttons wait it out. */
   isSavingLayout?: boolean;
 
+  /**
+   * `bar` (default) is the desktop row under the stage. `stacked` is the same
+   * bar on a phone (#24): the estimate on its own line and the four actions in
+   * a 2×2 grid of full-width, thumb-sized buttons, because four buttons in a
+   * row do not fit 375px and shrinking them until they do makes Slice and
+   * Print now equally easy to hit by accident.
+   */
+  layout?: 'bar' | 'stacked';
+
   className?: string;
 }
 
@@ -70,9 +79,13 @@ export function SliceActionBar({
   canResetLayout = false,
   resetLayoutHint,
   isSavingLayout = false,
+  layout = 'bar',
   className = '',
 }: SliceActionBarProps) {
   const { t } = useTranslation();
+  const stacked = layout === 'stacked';
+  // Applied to every button, so the four keep one shape in both layouts.
+  const buttonLayout = stacked ? 'justify-center py-2.5 text-sm' : '';
 
   // Three distinct states, three distinct explanations. "Slice first" and
   // "your slice is out of date" are different problems with different fixes,
@@ -86,7 +99,7 @@ export function SliceActionBar({
   return (
     <div
       data-testid="slice-action-bar"
-      className={`flex flex-wrap items-center gap-3 px-3 py-2 ${className}`}
+      className={`flex gap-3 px-3 py-2 ${stacked ? 'flex-col items-stretch' : 'flex-wrap items-center'} ${className}`}
     >
       <div className="min-w-0 text-xs leading-tight text-bambu-gray-light">
         <div data-testid="slice-estimate" className="tabular-nums">
@@ -106,13 +119,13 @@ export function SliceActionBar({
         )}
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className={stacked ? 'grid grid-cols-2 gap-2' : 'ml-auto flex items-center gap-2'}>
         <button
           type="button"
           onClick={onResetLayout}
           disabled={!canResetLayout || isSavingLayout}
           title={resetLayoutHint ?? t('slicer.resetLayout')}
-          className="inline-flex items-center gap-1.5 rounded-md border border-bambu-dark-tertiary px-2.5 py-1.5 text-xs text-bambu-gray transition-colors hover:border-bambu-gray hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-bambu-dark-tertiary disabled:hover:text-bambu-gray"
+          className={`inline-flex items-center gap-1.5 rounded-md border border-bambu-dark-tertiary px-2.5 py-1.5 text-xs text-bambu-gray transition-colors hover:border-bambu-gray hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-bambu-dark-tertiary disabled:hover:text-bambu-gray ${buttonLayout}`}
         >
           <RotateCcw className="h-3.5 w-3.5" />
           {t('slicer.resetLayout')}
@@ -123,7 +136,7 @@ export function SliceActionBar({
           onClick={onSaveLayout}
           disabled={!canSaveLayout || isSavingLayout}
           title={saveLayoutHint ?? t('slicer.saveLayout')}
-          className="inline-flex items-center gap-1.5 rounded-md border border-bambu-dark-tertiary px-2.5 py-1.5 text-xs text-bambu-gray transition-colors hover:border-bambu-gray hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-bambu-dark-tertiary disabled:hover:text-bambu-gray"
+          className={`inline-flex items-center gap-1.5 rounded-md border border-bambu-dark-tertiary px-2.5 py-1.5 text-xs text-bambu-gray transition-colors hover:border-bambu-gray hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-bambu-dark-tertiary disabled:hover:text-bambu-gray ${buttonLayout}`}
         >
           {isSavingLayout ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -137,7 +150,7 @@ export function SliceActionBar({
           type="button"
           onClick={onSlice}
           disabled={!canSlice || isSlicing}
-          className="inline-flex items-center gap-1.5 rounded-md bg-bambu-green px-3 py-1.5 text-xs font-medium text-bambu-dark transition-colors hover:bg-bambu-green/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className={`inline-flex items-center gap-1.5 rounded-md bg-bambu-green px-3 py-1.5 text-xs font-medium text-bambu-dark transition-colors hover:bg-bambu-green/90 disabled:cursor-not-allowed disabled:opacity-50 ${buttonLayout}`}
         >
           {isSlicing ? (
             <>
@@ -157,7 +170,7 @@ export function SliceActionBar({
           onClick={onPrintNow}
           disabled={!canPrintNow}
           title={printNowTitle}
-          className="inline-flex items-center gap-1.5 rounded-md border border-bambu-green/50 bg-bambu-green/15 px-3 py-1.5 text-xs font-medium text-bambu-green transition-colors hover:bg-bambu-green/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-bambu-green/15"
+          className={`inline-flex items-center gap-1.5 rounded-md border border-bambu-green/50 bg-bambu-green/15 px-3 py-1.5 text-xs font-medium text-bambu-green transition-colors hover:bg-bambu-green/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-bambu-green/15 ${buttonLayout}`}
         >
           <Printer className="h-3.5 w-3.5" />
           {t('slicer.printNow')}

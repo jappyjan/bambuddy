@@ -90,6 +90,10 @@ vi.mock('../../api/client', () => ({
     getResolvedProcess: vi.fn(),
     getLibraryFileDownloadUrl: vi.fn(() => '/api/v1/library/files/100/download'),
     getArchiveDownload: vi.fn(() => '/api/v1/archives/100/download'),
+    // The phone's model strip (#24) — the page builds its URL on every render.
+    getLibraryFileThumbnailUrl: vi.fn(() => '/api/v1/library/files/100/thumbnail'),
+    getLibraryFilePlateThumbnail: vi.fn(() => '/api/v1/library/files/100/plate-thumbnail/1'),
+    getArchiveThumbnail: vi.fn(() => '/api/v1/archives/7/thumbnail'),
     getSettings: vi.fn().mockResolvedValue({}),
     updateSettings: vi.fn().mockResolvedValue({}),
     listSlicerPipelines: vi.fn(),

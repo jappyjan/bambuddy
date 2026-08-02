@@ -4215,6 +4215,18 @@ export default {
     noEstimate: 'No estimate yet',
     printQueued: 'Print queued',
     processFieldsFailed: 'Could not load the settings list.',
+    wizardStepOf: 'Step {{current}} of {{total}}',
+    wizardPrinterTitle: 'Which printer?',
+    wizardFilamentsTitle: 'Which filaments?',
+    wizardSettingsTitle: 'Any adjustments?',
+    wizardReviewTitle: 'Ready to slice',
+    wizardNext: 'Next',
+    wizardNeedsPrinter: 'Choose a printer and a process profile to continue.',
+    wizardNeedsFilaments: 'Choose a filament profile for every slot to continue.',
+    wizardOpenViewport: 'Open the 3D view',
+    wizardCloseViewport: 'Close the 3D view',
+    wizardViewportLabel: '3D view',
+    wizardModelPreview: 'Model preview',
   },
 
   spoolman: {

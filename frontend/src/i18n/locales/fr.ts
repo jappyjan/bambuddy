@@ -4168,6 +4168,18 @@ export default {
     noEstimate: 'Pas encore d’estimation',
     printQueued: 'Impression mise en file d’attente',
     processFieldsFailed: 'Impossible de charger la liste des paramètres.',
+    wizardStepOf: 'Étape {{current}} sur {{total}}',
+    wizardPrinterTitle: 'Quelle imprimante ?',
+    wizardFilamentsTitle: 'Quels filaments ?',
+    wizardSettingsTitle: 'Des ajustements ?',
+    wizardReviewTitle: 'Prêt à trancher',
+    wizardNext: 'Suivant',
+    wizardNeedsPrinter: 'Choisissez un profil d’imprimante et de processus pour continuer.',
+    wizardNeedsFilaments: 'Choisissez un profil de filament pour chaque emplacement pour continuer.',
+    wizardOpenViewport: 'Ouvrir la vue 3D',
+    wizardCloseViewport: 'Fermer la vue 3D',
+    wizardViewportLabel: 'Vue 3D',
+    wizardModelPreview: 'Aperçu du modèle',
   },
 
   spoolman: {

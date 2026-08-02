@@ -4182,6 +4182,18 @@ export default {
     noEstimate: 'Todavía sin estimación',
     printQueued: 'Impresión en cola',
     processFieldsFailed: 'No se pudo cargar la lista de ajustes.',
+    wizardStepOf: 'Paso {{current}} de {{total}}',
+    wizardPrinterTitle: '¿Qué impresora?',
+    wizardFilamentsTitle: '¿Qué filamentos?',
+    wizardSettingsTitle: '¿Algún ajuste?',
+    wizardReviewTitle: 'Listo para laminar',
+    wizardNext: 'Siguiente',
+    wizardNeedsPrinter: 'Elige un perfil de impresora y de proceso para continuar.',
+    wizardNeedsFilaments: 'Elige un perfil de filamento para cada ranura para continuar.',
+    wizardOpenViewport: 'Abrir la vista 3D',
+    wizardCloseViewport: 'Cerrar la vista 3D',
+    wizardViewportLabel: 'Vista 3D',
+    wizardModelPreview: 'Vista previa del modelo',
   },
 
   spoolman: {
