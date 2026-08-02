@@ -4110,6 +4110,43 @@ export default {
         saveFailed: '保存に失敗しました',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: '印刷設定',
+      subsetNote: '厳選した {{shown}} 項目 — スライサーの {{total}}+ 項目のうちの一部で、全項目ではありません。',
+      searchLabel: '設定を検索',
+      searchPlaceholder: '{{total}} 項目から検索…',
+      tierLabel: '表示レベル',
+      tier: {
+        basic: '基本',
+        advanced: '詳細',
+      },
+      allCategories: 'すべて',
+      overrideCount: '{{changed}} 件変更',
+      noOverrides: 'プリセットの値',
+      reset: 'リセット',
+      resetTitle: 'すべての変更を消してプリセットの値に戻す',
+      revertField: 'プリセットの値に戻す',
+      revertFieldTo: 'プリセットの値に戻す（{{value}}）',
+      revertFieldAria: '{{field}} をプリセットの値に戻す',
+      unset: 'このプリセットでは未設定',
+      loading: '設定を読み込み中…',
+      noFields: 'このスライサーには変更できる設定がありません。',
+      noResults: '該当する設定はありません。',
+      categories: {
+        quality: '品質',
+        strength: '強度',
+        speed: '速度',
+        support: 'サポート',
+        infill: 'インフィル',
+        adhesion: '定着',
+        acceleration: '加速度',
+        multimaterial: 'マルチマテリアル',
+        advanced: '詳細',
+        special: '特殊',
+      },
+    },
   },
 
   // Spoolman

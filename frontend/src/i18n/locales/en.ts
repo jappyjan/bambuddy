@@ -4144,6 +4144,43 @@ export default {
         saveFailed: 'Save failed',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: 'Print settings',
+      subsetNote: "{{shown}} curated settings — a subset of the slicer's {{total}}+, not the full list.",
+      searchLabel: 'Search settings',
+      searchPlaceholder: 'Search {{total}} settings…',
+      tierLabel: 'Detail level',
+      tier: {
+        basic: 'Basic',
+        advanced: 'Advanced',
+      },
+      allCategories: 'All',
+      overrideCount: '{{changed}} changed',
+      noOverrides: 'Preset values',
+      reset: 'Reset',
+      resetTitle: 'Clear every override and go back to the preset values',
+      revertField: 'Back to the preset value',
+      revertFieldTo: 'Back to the preset value ({{value}})',
+      revertFieldAria: 'Revert {{field}} to the preset value',
+      unset: 'Not set by this preset',
+      loading: 'Loading settings…',
+      noFields: 'This slicer exposes no overridable settings.',
+      noResults: 'No setting matches that search.',
+      categories: {
+        quality: 'Quality',
+        strength: 'Strength',
+        speed: 'Speed',
+        support: 'Support',
+        infill: 'Infill',
+        adhesion: 'Adhesion',
+        acceleration: 'Acceleration',
+        multimaterial: 'Multi-material',
+        advanced: 'Advanced',
+        special: 'Special',
+      },
+    },
   },
 
   // Spoolman

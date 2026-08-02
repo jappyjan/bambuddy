@@ -4098,6 +4098,43 @@ export default {
         saveFailed: 'Falha ao salvar',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: 'Configurações de impressão',
+      subsetNote: '{{shown}} configurações selecionadas — um subconjunto das {{total}}+ do fatiador, não a lista completa.',
+      searchLabel: 'Buscar configurações',
+      searchPlaceholder: 'Buscar entre {{total}} configurações…',
+      tierLabel: 'Nível de detalhe',
+      tier: {
+        basic: 'Básico',
+        advanced: 'Avançado',
+      },
+      allCategories: 'Todas',
+      overrideCount: '{{changed}} alteradas',
+      noOverrides: 'Valores do perfil',
+      reset: 'Redefinir',
+      resetTitle: 'Limpar todas as alterações e voltar aos valores do perfil',
+      revertField: 'Voltar ao valor do perfil',
+      revertFieldTo: 'Voltar ao valor do perfil ({{value}})',
+      revertFieldAria: 'Restaurar {{field}} para o valor do perfil',
+      unset: 'Não definido por este perfil',
+      loading: 'Carregando configurações…',
+      noFields: 'Este fatiador não expõe configurações editáveis.',
+      noResults: 'Nenhuma configuração corresponde a essa busca.',
+      categories: {
+        quality: 'Qualidade',
+        strength: 'Resistência',
+        speed: 'Velocidade',
+        support: 'Suportes',
+        infill: 'Preenchimento',
+        adhesion: 'Aderência',
+        acceleration: 'Aceleração',
+        multimaterial: 'Multimaterial',
+        advanced: 'Avançado',
+        special: 'Especial',
+      },
+    },
   },
 
   // Spoolman

@@ -4098,6 +4098,43 @@ export default {
         saveFailed: '儲存失敗',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: '列印設定',
+      subsetNote: '精選 {{shown}} 項設定 — 只是切片軟體 {{total}}+ 項中的一部分，並非完整清單。',
+      searchLabel: '搜尋設定',
+      searchPlaceholder: '在 {{total}} 項設定中搜尋…',
+      tierLabel: '顯示層級',
+      tier: {
+        basic: '基本',
+        advanced: '進階',
+      },
+      allCategories: '全部',
+      overrideCount: '已變更 {{changed}} 項',
+      noOverrides: '預設值',
+      reset: '重設',
+      resetTitle: '清除所有變更並回到預設值',
+      revertField: '回到預設值',
+      revertFieldTo: '回到預設值（{{value}}）',
+      revertFieldAria: '將{{field}}回復為預設值',
+      unset: '此預設未設定',
+      loading: '正在載入設定…',
+      noFields: '此切片軟體沒有可修改的設定。',
+      noResults: '沒有符合的設定。',
+      categories: {
+        quality: '品質',
+        strength: '強度',
+        speed: '速度',
+        support: '支撐',
+        infill: '填充',
+        adhesion: '附著',
+        acceleration: '加速度',
+        multimaterial: '多材料',
+        advanced: '進階',
+        special: '特殊',
+      },
+    },
   },
 
   // Spoolman
