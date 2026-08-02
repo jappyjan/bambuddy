@@ -4099,6 +4099,43 @@ export default {
         saveFailed: 'Échec de l\'enregistrement',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: "Paramètres d'impression",
+      subsetNote: '{{shown}} paramètres sélectionnés — un sous-ensemble des {{total}}+ du trancheur, pas la liste complète.',
+      searchLabel: 'Rechercher un paramètre',
+      searchPlaceholder: 'Rechercher parmi {{total}} paramètres…',
+      tierLabel: 'Niveau de détail',
+      tier: {
+        basic: 'Essentiel',
+        advanced: 'Avancé',
+      },
+      allCategories: 'Tout',
+      overrideCount: '{{changed}} modifiés',
+      noOverrides: 'Valeurs du profil',
+      reset: 'Réinitialiser',
+      resetTitle: 'Effacer toutes les modifications et revenir aux valeurs du profil',
+      revertField: 'Revenir à la valeur du profil',
+      revertFieldTo: 'Revenir à la valeur du profil ({{value}})',
+      revertFieldAria: 'Rétablir {{field}} à la valeur du profil',
+      unset: 'Non défini par ce profil',
+      loading: 'Chargement des paramètres…',
+      noFields: 'Ce trancheur ne propose aucun paramètre modifiable.',
+      noResults: 'Aucun paramètre ne correspond à cette recherche.',
+      categories: {
+        quality: 'Qualité',
+        strength: 'Résistance',
+        speed: 'Vitesse',
+        support: 'Supports',
+        infill: 'Remplissage',
+        adhesion: 'Adhérence',
+        acceleration: 'Accélération',
+        multimaterial: 'Multi-matériaux',
+        advanced: 'Avancé',
+        special: 'Spécial',
+      },
+    },
   },
 
   // Spoolman

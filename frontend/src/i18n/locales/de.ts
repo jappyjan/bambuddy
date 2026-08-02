@@ -4110,6 +4110,43 @@ export default {
         saveFailed: 'Speichern fehlgeschlagen',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: 'Druckeinstellungen',
+      subsetNote: '{{shown}} kuratierte Einstellungen — ein Ausschnitt aus den {{total}}+ des Slicers, nicht die vollständige Liste.',
+      searchLabel: 'Einstellungen durchsuchen',
+      searchPlaceholder: '{{total}} Einstellungen durchsuchen…',
+      tierLabel: 'Detailgrad',
+      tier: {
+        basic: 'Einfach',
+        advanced: 'Erweitert',
+      },
+      allCategories: 'Alle',
+      overrideCount: '{{changed}} geändert',
+      noOverrides: 'Profilwerte',
+      reset: 'Zurücksetzen',
+      resetTitle: 'Alle Überschreibungen verwerfen und zu den Profilwerten zurückkehren',
+      revertField: 'Zurück zum Profilwert',
+      revertFieldTo: 'Zurück zum Profilwert ({{value}})',
+      revertFieldAria: '{{field}} auf den Profilwert zurücksetzen',
+      unset: 'Von diesem Profil nicht gesetzt',
+      loading: 'Einstellungen werden geladen…',
+      noFields: 'Dieser Slicer bietet keine überschreibbaren Einstellungen.',
+      noResults: 'Keine Einstellung passt zu dieser Suche.',
+      categories: {
+        quality: 'Qualität',
+        strength: 'Festigkeit',
+        speed: 'Geschwindigkeit',
+        support: 'Stützen',
+        infill: 'Füllung',
+        adhesion: 'Haftung',
+        acceleration: 'Beschleunigung',
+        multimaterial: 'Multimaterial',
+        advanced: 'Erweitert',
+        special: 'Spezial',
+      },
+    },
   },
 
   // Spoolman

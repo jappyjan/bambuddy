@@ -4113,6 +4113,43 @@ export default {
         saveFailed: 'Error al guardar',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: 'Ajustes de impresión',
+      subsetNote: '{{shown}} ajustes seleccionados — un subconjunto de los {{total}}+ del laminador, no la lista completa.',
+      searchLabel: 'Buscar ajustes',
+      searchPlaceholder: 'Buscar entre {{total}} ajustes…',
+      tierLabel: 'Nivel de detalle',
+      tier: {
+        basic: 'Básico',
+        advanced: 'Avanzado',
+      },
+      allCategories: 'Todos',
+      overrideCount: '{{changed}} cambiados',
+      noOverrides: 'Valores del perfil',
+      reset: 'Restablecer',
+      resetTitle: 'Borrar todos los cambios y volver a los valores del perfil',
+      revertField: 'Volver al valor del perfil',
+      revertFieldTo: 'Volver al valor del perfil ({{value}})',
+      revertFieldAria: 'Restaurar {{field}} al valor del perfil',
+      unset: 'No definido por este perfil',
+      loading: 'Cargando ajustes…',
+      noFields: 'Este laminador no expone ajustes modificables.',
+      noResults: 'Ningún ajuste coincide con esa búsqueda.',
+      categories: {
+        quality: 'Calidad',
+        strength: 'Resistencia',
+        speed: 'Velocidad',
+        support: 'Soportes',
+        infill: 'Relleno',
+        adhesion: 'Adherencia',
+        acceleration: 'Aceleración',
+        multimaterial: 'Multimaterial',
+        advanced: 'Avanzado',
+        special: 'Especial',
+      },
+    },
   },
 
   // Spoolman

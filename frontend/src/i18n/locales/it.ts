@@ -4098,6 +4098,43 @@ export default {
         saveFailed: 'Salvataggio non riuscito',
       },
     },
+    // Per-slice process overrides (#13, step-5.1) — the curated settings
+    // editor in the slicer rail and the mobile wizard's Settings step.
+    settingsEditor: {
+      title: 'Impostazioni di stampa',
+      subsetNote: "{{shown}} impostazioni selezionate — un sottoinsieme delle {{total}}+ dello slicer, non l'elenco completo.",
+      searchLabel: 'Cerca impostazioni',
+      searchPlaceholder: 'Cerca tra {{total}} impostazioni…',
+      tierLabel: 'Livello di dettaglio',
+      tier: {
+        basic: 'Base',
+        advanced: 'Avanzate',
+      },
+      allCategories: 'Tutte',
+      overrideCount: '{{changed}} modificate',
+      noOverrides: 'Valori del profilo',
+      reset: 'Ripristina',
+      resetTitle: 'Cancella tutte le modifiche e torna ai valori del profilo',
+      revertField: 'Torna al valore del profilo',
+      revertFieldTo: 'Torna al valore del profilo ({{value}})',
+      revertFieldAria: 'Ripristina {{field}} al valore del profilo',
+      unset: 'Non impostato da questo profilo',
+      loading: 'Caricamento impostazioni…',
+      noFields: 'Questo slicer non espone impostazioni modificabili.',
+      noResults: 'Nessuna impostazione corrisponde alla ricerca.',
+      categories: {
+        quality: 'Qualità',
+        strength: 'Resistenza',
+        speed: 'Velocità',
+        support: 'Supporti',
+        infill: 'Riempimento',
+        adhesion: 'Adesione',
+        acceleration: 'Accelerazione',
+        multimaterial: 'Multimateriale',
+        advanced: 'Avanzate',
+        special: 'Speciali',
+      },
+    },
   },
 
   // Spoolman
