@@ -1,4 +1,9 @@
 import type { ArchivePlatesResponse, LibraryFilePlatesResponse } from '../types/plates';
+import type { PlateLayout } from '../types/plateStage';
+// Type-only import of a pure, dependency-free module (no React, no imports of
+// its own), so the curated-field wire shapes are declared once rather than
+// mirrored here and left to drift.
+import type { ProcessFieldsResponse, ResolvedProcess } from '../components/slicer/processFields';
 
 const API_BASE = '/api/v1';
 
@@ -1575,6 +1580,13 @@ export interface SliceRequest {
   // instead of the picked profile triplet. The preset refs above are still
   // required by the backend validator but go unused on this path.
   use_embedded_settings?: boolean;
+  // Per-slice process overrides (step-4 / #8). Patched onto the resolved
+  // process JSON in the same place `bed_type` is, so one slice can deviate
+  // from its preset without cloning it. Values are **native** — `25`, not
+  // `"25%"`; `backend/app/services/process_overrides.py::_coerce` re-spells
+  // them for the profile. Unknown keys and out-of-range values are 422s, not
+  // silent drops. Omit (or send `{}`) for a plain preset slice.
+  process_overrides?: Record<string, number | boolean | string>;
 }
 
 // GET /api/v1/slicer/presets — unified listing across cloud / local / standard.
@@ -6491,6 +6503,35 @@ export const api = {
     }),
   getSliceJob: (jobId: number) =>
     request<SliceJobState>(`/slice-jobs/${jobId}`),
+
+  // Per-slice process overrides (step-4 / #8) — the two reads behind
+  // `ProcessSettingsEditor`. The editor itself fetches nothing; whoever mounts
+  // it (the /slicer rail, the mobile wizard) makes both calls.
+  //
+  // `process-fields` is curated metadata already filtered to the keys the
+  // configured slicer actually has — the filtering comes from the sidecar's
+  // `GET /schema`, which only the fork's images expose. Against an image
+  // without it the backend degrades to the curated file's own key list, so
+  // the rail may offer a setting the slicer lacks; the slice then 422s rather
+  // than silently doing nothing.
+  getProcessFields: () => request<ProcessFieldsResponse>('/slicer/process-fields'),
+
+  // Resolved process JSON for one preset, so the editor can show the preset's
+  // *real* current values instead of curated defaults. `PresetRef` goes over
+  // as two query params, matching the rest of the preset surface. The
+  // `standard` tier resolves to an `{name, inherits, …}` stub the sidecar
+  // flattens at slice time, so it carries no concrete values on this side.
+  getResolvedProcess: (ref: PresetRef) =>
+    request<ResolvedProcess>(
+      `/slicer/resolved-process?source=${encodeURIComponent(ref.source)}&id=${encodeURIComponent(ref.id)}`,
+    ),
+
+  // Saved plate arrangement (spec §4). `layout` is null when the file has
+  // never been arranged — the model slices as designed. Writing it is #12's
+  // (step-8) job; the slicer page only reads it so the stage shows what the
+  // slice will actually do.
+  getLibraryFileLayout: (fileId: number) =>
+    request<{ file_id: number; layout: PlateLayout | null }>(`/library/files/${fileId}/layout`),
 
   // Unified slicer-preset listing — cloud + local + standard, deduped by name.
   // Used by the SliceModal; see UnifiedPresetsResponse for the shape and

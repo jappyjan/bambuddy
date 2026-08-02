@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { render } from '../utils';
 import { FileManagerPage } from '../../pages/FileManagerPage';
@@ -218,5 +218,40 @@ describe('FileManagerPage — file inspector panel (#27)', () => {
     await waitFor(() =>
       expect(screen.queryByTestId('file-inspector-panel')).not.toBeInTheDocument(),
     );
+  });
+
+  // The panel's Slice button now opens the slicer page (#15, step-5.3) instead
+  // of the SliceModal. The panel itself is unchanged — it still only *emits*
+  // `onSlice`, holding no routing knowledge — so what is pinned here is what
+  // the page does with the event.
+  it('routes the inspector Slice button at /slicer?file=<id>', async () => {
+    server.use(
+      http.get('/api/v1/settings/', () =>
+        HttpResponse.json({
+          check_updates: false,
+          check_printer_firmware: false,
+          library_disk_warning_gb: 5,
+          use_slicer_api: true,
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<FileManagerPage />);
+
+    await waitFor(() => expect(screen.getByText('Bracket')).toBeInTheDocument());
+    await user.click(cardFor('Bracket'));
+    const panel = await screen.findByTestId('file-inspector-panel');
+
+    // Scoped to the panel: the grid card carries its own Slice button, and
+    // that one deliberately still opens the modal.
+    await user.click(within(panel).getByRole('button', { name: /Slice/i }));
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/slicer');
+      expect(window.location.search).toBe('?file=2');
+    });
+    // The SliceModal stays reachable from the grid — the panel routing away is
+    // not a removal of the fallback (spec §10).
+    expect(screen.queryByText('Slice model')).not.toBeInTheDocument();
   });
 });

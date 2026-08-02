@@ -4140,6 +4140,25 @@ export default {
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'Dilimleyici',
+    back: 'Geri',
+    backToFiles: 'Dosyalara dön',
+    noSource: 'Dilimlenecek dosya yok. Dosya yöneticisinden bir dosya açıp Dilimle seçeneğini kullanın.',
+    railLabel: 'Dilimleme ayarları',
+    presetsHeading: 'Profiller',
+    saveLayout: 'Yerleşimi kaydet',
+    saveLayoutComingSoon: 'Modelleri tabla üzerinde düzenleme sonraki bir adımda gelecek; henüz kaydedilecek bir şey yok.',
+    printNow: 'Şimdi yazdır',
+    printNowTitle: 'Dilimlenmiş dosyayı doğrudan bir yazıcıya gönder',
+    printNowStale: 'Son dilimlemeden bu yana ayarlar değişti — yazdırmadan önce yeniden dilimleyin.',
+    printNowNeedsSlice: 'Önce modeli dilimleyin.',
+    noEstimate: 'Henüz tahmin yok',
+    printQueued: 'Yazdırma kuyruğa alındı',
+    processFieldsFailed: 'Ayar listesi yüklenemedi.',
+  },
+
   spoolman: {
     title: 'Spoolman Entegrasyonu',
     enabled: 'Spoolman Etkin',

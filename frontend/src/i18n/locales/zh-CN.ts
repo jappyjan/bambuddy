@@ -4138,6 +4138,25 @@ export default {
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: '切片器',
+    back: '返回',
+    backToFiles: '返回文件列表',
+    noSource: '没有可切片的文件。请在文件管理器中打开文件并选择“切片”。',
+    railLabel: '切片设置',
+    presetsHeading: '配置文件',
+    saveLayout: '保存布局',
+    saveLayoutComingSoon: '在热床上排布模型将在后续步骤中提供，目前还没有可保存的内容。',
+    printNow: '立即打印',
+    printNowTitle: '将切片后的文件直接发送到打印机',
+    printNowStale: '自上次切片后设置已更改，请重新切片后再打印。',
+    printNowNeedsSlice: '请先对模型进行切片。',
+    noEstimate: '暂无预估',
+    printQueued: '打印已加入队列',
+    processFieldsFailed: '无法加载设置列表。',
+  },
+
   spoolman: {
     title: 'Spoolman 集成',
     enabled: 'Spoolman 已启用',

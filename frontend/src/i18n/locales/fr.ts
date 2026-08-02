@@ -4139,6 +4139,25 @@ export default {
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'Trancheur',
+    back: 'Retour',
+    backToFiles: 'Retour aux fichiers',
+    noSource: 'Aucun fichier à trancher. Ouvrez un fichier dans le gestionnaire de fichiers et choisissez Trancher.',
+    railLabel: 'Paramètres de tranchage',
+    presetsHeading: 'Profils',
+    saveLayout: 'Enregistrer la disposition',
+    saveLayoutComingSoon: 'L’agencement des modèles sur le plateau arrivera à une étape ultérieure — il n’y a encore rien à enregistrer.',
+    printNow: 'Imprimer maintenant',
+    printNowTitle: 'Envoyer le fichier tranché directement à une imprimante',
+    printNowStale: 'Les paramètres ont changé depuis le dernier tranchage — retranchez avant d’imprimer.',
+    printNowNeedsSlice: 'Tranchez d’abord le modèle.',
+    noEstimate: 'Pas encore d’estimation',
+    printQueued: 'Impression mise en file d’attente',
+    processFieldsFailed: 'Impossible de charger la liste des paramètres.',
+  },
+
   spoolman: {
     title: 'Intégration Spoolman',
     enabled: 'Spoolman Activé',

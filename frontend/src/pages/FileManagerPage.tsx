@@ -721,6 +721,13 @@ export function FileManagerPage() {
     return findFolder(folders);
   }, [selectedFolderId, folders]);
 
+  const handleSliceFromInspector = useCallback(
+    (file: LibraryFileListItem) => {
+      navigate(`/slicer?file=${file.id}`);
+    },
+    [navigate],
+  );
+
   // One inspector, two presentations: a rail beside the grid on a desktop, a
   // drag-to-resize bottom sheet on a phone (spec §7 step 3, mockup screen 1
   // option A). The element is built once here and mounted in exactly one of the
@@ -732,7 +739,16 @@ export function FileManagerPage() {
       plateCount={inspectedPlates?.plates.length || null}
       onClose={handleCloseInspector}
       onPrint={setPrintFile}
-      onSlice={setSliceFile}
+      // The inspector's Slice button now opens the full slicer page (#10,
+      // step-5) instead of the modal. The panel still only *emits* `onSlice` —
+      // it holds no routing knowledge — so this is a change to what the page
+      // does with the event, not to the panel's contract.
+      //
+      // `SliceModal` deliberately stays reachable: the per-card Slice button in
+      // the grid below still opens it, and it remains the fallback until the
+      // new page has been tested on real hardware (spec §10). Two entry points
+      // coexisting is the intent here, not an oversight.
+      onSlice={handleSliceFromInspector}
       useSlicerApi={settings?.use_slicer_api ?? false}
       onDownload={handleDownload}
       onRename={(f) => setRenameItem({ type: 'file', id: f.id, name: f.filename })}

@@ -3932,6 +3932,25 @@ export default {
       },
     },
   },
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'Слайсер',
+    back: 'Назад',
+    backToFiles: 'Назад к файлам',
+    noSource: 'Нет файла для нарезки. Откройте файл в менеджере файлов и выберите «Нарезать».',
+    railLabel: 'Настройки нарезки',
+    presetsHeading: 'Профили',
+    saveLayout: 'Сохранить расстановку',
+    saveLayoutComingSoon: 'Расстановка моделей на столе появится на следующем этапе — сохранять пока нечего.',
+    printNow: 'Печать сейчас',
+    printNowTitle: 'Отправить нарезанный файл сразу на принтер',
+    printNowStale: 'Настройки изменились после последней нарезки — нарежьте заново перед печатью.',
+    printNowNeedsSlice: 'Сначала нарежьте модель.',
+    noEstimate: 'Оценки пока нет',
+    printQueued: 'Печать добавлена в очередь',
+    processFieldsFailed: 'Не удалось загрузить список настроек.',
+  },
+
   spoolman: {
     title: "Интеграция со Spoolman",
     enabled: "Spoolman включён",

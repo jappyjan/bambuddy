@@ -4138,6 +4138,25 @@ export default {
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'Fatiador',
+    back: 'Voltar',
+    backToFiles: 'Voltar para os arquivos',
+    noSource: 'Nenhum arquivo para fatiar. Abra um arquivo no gerenciador de arquivos e escolha Fatiar.',
+    railLabel: 'Configurações de fatiamento',
+    presetsHeading: 'Perfis',
+    saveLayout: 'Salvar disposição',
+    saveLayoutComingSoon: 'Organizar os modelos na mesa chega em uma etapa posterior — ainda não há nada para salvar.',
+    printNow: 'Imprimir agora',
+    printNowTitle: 'Enviar o arquivo fatiado direto para uma impressora',
+    printNowStale: 'As configurações mudaram desde o último fatiamento — fatie novamente antes de imprimir.',
+    printNowNeedsSlice: 'Fatie o modelo primeiro.',
+    noEstimate: 'Ainda sem estimativa',
+    printQueued: 'Impressão na fila',
+    processFieldsFailed: 'Não foi possível carregar a lista de configurações.',
+  },
+
   spoolman: {
     title: 'Integração com Spoolman',
     enabled: 'Spoolman Ativado',

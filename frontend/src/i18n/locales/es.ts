@@ -4153,6 +4153,25 @@ export default {
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'Laminador',
+    back: 'Atrás',
+    backToFiles: 'Volver a archivos',
+    noSource: 'No hay ningún archivo que laminar. Abre un archivo en el gestor de archivos y elige Laminar.',
+    railLabel: 'Ajustes de laminado',
+    presetsHeading: 'Perfiles',
+    saveLayout: 'Guardar disposición',
+    saveLayoutComingSoon: 'Colocar los modelos en la placa llegará en un paso posterior; todavía no hay nada que guardar.',
+    printNow: 'Imprimir ahora',
+    printNowTitle: 'Enviar el archivo laminado directamente a una impresora',
+    printNowStale: 'Los ajustes han cambiado desde el último laminado: vuelve a laminar antes de imprimir.',
+    printNowNeedsSlice: 'Lamina primero el modelo.',
+    noEstimate: 'Todavía sin estimación',
+    printQueued: 'Impresión en cola',
+    processFieldsFailed: 'No se pudo cargar la lista de ajustes.',
+  },
+
   spoolman: {
     title: 'Integración con Spoolman',
     enabled: 'Spoolman activado',

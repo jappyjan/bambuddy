@@ -4150,6 +4150,25 @@ export default {
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'Slicer',
+    back: 'Zurück',
+    backToFiles: 'Zurück zu den Dateien',
+    noSource: 'Keine Datei zum Slicen. Öffne eine Datei im Dateimanager und wähle „Slicen“.',
+    railLabel: 'Slice-Einstellungen',
+    presetsHeading: 'Profile',
+    saveLayout: 'Anordnung speichern',
+    saveLayoutComingSoon: 'Das Anordnen der Modelle auf der Platte kommt in einem späteren Schritt – es gibt noch nichts zu speichern.',
+    printNow: 'Jetzt drucken',
+    printNowTitle: 'Die geslicete Datei direkt an einen Drucker senden',
+    printNowStale: 'Die Einstellungen haben sich seit dem letzten Slice geändert – bitte erneut slicen.',
+    printNowNeedsSlice: 'Slice zuerst das Modell.',
+    noEstimate: 'Noch keine Schätzung',
+    printQueued: 'Druck eingereiht',
+    processFieldsFailed: 'Die Einstellungsliste konnte nicht geladen werden.',
+  },
+
   spoolman: {
     title: 'Spoolman-Integration',
     enabled: 'Spoolman aktiviert',

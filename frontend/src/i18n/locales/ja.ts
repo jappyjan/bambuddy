@@ -4150,6 +4150,25 @@ export default {
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'スライサー',
+    back: '戻る',
+    backToFiles: 'ファイル一覧に戻る',
+    noSource: 'スライスするファイルがありません。ファイルマネージャーでファイルを開き、スライスを選択してください。',
+    railLabel: 'スライス設定',
+    presetsHeading: 'プロファイル',
+    saveLayout: '配置を保存',
+    saveLayoutComingSoon: 'プレート上でのモデル配置は後のステップで対応します。まだ保存するものはありません。',
+    printNow: 'すぐに印刷',
+    printNowTitle: 'スライス済みのファイルをプリンターへ直接送信します',
+    printNowStale: '前回のスライス以降に設定が変更されました。印刷する前に再度スライスしてください。',
+    printNowNeedsSlice: '先にモデルをスライスしてください。',
+    noEstimate: '見積もりはまだありません',
+    printQueued: '印刷をキューに追加しました',
+    processFieldsFailed: '設定一覧を読み込めませんでした。',
+  },
+
   spoolman: {
     title: 'Spoolman連携',
     enabled: 'Spoolman有効',

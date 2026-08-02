@@ -4138,6 +4138,25 @@ export default {
   },
 
   // Spoolman
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: 'Slicing',
+    back: 'Indietro',
+    backToFiles: 'Torna ai file',
+    noSource: 'Nessun file da elaborare. Apri un file nel gestore file e scegli Elabora.',
+    railLabel: 'Impostazioni di slicing',
+    presetsHeading: 'Profili',
+    saveLayout: 'Salva disposizione',
+    saveLayoutComingSoon: 'La disposizione dei modelli sul piatto arriverà in un passaggio successivo: non c’è ancora nulla da salvare.',
+    printNow: 'Stampa ora',
+    printNowTitle: 'Invia il file elaborato direttamente a una stampante',
+    printNowStale: 'Le impostazioni sono cambiate dall’ultima elaborazione: rielabora prima di stampare.',
+    printNowNeedsSlice: 'Elabora prima il modello.',
+    noEstimate: 'Nessuna stima disponibile',
+    printQueued: 'Stampa in coda',
+    processFieldsFailed: 'Impossibile caricare l’elenco delle impostazioni.',
+  },
+
   spoolman: {
     title: 'Integrazione Spoolman',
     enabled: 'Spoolman abilitato',

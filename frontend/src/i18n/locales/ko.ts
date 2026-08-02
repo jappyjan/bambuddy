@@ -3941,6 +3941,25 @@ export default {
       },
     },
   },
+  // Desktop slicer page (#10, step-5).
+  slicer: {
+    title: '슬라이서',
+    back: '뒤로',
+    backToFiles: '파일 목록으로 돌아가기',
+    noSource: '슬라이스할 파일이 없습니다. 파일 관리자에서 파일을 열고 슬라이스를 선택하세요.',
+    railLabel: '슬라이스 설정',
+    presetsHeading: '프로필',
+    saveLayout: '배치 저장',
+    saveLayoutComingSoon: '플레이트 위 모델 배치는 이후 단계에서 지원됩니다. 아직 저장할 내용이 없습니다.',
+    printNow: '지금 인쇄',
+    printNowTitle: '슬라이스된 파일을 프린터로 바로 보냅니다',
+    printNowStale: '마지막 슬라이스 이후 설정이 변경되었습니다. 인쇄하기 전에 다시 슬라이스하세요.',
+    printNowNeedsSlice: '먼저 모델을 슬라이스하세요.',
+    noEstimate: '아직 예상치가 없습니다',
+    printQueued: '인쇄를 대기열에 추가했습니다',
+    processFieldsFailed: '설정 목록을 불러오지 못했습니다.',
+  },
+
   spoolman: {
     title: 'Spoolman 통합',
     enabled: 'Spoolman 활성화됨',
