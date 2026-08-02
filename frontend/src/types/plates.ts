@@ -18,7 +18,23 @@ export interface PlateFilament {
 export interface PlateMetadata {
   index: number;
   name: string | null;
+  /**
+   * Display **names** of the objects on this plate ("part_0.stl"), read from
+   * `slice_info.config` / `plate_*.json`. Shown in the file grid and used as a
+   * fallback plate name. **Not** ids — see `object_ids`.
+   */
   objects: string[];
+  /**
+   * The 3MF `<object id>` values for this plate, in `model_settings.config`
+   * order. This is what `ModelViewer` parses into `ObjectData.id`, what the
+   * saved `plate_layout` keys placements on, and the only thing the backend's
+   * placement applier can match — a name in that field is accepted, stored and
+   * then silently dropped at slice time (step-8 / #32).
+   *
+   * Absent on older backends and on 3MFs whose object ids cannot be
+   * determined; the stage then has nothing safe to move and stays read-only.
+   */
+  object_ids?: string[];
   object_count?: number;
   has_thumbnail: boolean;
   thumbnail_url: string | null;

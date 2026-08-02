@@ -287,3 +287,138 @@ class TestStoredLayoutReachesTheSlicer:
         assert job["status"] == "failed", job
         assert "layout" in json.dumps(job).lower()
         assert sidecar.uploads == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+class TestObjectIdsSurviveTheWholeRoundTrip:
+    """The ``object_id`` contract, on a **multi-object** project 3MF (#32).
+
+    This is the path the step-8 tickets flag as the one that fails silently.
+    The placement UI keys every saved transform on an object id it got from
+    ``GET /library/files/{id}/plates``; the applier matches on the 3MF
+    ``<object id>``. If those two are different strings the PUT succeeds, the
+    GET echoes it back, the viewport looks right, and the slice comes out
+    unarranged — nothing anywhere reports a problem.
+
+    A single-object file cannot catch it: ``_rewrite_build`` deliberately
+    remaps a lone placement onto a lone build item whatever it is called
+    (an STL has no object ids to carry). Two objects is the smallest case
+    where the ids have to actually be right.
+    """
+
+    @staticmethod
+    def _multi_object_3mf() -> bytes:
+        return build_project_3mf(
+            object_id="2",
+            component_transform="1 0 0 0 1 0 0 0 1 100 100 10",
+            extra_objects=[("3", "1 0 0 0 1 0 0 0 1 160 100 10")],
+        )
+
+    async def test_plates_reports_ids_the_applier_matches_not_display_names(
+        self, async_client: AsyncClient, layout_slice_setup
+    ):
+        """``objects`` is names, ``object_ids`` is ids, and they differ."""
+        file_id = await layout_slice_setup["make_file"]("Two.3mf", self._multi_object_3mf())
+
+        response = await async_client.get(f"/api/v1/library/files/{file_id}/plates")
+        assert response.status_code == 200, response.text
+        plate = response.json()["plates"][0]
+
+        # The trap: `objects` is what the file grid shows, and it is names.
+        assert plate["objects"] == ["part_0.stl", "part_1.stl"]
+        # `object_ids` is what a layout must be keyed on.
+        assert plate["object_ids"] == ["2", "3"]
+
+        # And those ids really are the model's build-item ids — the exact
+        # strings `services/plate_layout.py` matches a placement against.
+        with zipfile.ZipFile(io.BytesIO(self._multi_object_3mf())) as zf:
+            xml = zf.read("3D/3dmodel.model").decode()
+        build = re.search(r"<build\b.*?</build>", xml, re.DOTALL).group(0)
+        assert re.findall(r'<item objectid="([^"]*)"', build) == plate["object_ids"]
+
+    async def test_every_object_of_a_multi_object_plate_is_placed(self, async_client: AsyncClient, layout_slice_setup):
+        """/plates → PUT /layout → slice, with the numbers checked on the wire."""
+        sidecar = _RecordingSidecar()
+        slicer_api_module.set_shared_http_client(
+            httpx.AsyncClient(transport=httpx.MockTransport(sidecar), timeout=10.0)
+        )
+        file_id = await layout_slice_setup["make_file"]("Two.3mf", self._multi_object_3mf())
+
+        plates = (await async_client.get(f"/api/v1/library/files/{file_id}/plates")).json()["plates"]
+        object_ids = plates[0]["object_ids"]
+
+        # Exactly what the page saves: one entry per object, keyed on the ids
+        # the same endpoint just handed the UI.
+        put = await async_client.put(
+            f"/api/v1/library/files/{file_id}/layout",
+            json={
+                "version": 1,
+                "plates": {
+                    "1": [
+                        {
+                            "object_id": object_ids[0],
+                            "position": [60.0, 40.0, 10.0],
+                            "rotation": [0.0, 0.0, 0.0],
+                            "scale": [1.0, 1.0, 1.0],
+                        },
+                        {
+                            "object_id": object_ids[1],
+                            "position": [190.0, 210.0, 10.0],
+                            "rotation": [0.0, 0.0, 0.0],
+                            "scale": [1.0, 1.0, 1.0],
+                        },
+                    ]
+                },
+            },
+        )
+        assert put.status_code == 200, put.text
+
+        job = await _slice(async_client, file_id, layout_slice_setup)
+        assert job["status"] == "completed", job
+        assert len(sidecar.uploads) == 1
+
+        # Both, not just the first: a partial match is the shape of the bug.
+        assert _anchor_on_bed(sidecar.uploads[0], object_ids[0]) == pytest.approx([60.0, 40.0, 10.0], abs=1e-6)
+        assert _anchor_on_bed(sidecar.uploads[0], object_ids[1]) == pytest.approx([190.0, 210.0, 10.0], abs=1e-6)
+
+    async def test_a_layout_keyed_on_display_names_places_nothing(self, async_client: AsyncClient, layout_slice_setup):
+        """The failure this is all guarding against, made visible.
+
+        Saving the names `objects` reports is accepted by the endpoint and
+        applies to nothing. The slice still succeeds — which is exactly why
+        the id has to be pinned by a test rather than noticed in a print.
+        """
+        sidecar = _RecordingSidecar()
+        slicer_api_module.set_shared_http_client(
+            httpx.AsyncClient(transport=httpx.MockTransport(sidecar), timeout=10.0)
+        )
+        file_id = await layout_slice_setup["make_file"](
+            "Two.3mf",
+            self._multi_object_3mf(),
+            plate_layout={
+                "version": 1,
+                "plates": {
+                    "1": [
+                        {
+                            "object_id": "part_0.stl",
+                            "position": [60.0, 40.0, 10.0],
+                            "rotation": [0.0, 0.0, 0.0],
+                            "scale": [1.0, 1.0, 1.0],
+                        },
+                        {
+                            "object_id": "part_1.stl",
+                            "position": [190.0, 210.0, 10.0],
+                            "rotation": [0.0, 0.0, 0.0],
+                            "scale": [1.0, 1.0, 1.0],
+                        },
+                    ]
+                },
+            },
+        )
+
+        job = await _slice(async_client, file_id, layout_slice_setup)
+        assert job["status"] == "completed", job
+        # Untouched: still where the file itself put them.
+        assert _anchor_on_bed(sidecar.uploads[0], "2") == pytest.approx([100.0, 100.0, 10.0], abs=1e-6)
+        assert _anchor_on_bed(sidecar.uploads[0], "3") == pytest.approx([160.0, 100.0, 10.0], abs=1e-6)

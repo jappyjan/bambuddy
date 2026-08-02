@@ -139,6 +139,11 @@ def build_project_3mf(
             '<config><plate><metadata key="index" value="1"/>'
             '<metadata key="printer_model_id" value="N1"/></plate></config>',
         )
+        # A real saved project carries a plate thumbnail, and it is what
+        # ``GET /library/files/{id}/plates`` discovers plates *by* — without it
+        # the file reports no plates at all and the placement UI has nothing to
+        # address. Byte content is irrelevant; only the entry's name is read.
+        zf.writestr("Metadata/plate_1.png", b"\x89PNG\r\n\x1a\n")
     return buf.getvalue()
 
 

@@ -27,6 +27,7 @@ import {
   IDENTITY_TRANSFORM,
   buildStagePlates,
   isSupportedPlateLayout,
+  toPlateLayout,
 } from '../../components/slicer/plateLayout';
 import type { ObjectMetrics } from '../../components/slicer/transformMath';
 import type { PlateMetadata } from '../../types/plates';
@@ -632,6 +633,11 @@ describe('buildStagePlates', () => {
     expect(built.objects[0].transform).toEqual(IDENTITY_TRANSFORM);
   });
 
+  const anchors: Record<string, ObjectMetrics> = {
+    '2': { anchor: [100, 100, 0], size: [20, 20, 20] },
+    '3': { anchor: [88, 60, 0], size: [20, 20, 20] },
+  };
+
   it('applies a stored layout by object id and leaves the rest as-designed', () => {
     const layout: PlateLayout = {
       version: 1,
@@ -642,13 +648,30 @@ describe('buildStagePlates', () => {
       },
     };
 
-    const [built] = buildStagePlates(metadata, layout);
+    const [built] = buildStagePlates(metadata, layout, anchors);
     expect(built.objects[0].transform).toEqual(IDENTITY_TRANSFORM);
+    // The stored position is *absolute*; the stage renders the delta from the
+    // object's anchor. Passing it through unchanged would be a 128 mm jump.
     expect(built.objects[1].transform).toEqual({
-      position: [128, 128, 0],
+      position: [40, 68, 0],
       rotation: [0, 0, 45],
       scale: [1, 1, 1],
     });
+  });
+
+  it('leaves an object as designed while its anchor is still unknown', () => {
+    // The anchors come from the 3MF parse and land after the layout does. A
+    // guessed anchor would place the object somewhere it has never been; as
+    // designed is at least a position the file itself describes.
+    const layout: PlateLayout = {
+      version: 1,
+      plates: {
+        '1': [{ object_id: '3', position: [128, 128, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }],
+      },
+    };
+
+    const [built] = buildStagePlates(metadata, layout, {});
+    expect(built.objects[1].transform).toEqual(IDENTITY_TRANSFORM);
   });
 
   it('rejects an unsupported layout version rather than guessing (spec §4)', () => {
@@ -662,9 +685,185 @@ describe('buildStagePlates', () => {
     expect(built.objects[0].transform).toEqual(IDENTITY_TRANSFORM);
   });
 
+  it('addresses objects by their 3MF ids, not by the display names', () => {
+    // `PlateMetadata.objects` is what the file grid shows — "part_0.stl".
+    // `object_ids` is what `ModelViewer` attaches a gizmo to and what the
+    // slicer matches a placement against. Keying the stage on the names
+    // produces a viewport nothing can move and a layout that saves cleanly
+    // and applies to nothing.
+    const named: PlateMetadata[] = [
+      { ...metadata[0], objects: ['part_0.stl', 'part_1.stl'], object_ids: ['2', '3'] },
+    ];
+    const [built] = buildStagePlates(named);
+    expect(built.objects.map((object) => object.id)).toEqual(['2', '3']);
+  });
+
+  it('falls back to the names when a backend sends no ids at all', () => {
+    const [built] = buildStagePlates(metadata);
+    expect(built.objects.map((object) => object.id)).toEqual(['2', '3']);
+  });
+
   it('gives each as-designed object its own arrays', () => {
     const [built] = buildStagePlates(metadata);
     expect(built.objects[0].transform.position).not.toBe(built.objects[1].transform.position);
     expect(built.objects[0].transform.position).not.toBe(IDENTITY_TRANSFORM.position);
+  });
+});
+
+/**
+ * The delta → absolute half of the persistence bridge (#32, step-8.2).
+ *
+ * Every case here is one that would have "saved successfully" and sliced
+ * wrongly: the backend takes whatever numbers it is handed and cannot tell an
+ * anchor-relative delta from a bed coordinate.
+ */
+describe('toPlateLayout', () => {
+  const metrics: Record<string, ObjectMetrics> = {
+    '2': { anchor: [100, 100, 0], size: [20, 20, 20] },
+    '3': { anchor: [88, 60, 0], size: [30, 30, 30] },
+  };
+
+  const stagePlate = (objects: StagePlate['objects']): StagePlate[] => [
+    { index: 1, name: 'Plate 1', objects },
+  ];
+
+  it('writes the absolute bed coordinate, not the delta the stage holds', () => {
+    const layout = toPlateLayout(
+      stagePlate([
+        {
+          id: '2',
+          transform: { position: [40, -10, 0], rotation: [0, 0, 90], scale: [1, 1, 1] },
+        },
+      ]),
+      metrics,
+    );
+
+    expect(layout).toEqual({
+      version: 1,
+      plates: {
+        '1': [
+          { object_id: '2', position: [140, 90, 0], rotation: [0, 0, 90], scale: [1, 1, 1] },
+        ],
+      },
+    });
+  });
+
+  it('round-trips every object of a multi-object plate', () => {
+    const objects = [
+      { id: '2', transform: { position: [40, -10, 0], rotation: [0, 0, 90], scale: [1, 1, 1] } },
+      { id: '3', transform: { position: [-12, 4.5, 0], rotation: [0, 0, 0], scale: [2, 2, 2] } },
+    ];
+    const layout = toPlateLayout(stagePlate(objects), metrics);
+
+    expect(layout?.plates['1']).toHaveLength(2);
+    // Back through the reader, against the plate metadata — the same path a
+    // page reload takes. Every object has to come back where it was, not just
+    // the one that happened to be selected.
+    const restored = buildStagePlates(
+      [
+        {
+          index: 1,
+          name: 'Plate 1',
+          objects: ['2', '3'],
+          has_thumbnail: false,
+          thumbnail_url: null,
+          print_time_seconds: null,
+          filament_used_grams: null,
+          filaments: [],
+        },
+      ],
+      layout,
+      metrics,
+    );
+    expect(restored[0].objects).toEqual(objects);
+  });
+
+  it('drops an object that is back as designed, so "absent" keeps meaning original', () => {
+    const layout = toPlateLayout(
+      stagePlate([
+        { id: '2', transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+        { id: '3', transform: { position: [10, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+      ]),
+      metrics,
+    );
+
+    expect(layout?.plates['1'].map((entry) => entry.object_id)).toEqual(['3']);
+  });
+
+  it('is null when nothing is arranged, so saving clears the stored layout', () => {
+    const layout = toPlateLayout(
+      stagePlate([
+        { id: '2', transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+      ]),
+      metrics,
+      { version: 1, plates: { '1': [{ object_id: '2', position: [140, 90, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }] } },
+    );
+
+    expect(layout).toBeNull();
+  });
+
+  it('keeps the stored arrangement of plates the viewport never measured', () => {
+    // **The one that loses a user's work silently.** `ModelViewer` only
+    // measures the plate it is rendering, so plate 2's objects sit at identity
+    // in the stage while plate 1 is open. Rebuilding the layout from the stage
+    // would write those out as "as designed" and drop plate 2's arrangement —
+    // and the save would report success.
+    const stored: PlateLayout = {
+      version: 1,
+      plates: {
+        '1': [{ object_id: '2', position: [140, 90, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }],
+        '2': [{ object_id: '9', position: [30, 30, 0], rotation: [0, 0, 15], scale: [1, 1, 1] }],
+      },
+    };
+    const plates: StagePlate[] = [
+      {
+        index: 1,
+        name: 'Plate 1',
+        objects: [
+          { id: '2', transform: { position: [40, -10, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+        ],
+      },
+      {
+        index: 2,
+        name: 'Plate 2',
+        objects: [{ id: '9', transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }],
+      },
+    ];
+
+    const layout = toPlateLayout(plates, metrics, stored);
+    expect(layout?.plates['2']).toEqual(stored.plates['2']);
+    expect(layout?.plates['1']).toEqual([
+      { object_id: '2', position: [140, 90, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    ]);
+  });
+
+  it('survives an anchor that is not a round number', () => {
+    // `anchor + delta - anchor` is not the identity in binary floating point,
+    // and the drift would flow into `selectionFingerprint` and stale a slice
+    // the moment its layout was saved.
+    const odd: Record<string, ObjectMetrics> = {
+      '2': { anchor: [0.1, 33.33, 0], size: [1, 1, 1] },
+    };
+    const objects = [
+      { id: '2', transform: { position: [0.2, 1.11, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+    ];
+    const layout = toPlateLayout(stagePlate(objects), odd);
+    const [restored] = buildStagePlates(
+      [
+        {
+          index: 1,
+          name: 'Plate 1',
+          objects: ['2'],
+          has_thumbnail: false,
+          thumbnail_url: null,
+          print_time_seconds: null,
+          filament_used_grams: null,
+          filaments: [],
+        },
+      ],
+      layout,
+      odd,
+    );
+    expect(restored.objects[0].transform.position).toEqual([0.2, 1.11, 0]);
   });
 });
