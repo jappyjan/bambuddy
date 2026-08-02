@@ -93,6 +93,9 @@ interface FileGridProps {
   filteredAndSortedFiles: LibraryFileListItem[];
   // Selection toolbar
   selectedFiles: number[];
+  // How many selected files are not in the current listing (#37). Drives the
+  // "not in this view" chip and the wider select-all / clear labels.
+  offscreenSelectedCount: number;
   flatFiles: LibraryFileListItem[];
   selectedSlicedFiles: LibraryFileListItem[];
   handleSelectAll: () => void;
@@ -160,6 +163,7 @@ export function FileGrid({
   setShowModified,
   filteredAndSortedFiles,
   selectedFiles,
+  offscreenSelectedCount,
   flatFiles,
   selectedSlicedFiles,
   handleSelectAll,
@@ -392,18 +396,26 @@ export function FileGrid({
         </div>
       )}
 
-      {/* Selection toolbar - sticky on mobile below search bar */}
-      {filteredAndSortedFiles.length > 0 && (
+      {/* Selection toolbar - sticky on mobile below search bar. Also shown when
+          the listing is empty but a selection is still live, otherwise walking
+          into an empty folder would hide the selection completely (#37). */}
+      {(filteredAndSortedFiles.length > 0 || selectedFiles.length > 0) && (
         <div className="flex flex-wrap items-center gap-2 mb-4 p-2 bg-bambu-dark-secondary rounded-lg border border-bambu-dark-tertiary sticky top-[52px] z-10 lg:static">
-          {/* Select all / Deselect all */}
-          {selectedFiles.length === flatFiles.length && selectedFiles.length > 0 ? (
+          {/* Select all / Deselect all. The toggle is about the *visible*
+              listing, since that is all select-all can reach; when a wider
+              selection is live both buttons say so out loud (#37). */}
+          {flatFiles.length === 0 ? null : flatFiles.every((f) => selectedFiles.includes(f.id)) ? (
             <Button
               variant="secondary"
               size="sm"
               onClick={handleDeselectAll}
             >
               <Square className="w-4 h-4 sm:mr-1" />
-              <span className="hidden sm:inline">{t('fileManager.deselectAll')}</span>
+              <span className="hidden sm:inline">
+                {offscreenSelectedCount > 0
+                  ? t('fileManager.clearAllSelected', { count: selectedFiles.length })
+                  : t('fileManager.deselectAll')}
+              </span>
             </Button>
           ) : (
             <Button
@@ -412,7 +424,11 @@ export function FileGrid({
               onClick={handleSelectAll}
             >
               <CheckSquare className="w-4 h-4 sm:mr-1" />
-              <span className="hidden sm:inline">{t('fileManager.selectAll')}</span>
+              <span className="hidden sm:inline">
+                {offscreenSelectedCount > 0
+                  ? t('fileManager.selectAllInView')
+                  : t('fileManager.selectAll')}
+              </span>
             </Button>
           )}
 
@@ -421,6 +437,13 @@ export function FileGrid({
               <span className="text-sm text-bambu-gray ml-2">
                 {t('fileManager.selected', { count: selectedFiles.length })}
               </span>
+              {/* Always on screen — no hover, no expand. A count that does not
+                  say this is the bug this ticket exists for. */}
+              {offscreenSelectedCount > 0 && (
+                <span className="text-sm font-medium px-2 py-0.5 rounded bg-amber-500/20 text-amber-500">
+                  {t('fileManager.selectionOffscreen', { count: offscreenSelectedCount })}
+                </span>
+              )}
               <div className="hidden sm:block flex-1" />
               <div className="w-full sm:w-auto flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
                 {selectedSlicedFiles.length === 1 && (
@@ -477,7 +500,11 @@ export function FileGrid({
                   onClick={handleDeselectAll}
                 >
                   <X className="w-4 h-4 sm:mr-1" />
-                  <span className="hidden sm:inline">{t('common.clear')}</span>
+                  <span className="hidden sm:inline">
+                    {offscreenSelectedCount > 0
+                      ? t('fileManager.clearAllSelected', { count: selectedFiles.length })
+                      : t('common.clear')}
+                  </span>
                 </Button>
               </div>
             </>

@@ -74,7 +74,13 @@ export function FileManagerPage() {
   // combined view across every linked external folder (#1621). Per-folder
   // selection bypasses this (selectedFolderId !== null disables the filter).
   const [topLevelView, setTopLevelView] = useState<'internal' | 'external'>('internal');
+  // Selection deliberately survives a folder / search / tag change (#37), so
+  // part of it can sit off-screen. `selectedNames` remembers the filename of
+  // every id at the moment it was picked — the listing no longer contains it
+  // once the view moves on, and the delete confirmation has to be able to name
+  // what it is about to destroy.
   const [selectedFiles, setSelectedFiles] = useState<number[]>([]);
+  const [selectedNames, setSelectedNames] = useState<Record<number, string>>({});
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [showExternalFolderModal, setShowExternalFolderModal] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
@@ -637,26 +643,60 @@ export function FileManagerPage() {
     return flattenGrouped(files).filter(f => selectedFiles.includes(f.id) && isSlicedFile(f.filename));
   }, [files, selectedFiles, isSlicedFile]);
 
+  // Which part of the selection the user can actually see. Computed off the
+  // loaded listing only — while `files` is in flight everything would look
+  // off-screen, and flashing "7 not in this view" on every refetch is exactly
+  // the kind of lie this ticket is about.
+  const offscreenSelected = useMemo(() => {
+    if (!files) return [];
+    const visible = new Set(flatFiles.map((f) => f.id));
+    return selectedFiles.filter((id) => !visible.has(id));
+  }, [files, flatFiles, selectedFiles]);
+
+  // Every selected file by name, off-screen ones flagged. Names come from the
+  // live listing when the file is visible (so a rename is reflected) and from
+  // the capture-at-select-time record when it is not.
+  const selectedFileEntries = useMemo(() => {
+    const offscreen = new Set(offscreenSelected);
+    return selectedFiles.map((id) => ({
+      id,
+      name: flatFiles.find((f) => f.id === id)?.filename ?? selectedNames[id] ?? `#${id}`,
+      offscreen: offscreen.has(id),
+    }));
+  }, [selectedFiles, flatFiles, selectedNames, offscreenSelected]);
+
   // Handlers
   const handleFileSelect = useCallback((id: number) => {
     // Always toggle selection (multi-select by default)
     setSelectedFiles((prev) => {
       return prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
     });
+    setSelectedNames((prev) => {
+      const filename = flatFiles.find((f) => f.id === id)?.filename;
+      return filename ? { ...prev, [id]: filename } : prev;
+    });
     // ...and point the inspector at the clicked file (spec §7 step 3). Set
     // rather than toggled: clicking through a folder must update the panel in
     // place, never flicker it shut and open again. Closing is the X's job.
     setInspectedFileId(id);
-  }, []);
+  }, [flatFiles]);
 
   const handleCloseInspector = useCallback(() => setInspectedFileId(null), []);
 
+  // Adds the visible listing to the selection instead of replacing it: silently
+  // dropping an off-screen selection would be the same lie in the other
+  // direction. The button says "in view" whenever that distinction is live.
   const handleSelectAll = useCallback(() => {
     if (flatFiles.length > 0) {
-      setSelectedFiles(flatFiles.map((f) => f.id));
+      setSelectedFiles((prev) => [...new Set([...prev, ...flatFiles.map((f) => f.id)])]);
+      setSelectedNames((prev) => ({
+        ...prev,
+        ...Object.fromEntries(flatFiles.map((f) => [f.id, f.filename])),
+      }));
     }
   }, [flatFiles]);
 
+  // Clears the whole selection, off-screen included — never just the visible part.
   const handleDeselectAll = useCallback(() => {
     setSelectedFiles([]);
   }, []);
@@ -699,6 +739,16 @@ export function FileManagerPage() {
   };
 
   const isDeleting = deleteFolderMutation.isPending || deleteFileMutation.isPending || bulkDeleteMutation.isPending;
+
+  // What the delete confirmation lists by name. A single-file delete fired from
+  // a file card is already on screen and keeps its plain message; one fired
+  // from the selection can point at a file the user cannot see, so it gets the
+  // same named list as a bulk delete.
+  const deleteEntries = useMemo(() => {
+    if (!deleteConfirm || deleteConfirm.type === 'folder') return [];
+    if (deleteConfirm.type === 'bulk') return selectedFileEntries;
+    return selectedFileEntries.filter((e) => e.id === deleteConfirm.id && e.offscreen);
+  }, [deleteConfirm, selectedFileEntries]);
 
   const handleViewModeChange = (mode: 'grid' | 'list') => {
     setViewMode(mode);
@@ -888,6 +938,7 @@ export function FileManagerPage() {
             setShowModified={setShowModified}
             filteredAndSortedFiles={filteredAndSortedFiles}
             selectedFiles={selectedFiles}
+            offscreenSelectedCount={offscreenSelected.length}
             flatFiles={flatFiles}
             selectedSlicedFiles={selectedSlicedFiles}
             handleSelectAll={handleSelectAll}
@@ -966,6 +1017,7 @@ export function FileManagerPage() {
         <MoveFilesModal
           folders={folders}
           selectedFiles={selectedFiles}
+          offscreenSelectedCount={offscreenSelected.length}
           currentFolderId={selectedFolderId}
           onClose={() => setShowMoveModal(false)}
           onMove={(folderId) => moveFilesMutation.mutate({ fileIds: selectedFiles, folderId })}
@@ -1003,6 +1055,7 @@ export function FileManagerPage() {
       <BulkTagsPickerModal
         open={showBulkTagsModal}
         fileIds={selectedFiles}
+        offscreenCount={offscreenSelected.length}
         onClose={() => setShowBulkTagsModal(false)}
       />
 
@@ -1038,7 +1091,28 @@ export function FileManagerPage() {
           loadingText={t('fileManager.deleting')}
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm(null)}
-        />
+        >
+          {/* Delete is irreversible and the selection may reach outside the
+              current view, so this is the last place the user can catch it:
+              name every file, and mark the ones they cannot see (#37). */}
+          {deleteEntries.length > 0 && (
+            <div className="mb-4">
+              <p className="text-sm text-bambu-gray mb-2">{t('fileManager.filesToDelete')}</p>
+              <ul className="max-h-40 overflow-y-auto text-sm bg-bambu-dark rounded-lg border border-bambu-dark-tertiary divide-y divide-bambu-dark-tertiary">
+                {deleteEntries.map((entry) => (
+                  <li key={entry.id} className="flex items-center gap-2 px-3 py-1.5">
+                    <span className="text-white truncate">{entry.name}</span>
+                    {entry.offscreen && (
+                      <span className="ml-auto flex-shrink-0 text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500">
+                        {t('fileManager.notInThisView')}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </ConfirmModal>
       )}
 
       {printFile && (

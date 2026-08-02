@@ -11,6 +11,9 @@ import { libraryTagsQueryKey } from '../utils/libraryTagsQuery';
 interface BulkTagsPickerModalProps {
   open: boolean;
   fileIds: number[];
+  // Selected files that are not in the current listing (#37). Optional so
+  // callers outside the File Manager don't have to reason about it.
+  offscreenCount?: number;
   onClose: () => void;
 }
 
@@ -25,7 +28,7 @@ type Action = 'add' | 'remove';
  * would rarely want for arbitrary multi-selections. The API still exposes it
  * for callers that need it (e.g. a future bulk-edit screen).
  */
-export function BulkTagsPickerModal({ open, fileIds, onClose }: BulkTagsPickerModalProps) {
+export function BulkTagsPickerModal({ open, fileIds, offscreenCount = 0, onClose }: BulkTagsPickerModalProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -136,9 +139,14 @@ export function BulkTagsPickerModal({ open, fileIds, onClose }: BulkTagsPickerMo
         aria-labelledby={titleId}
       >
         <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-bambu-dark-tertiary">
-          <h3 id={titleId} className="text-base font-semibold text-white flex items-center gap-2">
+          <h3 id={titleId} className="text-base font-semibold text-white flex items-center gap-2 flex-wrap">
             <Tag className="w-4 h-4 text-bambu-green" />
             {t('fileManager.tags.bulkTitle', { count: fileIds.length })}
+            {offscreenCount > 0 && (
+              <span className="text-sm font-normal text-amber-500">
+                {t('fileManager.selectionOffscreen', { count: offscreenCount })}
+              </span>
+            )}
           </h3>
           <button
             type="button"
