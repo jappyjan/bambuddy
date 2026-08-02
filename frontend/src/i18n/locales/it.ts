@@ -5220,6 +5220,18 @@ export default {
     },
   },
 
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'Oggetti',
+    objectFallback: 'Oggetto {{id}}',
+    transform: 'Trasformazione',
+    position: 'Posizione',
+    rotation: 'Rotazione',
+    scale: 'Scala',
+    noSelection: 'Nessun oggetto selezionato',
+    emptyPlate: 'Questo piatto non contiene oggetti',
+  },
+
   // Maintenance type descriptions (built-in)
   maintenanceDescriptions: {
     lubricateCarbonRods: 'Applica lubrificante alle aste in carbonio per un movimento fluido',

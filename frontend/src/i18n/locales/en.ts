@@ -5275,6 +5275,18 @@ export default {
     },
   },
 
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'Objects',
+    objectFallback: 'Object {{id}}',
+    transform: 'Transform',
+    position: 'Position',
+    rotation: 'Rotation',
+    scale: 'Scale',
+    noSelection: 'No object selected',
+    emptyPlate: 'This plate has no objects',
+  },
+
   // Maintenance type descriptions (built-in)
   maintenanceDescriptions: {
     lubricateCarbonRods: 'Apply lubricant to carbon rods for smooth motion',
