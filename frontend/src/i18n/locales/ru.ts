@@ -4954,6 +4954,18 @@ export default {
       unsupportedFormat: "Неподдерживаемый формат файла",
     },
   },
+
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'Объекты',
+    objectFallback: 'Объект {{id}}',
+    transform: 'Преобразование',
+    position: 'Позиция',
+    rotation: 'Поворот',
+    scale: 'Масштаб',
+    noSelection: 'Объект не выбран',
+    emptyPlate: 'На этом столе нет объектов',
+  },
   maintenanceDescriptions: {
     lubricateCarbonRods: "Смазать углепластиковые направляющие для плавного перемещения",
     lubricateRails: "Смазать линейные направляющие для плавного перемещения",

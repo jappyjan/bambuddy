@@ -5220,6 +5220,18 @@ export default {
     },
   },
 
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: '对象',
+    objectFallback: '对象 {{id}}',
+    transform: '变换',
+    position: '位置',
+    rotation: '旋转',
+    scale: '缩放',
+    noSelection: '未选择对象',
+    emptyPlate: '此打印板上没有对象',
+  },
+
   // Maintenance type descriptions (built-in)
   maintenanceDescriptions: {
     lubricateCarbonRods: '在碳纤维杆上涂抹润滑剂以确保顺畅运动',

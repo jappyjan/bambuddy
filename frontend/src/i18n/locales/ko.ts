@@ -4966,6 +4966,18 @@ export default {
       unsupportedFormat: '지원되지 않는 파일 형식'
     }
   },
+
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: '오브젝트',
+    objectFallback: '오브젝트 {{id}}',
+    transform: '변형',
+    position: '위치',
+    rotation: '회전',
+    scale: '크기 조절',
+    noSelection: '선택된 오브젝트가 없습니다',
+    emptyPlate: '이 플레이트에는 오브젝트가 없습니다',
+  },
   maintenanceDescriptions: {
     lubricateCarbonRods: '부드러운 움직임을 위해 카본 로드에 윤활유 도포',
     lubricateRails: '부드러운 움직임을 위해 선형 레일에 윤활유 도포',

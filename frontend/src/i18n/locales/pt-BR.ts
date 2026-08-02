@@ -5220,6 +5220,18 @@ export default {
     },
   },
 
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'Objetos',
+    objectFallback: 'Objeto {{id}}',
+    transform: 'Transformação',
+    position: 'Posição',
+    rotation: 'Rotação',
+    scale: 'Escala',
+    noSelection: 'Nenhum objeto selecionado',
+    emptyPlate: 'Esta placa não tem objetos',
+  },
+
   // Maintenance type descriptions (built-in)
   maintenanceDescriptions: {
     lubricateCarbonRods: 'Aplique lubrificante nos eixos de carbono para um movimento suave',

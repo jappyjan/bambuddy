@@ -5232,6 +5232,18 @@ export default {
     },
   },
 
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'オブジェクト',
+    objectFallback: 'オブジェクト {{id}}',
+    transform: '変形',
+    position: '位置',
+    rotation: '回転',
+    scale: '拡大縮小',
+    noSelection: 'オブジェクトが選択されていません',
+    emptyPlate: 'このプレートにはオブジェクトがありません',
+  },
+
   // Maintenance type descriptions (built-in)
   maintenanceDescriptions: {
     lubricateCarbonRods: 'カーボンロッドに潤滑剤を塗布してスムーズな動きを確保',

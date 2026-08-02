@@ -5196,6 +5196,18 @@ export default {
     },
   },
 
+  // PlateStage — the slicer page 3D viewport (#14).
+  plateStage: {
+    objects: 'Nesneler',
+    objectFallback: 'Nesne {{id}}',
+    transform: 'Dönüşüm',
+    position: 'Konum',
+    rotation: 'Döndürme',
+    scale: 'Ölçek',
+    noSelection: 'Seçili nesne yok',
+    emptyPlate: 'Bu tablada nesne yok',
+  },
+
   // Bakım türü açıklamaları (yerleşik)
   maintenanceDescriptions: {
     lubricateCarbonRods: 'Düzgün hareket için karbon çubuklara yağ uygula',
