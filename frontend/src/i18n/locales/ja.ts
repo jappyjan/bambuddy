@@ -4191,6 +4191,15 @@ export default {
     wizardCloseViewport: '3Dビューを閉じる',
     wizardViewportLabel: '3Dビュー',
     wizardModelPreview: 'モデルのプレビュー',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: '現在の選択 — タップして変更',
+    wizardChipPrinter: 'プリンター',
+    wizardChipFilaments: 'フィラメント',
+    wizardChipSettings: '設定',
+    wizardChipNothingChosen: 'まだ選択されていません',
+    wizardChipFilamentSlots: '{{total}} スロット中 {{chosen}} 件を設定済み',
+    wizardBackToReview: '確認画面に戻る',
   },
 
   spoolman: {

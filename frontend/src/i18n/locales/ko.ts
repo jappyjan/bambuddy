@@ -3982,6 +3982,15 @@ export default {
     wizardCloseViewport: '3D 보기 닫기',
     wizardViewportLabel: '3D 보기',
     wizardModelPreview: '모델 미리보기',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: '현재 선택 — 탭하여 변경',
+    wizardChipPrinter: '프린터',
+    wizardChipFilaments: '필라멘트',
+    wizardChipSettings: '설정',
+    wizardChipNothingChosen: '아직 선택하지 않음',
+    wizardChipFilamentSlots: '{{total}}개 슬롯 중 {{chosen}}개 설정됨',
+    wizardBackToReview: '검토 화면으로 돌아가기',
   },
 
   spoolman: {

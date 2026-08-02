@@ -4179,6 +4179,15 @@ export default {
     wizardCloseViewport: '关闭 3D 视图',
     wizardViewportLabel: '3D 视图',
     wizardModelPreview: '模型预览',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: '你的选择 — 点按即可更改',
+    wizardChipPrinter: '打印机',
+    wizardChipFilaments: '耗材',
+    wizardChipSettings: '设置',
+    wizardChipNothingChosen: '尚未选择',
+    wizardChipFilamentSlots: '已设置 {{total}} 个槽位中的 {{chosen}} 个',
+    wizardBackToReview: '返回确认',
   },
 
   spoolman: {

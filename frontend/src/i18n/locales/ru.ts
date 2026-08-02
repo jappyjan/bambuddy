@@ -3973,6 +3973,15 @@ export default {
     wizardCloseViewport: 'Закрыть 3D-вид',
     wizardViewportLabel: '3D-вид',
     wizardModelPreview: 'Предпросмотр модели',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: 'Ваш выбор — нажмите, чтобы изменить',
+    wizardChipPrinter: 'Принтер',
+    wizardChipFilaments: 'Филаменты',
+    wizardChipSettings: 'Настройки',
+    wizardChipNothingChosen: 'Пока ничего не выбрано',
+    wizardChipFilamentSlots: 'Задано слотов: {{chosen}} из {{total}}',
+    wizardBackToReview: 'Назад к обзору',
   },
 
   spoolman: {

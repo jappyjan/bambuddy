@@ -4181,6 +4181,15 @@ export default {
     wizardCloseViewport: '3B görünümü kapat',
     wizardViewportLabel: '3B görünüm',
     wizardModelPreview: 'Model önizlemesi',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: 'Seçimleriniz — değiştirmek için dokunun',
+    wizardChipPrinter: 'Yazıcı',
+    wizardChipFilaments: 'Filamentler',
+    wizardChipSettings: 'Ayarlar',
+    wizardChipNothingChosen: 'Henüz bir şey seçilmedi',
+    wizardChipFilamentSlots: '{{total}} yuvadan {{chosen}} tanesi ayarlandı',
+    wizardBackToReview: 'Özete dön',
   },
 
   spoolman: {

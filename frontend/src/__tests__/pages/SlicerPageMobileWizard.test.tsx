@@ -8,8 +8,7 @@
  * something for itself:
  *
  * 1. **It gets all the way to a real slice**, opening on step 1 for a file that
- *    has never been sliced (review-first is #31, and until it lands "everyone
- *    starts at 1" is the contract).
+ *    has never been sliced.
  * 2. **Next is blocked while a step is unanswered** — and says why. A wizard
  *    that lets you walk past the printer step lands you on a Review whose Slice
  *    button is disabled for a reason you were never shown.
@@ -20,6 +19,13 @@
  * 4. **The full viewport is one tap away, with the archive read-only rule
  *    intact**, because `onTransformChange` is passed through rather than
  *    re-decided.
+ *
+ * Review-first (#31, step-6.2) adds three more, and the third is the one that
+ * matters: a file that has been sliced before opens on Review, its chips reach
+ * back into the steps nobody walked — and **Print now is still dead on
+ * arrival**. "Sliced before" is a fact about the file; Print now is a fact
+ * about whether the output matches the selection on screen, and only a slice
+ * completed in this session can establish it.
  *
  * The phone viewport is faked the way `pages/FileManagerInspectorSheet.test.tsx`
  * does it — by swapping `window.matchMedia`, narrowed to the max-width query so
@@ -59,6 +65,7 @@ vi.mock('../../api/client', () => ({
     sliceLibraryFile: vi.fn(),
     sliceArchive: vi.fn(),
     getSliceJob: vi.fn(),
+    getLibraryFile: vi.fn(),
     getLibraryFilePlates: vi.fn(),
     getArchivePlates: vi.fn(),
     getLibraryFileFilamentRequirements: vi.fn(),
@@ -183,6 +190,9 @@ describe('SlicerPage on a phone', () => {
 
     mockApi.getSlicerPresets.mockResolvedValue(PRESETS);
     mockApi.getSlicerPrinterModels.mockResolvedValue({});
+    // Never sliced, unless a test says otherwise — `slice_count` is what
+    // decides between step 1 and Review (#31).
+    mockApi.getLibraryFile.mockResolvedValue({ id: 100, filename: 'Cube.stl', slice_count: 0 });
     mockApi.getLibraryFilePlates.mockResolvedValue({
       file_id: 100,
       filename: 'Cube.stl',
@@ -396,6 +406,97 @@ describe('SlicerPage on a phone', () => {
     // Passed through, not re-decided: no `onTransformChange`, no gizmo.
     expect(viewerProps.interactive).toBe(false);
     expect(viewerProps.gizmoMode).toBeNull();
+  });
+
+  /** The source already has a sliced child — the review-first condition (#31). */
+  function previouslySliced(count = 2) {
+    mockApi.getLibraryFile.mockResolvedValue({ id: 100, filename: 'Cube.stl', slice_count: count });
+  }
+
+  it('opens a previously-sliced file on Review and slices without visiting a step', async () => {
+    previouslySliced();
+    const user = userEvent.setup();
+    renderWizard();
+    await waitForWizard();
+
+    // The *first* painted screen is Review — not step 1 that then jumps, which
+    // is what seeding `initialStep` after mount would produce.
+    expect(stepCounter()).toContain('Step 4 of 4');
+    // Nothing from the editing steps is on screen: the printer dropdown lives
+    // on step 1 and the settings editor on step 3.
+    expect(screen.queryByLabelText('Printer profile')).toBeNull();
+    expect(screen.queryByTestId('process-settings-editor')).toBeNull();
+
+    // The chips are a summary, so they say what the steps behind hold — the
+    // pre-picked printer by name, and the untouched settings.
+    await waitFor(() =>
+      expect(screen.getByTestId('wizard-chip-value-printer').textContent).toBe('Imported X1C 0.4'),
+    );
+    expect(screen.getByTestId('wizard-chip-value-settings').textContent).toContain('Preset values');
+
+    await waitFor(() => expect(sliceButton().disabled).toBe(false));
+    await user.click(sliceButton());
+
+    // And the request is the one the four-screen walk produces — review-first
+    // skipped the confirming, not the choosing.
+    await waitFor(() => expect(mockApi.sliceLibraryFile).toHaveBeenCalled());
+    const [fileId, body] = mockApi.sliceLibraryFile.mock.calls[0] as [number, SliceRequest];
+    expect(fileId).toBe(100);
+    expect(body).toEqual({
+      printer_preset: { source: 'local', id: '1' },
+      process_preset: { source: 'local', id: '2' },
+      filament_preset: { source: 'local', id: '3' },
+      filament_presets: [{ source: 'local', id: '3' }],
+    });
+  });
+
+  it('sends a chip back to its step, and Back to review returns', async () => {
+    previouslySliced();
+    const user = userEvent.setup();
+    renderWizard();
+    await waitForWizard();
+    await waitFor(() => expect(stepCounter()).toContain('Step 4 of 4'));
+
+    await user.click(screen.getByTestId('wizard-chip-printer'));
+    await waitFor(() => expect(stepCounter()).toContain('Step 1 of 4'));
+    expect(await screen.findByLabelText('Printer profile')).toBeDefined();
+
+    // Back the way you came — one tap, not three Nexts.
+    await user.click(screen.getByTestId('wizard-to-review'));
+    await waitFor(() => expect(stepCounter()).toContain('Step 4 of 4'));
+
+    // The filament chip goes to its own step, and Next from there is already
+    // the way back, so no second button claims to be.
+    await user.click(screen.getByTestId('wizard-chip-filaments'));
+    await waitFor(() => expect(stepCounter()).toContain('Step 2 of 4'));
+    await user.click(screen.getByTestId('wizard-to-review'));
+    await waitFor(() => expect(stepCounter()).toContain('Step 4 of 4'));
+
+    await user.click(screen.getByTestId('wizard-chip-settings'));
+    await waitFor(() => expect(stepCounter()).toContain('Step 3 of 4'));
+    expect(screen.queryByTestId('wizard-to-review')).toBeNull();
+    await user.click(nextButton());
+    await waitFor(() => expect(stepCounter()).toContain('Step 4 of 4'));
+  });
+
+  it('leaves Print now disabled on a review-first mount until a slice completes', async () => {
+    previouslySliced();
+    const user = userEvent.setup();
+    renderWizard();
+    await waitForWizard();
+    await waitFor(() => expect(stepCounter()).toContain('Step 4 of 4'));
+
+    // **The bug this exists to catch.** The file has been sliced before, and
+    // Review is on screen from the first frame — neither is a reason to offer
+    // the print. `lastSlice` is empty, so the page's gate is off, and the
+    // wizard renders that gate rather than inferring one from the mount.
+    expect(printNowButton().disabled).toBe(true);
+    expect(printNowButton().title).toMatch(/Slice the model first/i);
+    expect(screen.queryByTestId('print-now-stale')).toBeNull();
+
+    await waitFor(() => expect(sliceButton().disabled).toBe(false));
+    await user.click(sliceButton());
+    await waitFor(() => expect(printNowButton().disabled).toBe(false));
   });
 
   it('keeps Save and Reset layout reachable', async () => {

@@ -34,18 +34,39 @@
  * read-only rule (#32: no layout endpoint, therefore no editable gizmo) holds
  * here without this file knowing what an archive is.
  *
- * ## Where the wizard starts
+ * ## Where the wizard starts (#31, step-6.2)
  *
- * At step 1 for everyone. **#31 (step-6.2) seeds `initialStep`** — a
- * previously-sliced file should open on Review — and that is the only place the
- * start index is decided; see {@link MobileSliceWizardProps.initialStep} and
- * `FIRST_STEP` in `wizardSteps.ts`. #31's editable chips go in the Review
- * branch of the step body, which is marked with its ticket number.
+ * At step 1, unless the caller seeds `initialStep` — which `SlicerPage` does
+ * from the source's `slice_count`, so a file that has been sliced before opens
+ * on Review instead of walking four screens to re-confirm the same pre-pick.
+ * See {@link MobileSliceWizardProps.initialStep} and `initialStepForSource` in
+ * `wizardSteps.ts`; those are the only places the start index is decided.
+ *
+ * `initialStep` is read **once**, in a `useState` initialiser. That is not an
+ * accident and must not become an effect: the value arrives from a network
+ * call, and an effect would move the step out from under a user who has already
+ * tapped Next. The page's side of that bargain is to mount this component only
+ * once it knows the answer.
+ *
+ * Opening on Review means the three steps behind it were never seen, so Review
+ * has to *say* what they hold — that is what the chips are. Each names its
+ * step's current value and jumps to it; `wizardChips` reads those values, using
+ * the same `findPreset` the rail's dropdowns do.
+ *
+ * ## What review-first does not do
+ *
+ * It does not restore anything. Nothing in this codebase persists a previous
+ * slice's presets or overrides; `useSlicePresets` re-picks deterministically
+ * from the source 3MF's embedded printer / process plus compatibility scoring,
+ * which is why opening the same file twice lands on the same selection. And it
+ * does not touch Print now — `actions.canPrintNow` is still the page's boolean,
+ * rendered. Having been sliced *before* says nothing about whether the output
+ * on disk matches the selection on screen.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ArrowRight, Box, Maximize2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Box, Maximize2, Pencil, X } from 'lucide-react';
 import { PlateStage, type PlateStageProps } from './PlateStage';
 import { SliceActionBar, type SliceActionBarProps } from './SliceActionBar';
 import { SlicerRail, type SlicerRailProps } from './SlicerRail';
@@ -53,7 +74,11 @@ import {
   clampStep,
   FIRST_STEP,
   isStepComplete,
+  REVIEW_STEP,
+  wizardChips,
   WIZARD_STEPS,
+  type WizardChip,
+  type WizardChipStep,
   type WizardCompleteness,
   type WizardStep,
 } from './wizardSteps';
@@ -79,8 +104,9 @@ export interface MobileSliceWizardProps {
   /**
    * 1-based step to open on. Defaults to {@link FIRST_STEP}.
    *
-   * The seam for #31 (step-6.2): a file that has been sliced before should open
-   * on Review. Nothing else in this file decides the start index.
+   * Read once, at mount (#31, step-6.2) — see the module header. A caller
+   * whose answer arrives asynchronously must withhold this component until it
+   * has one, rather than expect a later value to take effect.
    */
   initialStep?: number;
 }
@@ -102,6 +128,12 @@ export function MobileSliceWizard({
   );
   const [viewportOpen, setViewportOpen] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  // Whether Review is somewhere to go *back* to. False on a fresh walk-through
+  // — there is nothing behind step 1 yet — and true the moment Review has been
+  // seen, whether that was by tapping Next three times or by mounting there.
+  const [reviewSeen, setReviewSeen] = useState(
+    () => clampStep(initialStep ?? FIRST_STEP) === REVIEW_STEP,
+  );
 
   // A different source is a different picture; without this a file with no
   // thumbnail would poison the placeholder for the next one.
@@ -136,6 +168,40 @@ export function MobileSliceWizard({
       : t('slicer.wizardNeedsFilaments');
 
   const isReview = step === 'review';
+
+  // Safe as an effect where seeding the *step* from one would not be: this only
+  // ever latches on, and it cannot move the user.
+  useEffect(() => {
+    if (isReview) setReviewSeen(true);
+  }, [isReview]);
+
+  const chips = useMemo(
+    () =>
+      wizardChips({
+        presets: rail.presets,
+        printerPreset: rail.printerPreset,
+        filamentPresets: rail.filamentPresets,
+        filamentSlots: rail.filamentSlots,
+        overrideCount: Object.keys(rail.overrides).length,
+      }),
+    [rail.presets, rail.printerPreset, rail.filamentPresets, rail.filamentSlots, rail.overrides],
+  );
+
+  const chipValue = (chip: WizardChip): string => {
+    if (chip.name) return chip.name;
+    switch (chip.step) {
+      case 'printer':
+        return t('slicer.wizardChipNothingChosen');
+      case 'filaments':
+        return chip.count === 0
+          ? t('slicer.wizardChipNothingChosen')
+          : t('slicer.wizardChipFilamentSlots', { chosen: chip.count, total: chip.total });
+      case 'settings':
+        return chip.count > 0
+          ? t('slice.settingsEditor.overrideCount', { changed: chip.count })
+          : t('slice.settingsEditor.noOverrides');
+    }
+  };
 
   const railSection = (
     <SlicerRail
@@ -222,16 +288,39 @@ export function MobileSliceWizard({
       <div className="flex min-h-0 flex-1 flex-col">
         {isReview ? (
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-            {/* #31 (step-6.2) adds the editable chips here — the summary of the
-                choices behind you, each tappable back to its own step. Today
-                this is read-only, and the estimate lives in the action bar. */}
-            <p className="text-xs text-bambu-gray" data-testid="wizard-review-overrides">
-              {Object.keys(rail.overrides).length > 0
-                ? t('slice.settingsEditor.overrideCount', {
-                    changed: Object.keys(rail.overrides).length,
-                  })
-                : t('slice.settingsEditor.noOverrides')}
-            </p>
+            {/* The editable chips (#31, step-6.2). Review is reachable without
+                having seen the three steps behind it, so each chip states what
+                its step currently holds — a summary you can disagree with, not
+                four buttons. Tapping one opens that step; "Back to review"
+                there brings you straight back. The estimate stays in the
+                action bar below. */}
+            <h2 id="wizard-review-chips" className="text-xs text-bambu-gray">
+              {t('slicer.wizardReviewSummary')}
+            </h2>
+            <div className="flex flex-col gap-1.5" role="group" aria-labelledby="wizard-review-chips">
+              {chips.map((chip) => (
+                <button
+                  key={chip.step}
+                  type="button"
+                  onClick={() => setStepIndex(chip.index)}
+                  data-testid={`wizard-chip-${chip.step}`}
+                  className="flex items-center gap-2 rounded-lg border border-bambu-dark-tertiary bg-bambu-dark-secondary px-3 py-2 text-left transition-colors hover:border-bambu-gray"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[10px] uppercase tracking-wider text-bambu-gray">
+                      {t(CHIP_TITLE_KEYS[chip.step])}
+                    </span>
+                    <span
+                      className="block truncate text-sm text-white"
+                      data-testid={`wizard-chip-value-${chip.step}`}
+                    >
+                      {chipValue(chip)}
+                    </span>
+                  </span>
+                  <Pencil className="h-3.5 w-3.5 flex-shrink-0 text-bambu-gray" aria-hidden="true" />
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           railSection
@@ -267,17 +356,37 @@ export function MobileSliceWizard({
           )}
 
           {!isReview && (
-            <button
-              type="button"
-              onClick={() => setStepIndex((current) => clampStep(current + 1))}
-              disabled={!stepComplete}
-              title={blockedReason ?? undefined}
-              data-testid="wizard-next"
-              className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-bambu-green px-4 py-2.5 text-sm font-medium text-bambu-dark transition-colors hover:bg-bambu-green/90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {t('slicer.wizardNext')}
-              <ArrowRight className="h-4 w-4" />
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              {/* The way back from a chip. Only where Next isn't already it —
+                  on Settings the two would be the same jump under two names.
+                  Gated on the same completeness as Next, for the same reason:
+                  #24's invariant is that you never arrive at Review with a
+                  selection its Slice button silently rejects. */}
+              {reviewSeen && stepIndex + 1 < REVIEW_STEP && (
+                <button
+                  type="button"
+                  onClick={() => setStepIndex(REVIEW_STEP)}
+                  disabled={!stepComplete}
+                  title={blockedReason ?? undefined}
+                  data-testid="wizard-to-review"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-bambu-dark-tertiary px-3 py-2.5 text-sm text-bambu-gray transition-colors hover:border-bambu-gray hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t('slicer.wizardBackToReview')}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setStepIndex((current) => clampStep(current + 1))}
+                disabled={!stepComplete}
+                title={blockedReason ?? undefined}
+                data-testid="wizard-next"
+                className="inline-flex items-center gap-1.5 rounded-md bg-bambu-green px-4 py-2.5 text-sm font-medium text-bambu-dark transition-colors hover:bg-bambu-green/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t('slicer.wizardNext')}
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
           )}
         </div>
       </footer>
@@ -316,4 +425,12 @@ const STEP_TITLE_KEYS: Record<WizardStep, string> = {
   filaments: 'slicer.wizardFilamentsTitle',
   settings: 'slicer.wizardSettingsTitle',
   review: 'slicer.wizardReviewTitle',
+};
+
+// The step titles are questions ("Which printer?"), which read wrongly as the
+// label on a chip that is already answered — so the chips get nouns.
+const CHIP_TITLE_KEYS: Record<WizardChipStep, string> = {
+  printer: 'slicer.wizardChipPrinter',
+  filaments: 'slicer.wizardChipFilaments',
+  settings: 'slicer.wizardChipSettings',
 };

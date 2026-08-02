@@ -80,6 +80,9 @@ vi.mock('../../api/client', () => ({
     sliceLibraryFile: vi.fn(),
     sliceArchive: vi.fn(),
     getSliceJob: vi.fn(),
+    // `slice_count` — the phone's review-first mount reads it (#31); the
+    // desktop fetches it too and ignores it.
+    getLibraryFile: vi.fn(),
     getLibraryFilePlates: vi.fn(),
     getArchivePlates: vi.fn(),
     getLibraryFileFilamentRequirements: vi.fn(),
@@ -191,6 +194,7 @@ describe('SlicerPage', () => {
     vi.clearAllMocks();
     mockApi.getSlicerPresets.mockResolvedValue(PRESETS);
     mockApi.getSlicerPrinterModels.mockResolvedValue({});
+    mockApi.getLibraryFile.mockResolvedValue({ id: 100, filename: 'Cube.stl', slice_count: 0 });
     mockApi.getLibraryFilePlates.mockResolvedValue({
       file_id: 100,
       filename: 'Cube.stl',

@@ -4227,6 +4227,15 @@ export default {
     wizardCloseViewport: 'Close the 3D view',
     wizardViewportLabel: '3D view',
     wizardModelPreview: 'Model preview',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: 'Your choices — tap to change',
+    wizardChipPrinter: 'Printer',
+    wizardChipFilaments: 'Filaments',
+    wizardChipSettings: 'Settings',
+    wizardChipNothingChosen: 'Nothing chosen yet',
+    wizardChipFilamentSlots: '{{chosen}} of {{total}} slots set',
+    wizardBackToReview: 'Back to review',
   },
 
   spoolman: {

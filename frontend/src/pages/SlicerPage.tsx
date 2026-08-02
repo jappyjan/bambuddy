@@ -62,13 +62,31 @@
  * `handleSlice` this page already computed; it re-derives none of them. That is
  * the whole reason the phone cannot slice or print something different from the
  * desktop: there is no second copy of the rules to disagree with.
+ *
+ * ## Review-first (#31, step-6.2)
+ *
+ * The one thing the phone branch decides for itself is **which step the wizard
+ * opens on**, from the source's `slice_count`: a file that already has a sliced
+ * child opens on Review, where chips summarise the three steps behind it. The
+ * presets there are not restored from anywhere — `useSlicePresets` re-picks
+ * them deterministically from the same 3MF, which is why re-opening a file
+ * reproduces its selection.
+ *
+ * Two constraints shape the code below and are easy to undo by accident:
+ *
+ * 1. `MobileSliceWizard` reads `initialStep` once, at mount. The count arrives
+ *    over the network, so the wizard is **withheld until the query settles**
+ *    rather than seeded afterwards — see the mobile branch.
+ * 2. **`slice_count` never touches Print now.** That gate is the fingerprint
+ *    comparison below and nothing else; a previous slice's output is not in
+ *    `lastSlice`, and mounting on Review must not imply it is.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, FileQuestion } from 'lucide-react';
+import { ArrowLeft, FileQuestion, Loader2 } from 'lucide-react';
 import {
   api,
   type PresetRef,
@@ -80,6 +98,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useSlicePresets } from '../hooks/useSlicePresets';
 import { MobileSliceWizard } from '../components/slicer/MobileSliceWizard';
+import { initialStepForSource } from '../components/slicer/wizardSteps';
 import { PlateStage } from '../components/slicer/PlateStage';
 import { SliceActionBar } from '../components/slicer/SliceActionBar';
 import { SlicerRail } from '../components/slicer/SlicerRail';
@@ -176,6 +195,17 @@ export function SlicerPage() {
   const filename = platesQuery.data?.filename ?? '';
   const platesMeta = useMemo(() => platesQuery.data?.plates ?? [], [platesQuery.data]);
   const isMultiPlate = !!platesQuery.data?.is_multi_plate && platesMeta.length > 1;
+
+  // Has this file been sliced before? (#31, step-6.2.) `slice_count` is a
+  // server-derived COUNT of non-trashed sliced children — the only thing on
+  // this page that reads it is which step the phone wizard opens on. Library
+  // files only: an archive has no such field, and so always starts at step 1.
+  const sourceFileQuery = useQuery({
+    queryKey: ['libraryFile', source?.id],
+    queryFn: async () => api.getLibraryFile(source!.id),
+    enabled: source?.kind === 'libraryFile',
+    staleTime: 60_000,
+  });
 
   // Saved arrangement (spec §4). Library files only — archives carry the same
   // column but expose no endpoint yet. Absent / null / wrong-version leaves
@@ -664,6 +694,31 @@ export function SlicerPage() {
 
   // The only fork. Everything above ran for both.
   if (isMobile) {
+    // **Review-first is decided before the wizard exists, not after** (#31,
+    // step-6.2). `initialStep` is read once, in a `useState` initialiser, on
+    // purpose: an effect that moved the step later would move it out from under
+    // a user who had already tapped Next. So the answer has to be in hand at
+    // mount, and the page holds the wizard back for the one render or two that
+    // `slice_count` takes to arrive. The alternative — mount at step 1 and
+    // remount on a changing `key` — reaches Review too, but by throwing away
+    // whatever the user did in between, which is the same bug wearing a hat.
+    //
+    // An errored query settles as "never sliced": `isPending` goes false, and
+    // starting at step 1 is the honest fallback when the count is unknown. A
+    // disabled query (archive) stays pending forever, hence the kind check
+    // first — archives have no `slice_count` and never wait for one.
+    const sliceCountSettled = source.kind !== 'libraryFile' || !sourceFileQuery.isPending;
+    if (!sliceCountSettled) {
+      return (
+        <div
+          data-testid="wizard-loading"
+          className="flex min-h-[calc(100vh-64px)] items-center justify-center gap-2 p-8 text-sm text-bambu-gray"
+        >
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {t('common.loading')}
+        </div>
+      );
+    }
     return (
       <>
         <MobileSliceWizard
@@ -674,6 +729,10 @@ export function SlicerPage() {
           stage={stageProps}
           actions={actionBarProps}
           thumbnailUrl={thumbnailUrl}
+          // Never a gate on Print now — `actionBarProps.canPrintNow` is
+          // untouched by this. A file having been sliced before says nothing
+          // about whether that output matches what is on screen now.
+          initialStep={initialStepForSource(sourceFileQuery.data?.slice_count)}
         />
         {printModal}
       </>
