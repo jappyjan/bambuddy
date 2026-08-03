@@ -3657,6 +3657,8 @@ export default {
     noFilesDescription: '上传文件以开始组织您的打印相关文件。',
     noMatchingFiles: '没有匹配的文件',
     noMatchingFilesDescription: '没有文件匹配您当前的搜索或筛选条件。',
+    filesLoadFailed: '无法加载文件',
+    filesLoadFailedDescription: '文件列表加载失败。请检查网络连接后重试。',
     clearFilters: '清除筛选',
     printedCount: '已打印 {{count}} 次',
     slicedBadge: '已切片',

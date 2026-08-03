@@ -3481,6 +3481,8 @@ export default {
     noFilesDescription: '파일을 업로드하여 인쇄 관련 파일을 정리하세요.',
     noMatchingFiles: '일치하는 파일 없음',
     noMatchingFilesDescription: '현재 검색 또는 필터 조건과 일치하는 파일이 없습니다.',
+    filesLoadFailed: '파일을 불러오지 못했습니다',
+    filesLoadFailedDescription: '파일 목록을 불러오지 못했습니다. 연결을 확인하고 다시 시도하세요.',
     clearFilters: '필터 초기화',
     printedCount: '{{count}}회 인쇄됨',
     slicedBadge: '슬라이스됨',

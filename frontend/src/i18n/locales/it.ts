@@ -3657,6 +3657,8 @@ export default {
     noFilesDescription: 'Carica file per iniziare a organizzare i file di stampa.',
     noMatchingFiles: 'Nessun file corrispondente',
     noMatchingFilesDescription: 'Nessun file corrisponde ai criteri di ricerca o filtro.',
+    filesLoadFailed: "Impossibile caricare i file",
+    filesLoadFailedDescription: "Caricamento dell'elenco dei file non riuscito. Controlla la connessione e riprova.",
     clearFilters: 'Pulisci filtri',
     printedCount: 'Stampato {{count}}x',
     slicedBadge: 'AFFETTATO',

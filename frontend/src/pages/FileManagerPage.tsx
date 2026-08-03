@@ -136,6 +136,10 @@ export function FileManagerPage() {
   });
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  // Latest width for the mouseup persist, so the resize effect does not need
+  // `sidebarWidth` in its deps and stops re-registering listeners on every
+  // mouse move (#38).
+  const sidebarWidthRef = useRef(sidebarWidth);
 
   // Handle sidebar resize
   useEffect(() => {
@@ -153,6 +157,7 @@ export function FileManagerPage() {
       const newWidth = e.clientX - containerRect.left;
       // Clamp between 200px and 500px
       const clampedWidth = Math.min(500, Math.max(200, newWidth));
+      sidebarWidthRef.current = clampedWidth;
       setSidebarWidth(clampedWidth);
     };
 
@@ -161,7 +166,7 @@ export function FileManagerPage() {
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
       // Save to localStorage
-      localStorage.setItem('library-sidebar-width', String(sidebarWidth));
+      localStorage.setItem('library-sidebar-width', String(sidebarWidthRef.current));
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -173,7 +178,7 @@ export function FileManagerPage() {
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
     };
-  }, [isResizing, sidebarWidth]);
+  }, [isResizing]);
 
   // Filter and sort state (persist sort preferences to localStorage)
   const [searchQuery, setSearchQuery] = useState('');
@@ -306,7 +311,7 @@ export function FileManagerPage() {
     );
   }, []);
 
-  const { data: files, isLoading: filesLoading } = useQuery({
+  const { data: files, isLoading: filesLoading, isError: filesError, refetch: refetchFiles } = useQuery({
     queryKey: ['library-files', selectedFolderId, topLevelView, searchExpandsSubfolders, tagFilterKey],
     // When a specific folder is selected we list its contents directly; when
     // no folder is selected the topLevelView pseudo-node decides whether the
@@ -962,6 +967,8 @@ export function FileManagerPage() {
             setShowMoveModal={setShowMoveModal}
             setShowBulkTagsModal={setShowBulkTagsModal}
             isLoading={isLoading}
+            filesError={filesError}
+            onRetryFiles={() => { void refetchFiles(); }}
             topLevelView={topLevelView}
             setShowUploadModal={setShowUploadModal}
             viewMode={viewMode}
@@ -1169,7 +1176,7 @@ export function FileManagerPage() {
           onClose={() => setViewerFile(null)}
           onSliceWithBambuddy={
             // Only offer in-app slicing on files the SliceModal can actually
-            // handle (matches the file-row Cog visibility check at :2127).
+            // handle (matches the file-row Cog visibility check in FileGrid).
             isSliceableFilename(viewerFile.filename) && hasPermission('library:upload')
               ? () => {
                   const f = viewerFile;
