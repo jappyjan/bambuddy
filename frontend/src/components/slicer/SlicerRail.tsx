@@ -1,16 +1,22 @@
 /**
  * The slicer page's left rail (#15, step-5.3; mockup screen 2, desktop layout).
  *
- * Top to bottom: printer, process, build plate, the filament slot grid, then
- * `ProcessSettingsEditor` filling whatever height is left. Presentation only —
+ * Top to bottom: the printer group (printer model + build-plate cards and the
+ * nozzle diameter — `PrinterPicker`, #44), process, the filament slot grid,
+ * then `ProcessSettingsEditor` filling whatever height is left. Presentation only —
  * every value and every setter comes from the page, which owns the selection
  * because the action bar has to fingerprint the same one (see
  * `sliceSelection.ts`). Splitting it out keeps the page about *wiring* and this
  * file about *layout*, and lets the mobile wizard (#11) reuse the field set
  * without inheriting the desktop arrangement.
  *
- * The preset controls are the same `PresetDropdown` / `BedTypeDropdown` the
- * `SliceModal` renders, so the two entry points cannot offer different presets.
+ * The process and filament controls are the same `PresetDropdown` the
+ * `SliceModal` renders, and the build plate the same `BedTypeDropdown`, so the
+ * two entry points cannot offer different presets. The printer is the one
+ * control that differs: the rail splits it across model and nozzle diameter
+ * (#44) while the modal keeps the flat dropdown. Both still select a single
+ * printer `PresetRef` out of the same list, so what reaches the slicer — and
+ * the fingerprint — is identical either way.
  *
  * ## Sections (#24, step-6.1)
  *
@@ -27,14 +33,15 @@ import { Loader2, RefreshCw } from 'lucide-react';
 import type { PresetRef, UnifiedPresetsResponse } from '../../api/client';
 import type { PrinterCompatibilityIndex } from '../../utils/slicerPrinterMatch';
 import type { PlateFilament } from '../../types/plates';
-import { BedTypeDropdown, PresetDropdown } from './PresetControls';
+import { PresetDropdown } from './PresetControls';
+import { PrinterPicker } from './PrinterPicker';
 import { ProcessSettingsEditor } from './ProcessSettingsEditor';
 import type { ProcessField, ProcessOverrides, ResolvedProcess } from './processFields';
 
 /**
  * A group of controls the rail can render on its own.
  *
- * - `presets` — printer, "slice as designed", process, build plate
+ * - `presets` — printer model / nozzle / build plate, "slice as designed", process
  * - `filaments` — the per-slot filament grid
  * - `settings` — `ProcessSettingsEditor`
  */
@@ -172,18 +179,20 @@ export function SlicerRail({
         <div className="flex flex-col gap-2">
           {showPresetPickers && (
             <>
-              <PresetDropdown
-                label={t('slice.printer')}
-                slot="printer"
+              {/* Printer model + build plate as cards, nozzle diameter below
+                  them (#44). Produces the same single `PresetRef` the flat
+                  dropdown did — see `PrinterPicker`, including why there is no
+                  Flow control. Locked in embedded mode for the same reason the
+                  modal locks its dropdown (#2611): the pick is unused on that
+                  path, and changing it away from the design's target would drop
+                  canUseEmbedded and yank the toggle out from under the user. */}
+              <PrinterPicker
                 data={presets}
                 value={printerPreset}
                 onChange={onPrinterPresetChange}
-                // Locked in embedded mode for the same reason the modal locks
-                // it (#2611): the pick is unused on that path, and changing it
-                // away from the design's target would drop canUseEmbedded and
-                // yank the toggle out from under the user.
+                bedType={bedType}
+                onBedTypeChange={onBedTypeChange}
                 disabled={disabled || useEmbedded}
-                selectClassName="px-2 py-1.5 text-xs"
               />
 
               {canUseEmbedded && (
@@ -214,15 +223,6 @@ export function SlicerRail({
                 selectedPrinterName={selectedPrinterName}
                 compatIndex={compatIndex}
                 selectClassName="px-2 py-1.5 text-xs"
-              />
-
-              {/* Bed type patches curr_bed_type onto the resolved process JSON,
-                  which the embedded-settings path never sends — so it has no
-                  effect there and is disabled rather than implying it does. */}
-              <BedTypeDropdown
-                value={bedType}
-                onChange={onBedTypeChange}
-                disabled={disabled || useEmbedded}
               />
             </>
           )}

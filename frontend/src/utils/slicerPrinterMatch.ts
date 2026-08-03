@@ -110,10 +110,28 @@ const DEFAULT_NOZZLE = '0.4';
 // Strip a trailing "<size> nozzle" segment, returning the nozzle string
 // (e.g. "0.6") or null when absent. Used by both BBL-token and printer-
 // preset extractors so the suffix is parsed identically on both sides.
+//
+// Exported (as `splitNozzleSuffix`, below) because the rail's printer /
+// nozzle-diameter controls (#44) have to split the very same names into the
+// very same two parts. A second regex there would drift from this one, and the
+// way it would drift is that a preset the matcher reads as "0.6" gets offered
+// under a different diameter in the picker.
 function takeNozzleSuffix(s: string): { stripped: string; nozzle: string | null } {
   const m = s.match(/^(.*?)\s+([\d.]+)\s*nozzle\s*$/i);
   if (!m) return { stripped: s.trim(), nozzle: null };
   return { stripped: m[1].trim(), nozzle: m[2] };
+}
+
+/**
+ * Split a printer-preset name into everything before a trailing
+ * "<size> nozzle" segment and the size itself — "Bambu Lab H2S 0.4 nozzle"
+ * → `{ stripped: 'Bambu Lab H2S', nozzle: '0.4' }`. A name without the
+ * segment comes back with `nozzle: null` and is otherwise untouched.
+ *
+ * The public face of `takeNozzleSuffix`; see the note there.
+ */
+export function splitNozzleSuffix(name: string): { stripped: string; nozzle: string | null } {
+  return takeNozzleSuffix(name);
 }
 
 // Pull the model token and nozzle out of a "@BBL <token> [<size> nozzle]"

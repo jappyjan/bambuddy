@@ -62,30 +62,45 @@ export function BedTypeDropdown({
   value,
   onChange,
   disabled,
+  // Both default to the modal's original rendering — this control is shared,
+  // and the rail's build-plate card (#44) is the only caller that overrides
+  // them: it draws its own heading, so a second visible label inside the card
+  // would just repeat it, and the rail's selects run tighter than the modal's.
+  hideLabel = false,
+  selectClassName = 'w-full px-3 py-2 rounded-md bg-bambu-dark border border-bambu-dark-tertiary text-white text-sm focus:outline-none focus:border-bambu-gray disabled:opacity-50',
 }: {
   value: string | null;
   onChange: (value: string | null) => void;
   disabled?: boolean;
+  hideLabel?: boolean;
+  selectClassName?: string;
 }) {
   const { t } = useTranslation();
+  const select = (
+    <select
+      // Without a visible label the select still has to be reachable by name —
+      // for a screen reader as much as for a test.
+      aria-label={hideLabel ? t('slice.bedType.label') : undefined}
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
+      disabled={disabled}
+      className={selectClassName}
+    >
+      <option value="">{t('slice.bedType.auto')}</option>
+      {BED_TYPE_OPTIONS.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {t(opt.labelKey, opt.fallback)}
+        </option>
+      ))}
+    </select>
+  );
+  if (hideLabel) return select;
   return (
     <label className="block">
       <span className="block text-xs text-bambu-gray mb-1">
         {t('slice.bedType.label')}
       </span>
-      <select
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
-        disabled={disabled}
-        className="w-full px-3 py-2 rounded-md bg-bambu-dark border border-bambu-dark-tertiary text-white text-sm focus:outline-none focus:border-bambu-gray disabled:opacity-50"
-      >
-        <option value="">{t('slice.bedType.auto')}</option>
-        {BED_TYPE_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {t(opt.labelKey, opt.fallback)}
-          </option>
-        ))}
-      </select>
+      {select}
     </label>
   );
 }
