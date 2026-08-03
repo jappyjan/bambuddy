@@ -40,10 +40,14 @@
  * files.** The missing thing is not a pipeline; the values are not there.
  *
  * The per-printer flow matrix does exist, but only as unlabelled positional
- * arrays (`nozzle_volume` / `nozzle_type` — seven entries on a two-extruder
- * H2D), indexed by a `NozzleVolumeType` enum that lives in the slicer binary
- * rather than in the data. Nothing readable says which index means which flow,
- * or which flows a given printer accepts.
+ * arrays (`nozzle_volume` / `nozzle_type`), indexed by a `NozzleVolumeType`
+ * enum that lives in the slicer binary rather than in the data. Nothing
+ * readable says which index means which flow, or which flows a given printer
+ * accepts — and the arrays are not even the same length across bundles: on the
+ * two-extruder `Bambu Lab H2D 0.4 nozzle`, BambuStudio carries seven entries
+ * and OrcaSlicer five (the 0.8 nozzle four, the 0.6 none at all). Their length
+ * is not a printer fact you can read off; it tracks whatever variants that
+ * bundle happens to enumerate.
  *
  * `nozzle_volume_type` *is* a settable key on both slicers (it appears in both
  * `backend/tests/_fixtures/slicer_keys/*.json`), so a flow value could be
