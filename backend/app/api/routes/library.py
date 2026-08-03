@@ -3537,6 +3537,39 @@ def _patch_process_overrides(process_json: str, overrides: dict[str, Any]) -> st
     return json.dumps(profile)
 
 
+def _patch_filament_colour(filament_json: str, colour: str) -> str:
+    """Set a resolved filament profile's colour for this one slice (#45).
+
+    The rail lets a user give each filament slot a colour, the way Bambu
+    Studio's Project Filaments panel does. Colour lives on the *filament*
+    profile (``filament_colour``), so it cannot travel in ``process_overrides``
+    — hence a patch of its own, deliberately shaped like
+    :func:`_patch_process_overrides` above.
+
+    Both keys are written. The two slicers disagree about which one they read:
+    BambuStudio / OrcaSlicer filament profiles carry ``filament_colour`` while
+    the profile *defaults* live under ``default_filament_colour``, and a profile
+    that only had the latter set would keep showing its old colour. Writing both
+    costs nothing and removes the question. Arrays, not scalars — filament
+    profiles store these per-extruder, and a bare string where the profile had a
+    list is the shape the CLI silently drops.
+
+    Returns the JSON unchanged when it can't be parsed or isn't an object,
+    matching the process patcher: a slice with the profile's own colour is a
+    far better failure than no slice at all.
+    """
+    try:
+        profile = json.loads(filament_json)
+    except json.JSONDecodeError:
+        logger.warning("Filament colour override skipped: filament profile is not valid JSON")
+        return filament_json
+    if not isinstance(profile, dict):
+        return filament_json
+    profile["filament_colour"] = [colour]
+    profile["default_filament_colour"] = [colour]
+    return json.dumps(profile)
+
+
 # Support-related keys we lift from the source 3MF's project_settings.config
 # into the picked process preset before `--load-settings` sees it (#1881).
 # BambuStudio's shipped process presets ("0.20mm Standard @BBL H2D" etc.)
@@ -3715,6 +3748,17 @@ async def _run_slicer_with_fallback(
     for ref in request.filament_presets:
         assert ref is not None, "schema validator guarantees filament list is non-None"
         filament_jsons.append(await resolve_preset_ref(db, user, ref, "filament"))
+
+    # Per-slot colour overrides (#45). Applied HERE — immediately after
+    # resolution and before anything else touches the list — because this is
+    # the only point where index i is still exactly `request.filament_presets[i]`.
+    # `substitute_unused_plate_filaments` below rewrites entries by index, so a
+    # colour applied after it would land on a substituted profile and colour the
+    # wrong slot.
+    for index, colour in enumerate(request.filament_colours):
+        if colour is None or index >= len(filament_jsons):
+            continue
+        filament_jsons[index] = _patch_filament_colour(filament_jsons[index], colour)
 
     # Slicer routing — pick the sidecar URL by preferred_slicer.
     # The per-install URL setting (Settings UI → Slicer card) wins; an

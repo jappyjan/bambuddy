@@ -795,7 +795,9 @@ describe('SlicerPage', () => {
       // given no `onTransformChange`, and that is what it reports downstream.
       expect(viewerProps.interactive).toBe(false);
       expect(viewerProps.gizmoMode).toBeNull();
-      expect(screen.queryByRole('button', { name: /Move/i })).toBeNull();
+      // Anchored: accessible-name regexes match substrings, and the rail's
+      // "Re*move* the last filament slot" (#45) is not a gizmo.
+      expect(screen.queryByRole('button', { name: /^Move$/ })).toBeNull();
       expect(saveButton().disabled).toBe(true);
       expect(saveButton().title).toMatch(/library files/i);
     });

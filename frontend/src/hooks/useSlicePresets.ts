@@ -220,6 +220,32 @@ export function useSlicePresets({
     [filamentSlots],
   );
 
+  // Slot list edits (#45, rail.2). The `/slicer` rail lets the user add and
+  // remove filament slots; `SliceModal` does not, and neither of these is on
+  // the shape it consumes — they are additions, not a reshaping.
+  //
+  // **They exist because the two lists have to move together.** The slot list
+  // lives on the page and this one lives here, and `filament_presets` is
+  // positional: if the page inserts a slot at index 1 while this array is only
+  // grown at the end, every pick from index 1 down lands one slot late and the
+  // slice comes out with the materials swapped. Splicing at the same index is
+  // what keeps a slot's chosen profile attached to that slot.
+  //
+  // The pre-pick effect above then does the rest: the freshly inserted `null`
+  // is the one entry it re-picks, and every kept entry is still the pick that
+  // was made for the slot it is now sitting next to.
+  const insertFilamentPresetAt = useCallback((index: number, ref: PresetRef | null = null) => {
+    setFilamentPresets((current) => {
+      const next = [...current];
+      next.splice(Math.min(Math.max(index, 0), next.length), 0, ref);
+      return next;
+    });
+  }, []);
+
+  const removeFilamentPresetAt = useCallback((index: number) => {
+    setFilamentPresets((current) => current.filter((_, i) => i !== index));
+  }, []);
+
   // Slicer Pipelines (#1425) — apply a saved preset bundle to all slots with
   // one pick. The filament list is right-padded from current state so a
   // pipeline with fewer entries than the current source's slot count keeps the
@@ -251,6 +277,8 @@ export function useSlicePresets({
     setProcessPreset,
     filamentPresets,
     setFilamentPresetAt,
+    insertFilamentPresetAt,
+    removeFilamentPresetAt,
     bedType,
     setBedType,
     useEmbedded,

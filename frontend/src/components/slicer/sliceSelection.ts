@@ -46,6 +46,17 @@ export interface SliceSelection {
   processPreset: PresetRef | null;
   /** One ref per plate slot, in plate order. */
   filamentPresets: (PresetRef | null)[];
+  /**
+   * Per-slot colour **overrides** (#45), positionally aligned with
+   * `filamentPresets`. `null` means "whatever the plate was designed with" —
+   * only a colour the user actually chose travels.
+   *
+   * That distinction is what keeps this page's plain slice byte-identical to
+   * `SliceModal`'s: an untouched selection produces all-nulls, and the key is
+   * omitted from the body entirely. Optional so callers that never offer the
+   * control (the modal) need not construct it.
+   */
+  filamentColors?: (string | null)[];
   /** Build-plate override (#1337); null inherits the process preset's. */
   bedType: string | null;
   /**
@@ -96,11 +107,19 @@ export function buildSliceBody(selection: SliceSelection): SliceRequest {
     throw new Error('buildSliceBody: incomplete selection');
   }
   const filaments = selection.filamentPresets as PresetRef[];
+  // Colours are sent only when the user set at least one. Right-sized to the
+  // slot list so index N is slot N + 1 on the wire exactly as `filament_presets`
+  // is — a shorter list would silently colour the wrong slots.
+  const colors = selection.filamentColors ?? [];
+  const anyColor = colors.some((value) => value != null);
   return {
     printer_preset: selection.printerPreset as PresetRef,
     process_preset: selection.processPreset as PresetRef,
     filament_preset: filaments[0],
     filament_presets: filaments,
+    ...(anyColor
+      ? { filament_colours: filaments.map((_, index) => colors[index] ?? null) }
+      : {}),
     ...(selection.plate != null ? { plate: selection.plate } : {}),
     ...(selection.bedType != null ? { bed_type: selection.bedType } : {}),
     ...(selection.useEmbedded ? { use_embedded_settings: true } : {}),

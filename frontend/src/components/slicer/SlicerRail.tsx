@@ -12,11 +12,12 @@
  *
  * The process and filament controls are the same `PresetDropdown` the
  * `SliceModal` renders, and the build plate the same `BedTypeDropdown`, so the
- * two entry points cannot offer different presets. The printer is the one
- * control that differs: the rail splits it across model and nozzle diameter
- * (#44) while the modal keeps the flat dropdown. Both still select a single
- * printer `PresetRef` out of the same list, so what reaches the slicer — and
- * the fingerprint — is identical either way.
+ * two entry points cannot offer different presets. Two controls differ: the
+ * rail splits the printer across model and nozzle diameter (#44) while the
+ * modal keeps the flat dropdown, and the rail wraps the filament dropdowns in
+ * `FilamentSlotGrid` (#45) so slots can be added, removed and coloured. Both
+ * still select `PresetRef`s out of the same lists, so what reaches the
+ * slicer — and the fingerprint — is the same shape either way.
  *
  * ## Sections (#24, step-6.1)
  *
@@ -32,7 +33,8 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, RefreshCw } from 'lucide-react';
 import type { PresetRef, UnifiedPresetsResponse } from '../../api/client';
 import type { PrinterCompatibilityIndex } from '../../utils/slicerPrinterMatch';
-import type { PlateFilament } from '../../types/plates';
+import { FilamentSlotGrid } from './FilamentSlotGrid';
+import type { FilamentSlotState } from './filamentSlots';
 import { PresetDropdown } from './PresetControls';
 import { PrinterPicker } from './PrinterPicker';
 import { ProcessSettingsEditor } from './ProcessSettingsEditor';
@@ -63,9 +65,18 @@ export interface SlicerRailProps {
   /** One entry per plate slot, in plate order. */
   filamentPresets: (PresetRef | null)[];
   onFilamentPresetChange: (index: number, ref: PresetRef | null) => void;
-  /** Plate slot metadata — drives the labels, swatches and used/unused gating. */
-  filamentSlots: PlateFilament[];
+  /**
+   * The page's **owned** slot list (#45), seeded from the plate's requirements.
+   * Drives the labels, the badge colours and the used/unused gating.
+   */
+  filamentSlots: FilamentSlotState[];
   filamentSlotsLoading: boolean;
+  /** Slot-list edits (#45). Every one of them is refused by the page when it
+   *  would move a slot the plate paints with — see `filamentSlots.ts`. */
+  onAddFilamentSlot: () => void;
+  onInsertFilamentSlotAfter: (index: number) => void;
+  onRemoveFilamentSlot: (index: number) => void;
+  onFilamentSlotColorChange: (index: number, color: string | null) => void;
   bedType: string | null;
   onBedTypeChange: (value: string | null) => void;
 
@@ -110,6 +121,10 @@ export function SlicerRail({
   onFilamentPresetChange,
   filamentSlots,
   filamentSlotsLoading,
+  onAddFilamentSlot,
+  onInsertFilamentSlotAfter,
+  onRemoveFilamentSlot,
+  onFilamentSlotColorChange,
   bedType,
   onBedTypeChange,
   useEmbedded,
@@ -227,42 +242,27 @@ export function SlicerRail({
             </>
           )}
 
-          {showFilaments &&
-            (filamentSlotsLoading ? (
-              <div className="flex items-center gap-2 py-1 text-xs text-bambu-gray">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                {t('slice.analyzingPlateFilaments')}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2" data-testid="filament-slots">
-                {filamentSlots.map((slot, index) => {
-                  // Slots the backend flagged as unused by this plate are
-                  // auto-picked and disabled — the CLI still needs a profile
-                  // per project slot, but the user shouldn't have to think
-                  // about slots their plate doesn't paint with.
-                  const isUsed = slot.used_in_plate !== false;
-                  const baseLabel =
-                    filamentSlots.length > 1
-                      ? t('slice.filamentSlot', { index: index + 1, type: slot.type })
-                      : t('slice.filament');
-                  return (
-                    <PresetDropdown
-                      key={`filament-${index}`}
-                      label={isUsed ? baseLabel : `${baseLabel} ${t('slice.notUsedByPlate')}`}
-                      slot="filament"
-                      data={presets}
-                      value={filamentPresets[index] ?? null}
-                      onChange={(ref) => onFilamentPresetChange(index, ref)}
-                      disabled={disabled || !isUsed || useEmbedded}
-                      swatchColor={filamentSlots.length > 1 ? slot.color : undefined}
-                      selectedPrinterName={selectedPrinterName}
-                      compatIndex={compatIndex}
-                      selectClassName="px-2 py-1.5 text-xs"
-                    />
-                  );
-                })}
-              </div>
-            ))}
+          {/* Bambu Studio's Project Filaments panel (#45): numbered
+              colour-carrying badges, add / remove, per-slot `⋯`. Disabled
+              wholesale in embedded mode for the same reason the other pickers
+              are — that path slices the design's own profiles, so a slot edit
+              there would change nothing about the output. */}
+          {showFilaments && (
+            <FilamentSlotGrid
+              presets={presets}
+              slots={filamentSlots}
+              slotsLoading={filamentSlotsLoading}
+              filamentPresets={filamentPresets}
+              onFilamentPresetChange={onFilamentPresetChange}
+              onAddSlot={onAddFilamentSlot}
+              onInsertSlotAfter={onInsertFilamentSlotAfter}
+              onRemoveSlot={onRemoveFilamentSlot}
+              onSlotColorChange={onFilamentSlotColorChange}
+              selectedPrinterName={selectedPrinterName}
+              compatIndex={compatIndex}
+              disabled={disabled || useEmbedded}
+            />
+          )}
         </div>
       )}
 

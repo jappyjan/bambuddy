@@ -4213,6 +4213,25 @@ export default {
     nozzleDiameterUnavailable: '{{diameter}} mm — no profile',
     printerNoMatch: 'No printer profile for {{model}} with a {{diameter}} mm nozzle. Pick a diameter this printer has.',
     printerNoMatchNoDiameter: 'No printer profile for {{model}}.',
+    // The rail's filament slot manager (#45) — Bambu Studio's Project
+    // Filaments panel: numbered colour-carrying badges, add / remove, and a
+    // per-slot menu. `slotOrderLocked` is the one message that matters: slot
+    // position is what the model's painted geometry refers to.
+    filamentHeading: 'Filament',
+    addSlot: 'Add a filament slot',
+    removeSlot: 'Remove the last filament slot',
+    filamentSlotPlain: 'Filament {{index}}',
+    filamentSlotAdded: 'Filament {{index}} (added)',
+    slotMenu: 'Options for filament {{index}}',
+    insertSlotAfter: 'Insert a slot after this one',
+    removeThisSlot: 'Remove this slot',
+    resetSlotColor: 'Reset colour to as designed',
+    slotColor: 'Colour of filament {{index}}',
+    slotColorTitle: 'Colour of filament {{index}} — click to change',
+    slotColorNotSet: 'This slot still has the colour it was designed with.',
+    slotLastRemaining: 'A slice needs at least one filament slot.',
+    slotOrderLocked: 'This slot is painted into the model, which refers to it by number. Slots after it can be added and removed.',
+    slotOrderHint: 'Slots your plate paints with keep their position. Add and remove slots after them.',
     saveLayout: 'Save layout',
     saveLayoutTitle: 'Save this arrangement — it is applied every time this file is sliced.',
     saveLayoutClean: 'The plate already matches the saved arrangement.',
