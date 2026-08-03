@@ -4153,6 +4153,7 @@ export default {
     noSource: 'Dilimlenecek dosya yok. Dosya yöneticisinden bir dosya açıp Dilimle seçeneğini kullanın.',
     railLabel: 'Dilimleme ayarları',
     presetsHeading: 'Profiller',
+    sectionPrinterQuality: 'Yazıcı ve kalite',
     printerModel: 'Yazıcı',
     printerModelSelect: 'Bir yazıcı seçin',
     nozzleHeading: 'Nozul',

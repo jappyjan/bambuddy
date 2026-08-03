@@ -4152,6 +4152,7 @@ export default {
     noSource: 'Aucun fichier à trancher. Ouvrez un fichier dans le gestionnaire de fichiers et choisissez Trancher.',
     railLabel: 'Paramètres de tranchage',
     presetsHeading: 'Profils',
+    sectionPrinterQuality: 'Imprimante et qualité',
     printerModel: 'Imprimante',
     printerModelSelect: 'Choisir une imprimante',
     nozzleHeading: 'Buse',

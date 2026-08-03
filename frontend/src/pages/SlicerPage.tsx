@@ -32,6 +32,16 @@
  *    travels; an untouched selection sends no `filament_colours` at all, which
  *    is what keeps a plain slice from this page byte-identical to `SliceModal`'s.
  *
+ * ## The rail's sections (#46, rail.3)
+ *
+ * The desktop rail groups itself into three collapsible panels and remembers
+ * which are open. **Nothing about that is this page's business**, and that is
+ * the point: every value the rail edits is owned here, so a hidden control
+ * goes on contributing to `selection` — and therefore to the slice body and to
+ * the Print-now fingerprint — exactly as it did while it was on screen. The
+ * one thing decided here is that the *phone* does not get chevrons; see the
+ * desktop `SlicerRail` below.
+ *
  * ## Print now
  *
  * Enabled only while the last completed slice still matches the selection on
@@ -867,7 +877,12 @@ export function SlicerPage() {
       )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
-        <SlicerRail {...railProps} className="w-full lg:w-80 lg:flex-shrink-0" />
+        {/* `collapsible` is set here and not in `railProps` on purpose (#46):
+            the phone already gives each of these groups its own step, so a
+            chevron there would be a second, contradictory way to hide the
+            step the user is standing on. `MobileSliceWizardProps` omits the
+            prop so it cannot arrive by the other route either. */}
+        <SlicerRail {...railProps} collapsible className="w-full lg:w-80 lg:flex-shrink-0" />
 
         <PlateStage
           {...stageProps}

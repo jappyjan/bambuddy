@@ -92,7 +92,7 @@ export interface MobileSliceWizardProps {
   errorMessage?: string | null;
 
   /** `SlicerRail`'s props verbatim; the wizard only chooses the `sections`. */
-  rail: Omit<SlicerRailProps, 'sections' | 'className'>;
+  rail: Omit<SlicerRailProps, 'sections' | 'collapsible' | 'className'>;
   /** `PlateStage`'s props verbatim, for the full-screen viewport. */
   stage: Omit<PlateStageProps, 'actionBar' | 'className'>;
   /** `SliceActionBar`'s props verbatim, including the `canPrintNow` gate. */

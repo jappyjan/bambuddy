@@ -4163,6 +4163,7 @@ export default {
     noSource: 'Keine Datei zum Slicen. Öffne eine Datei im Dateimanager und wähle „Slicen“.',
     railLabel: 'Slice-Einstellungen',
     presetsHeading: 'Profile',
+    sectionPrinterQuality: 'Drucker & Qualität',
     printerModel: 'Drucker',
     printerModelSelect: 'Drucker wählen',
     nozzleHeading: 'Düse',

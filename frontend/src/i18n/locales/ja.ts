@@ -4163,6 +4163,7 @@ export default {
     noSource: 'スライスするファイルがありません。ファイルマネージャーでファイルを開き、スライスを選択してください。',
     railLabel: 'スライス設定',
     presetsHeading: 'プロファイル',
+    sectionPrinterQuality: 'プリンターと品質',
     printerModel: 'プリンター',
     printerModelSelect: 'プリンターを選択',
     nozzleHeading: 'ノズル',

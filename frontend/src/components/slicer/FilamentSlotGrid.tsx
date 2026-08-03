@@ -65,6 +65,15 @@ export interface FilamentSlotGridProps {
   selectedPrinterName: string | null;
   compatIndex: PrinterCompatibilityIndex;
   disabled?: boolean;
+  /**
+   * Render the "Filament" heading above the add / remove buttons.
+   *
+   * Off when the rail wraps this grid in its own collapsible section (#46) —
+   * that section's header already says "Filament", and repeating it inside
+   * reads as two panels. The add / remove buttons stay either way: they are
+   * the grid's controls, not the section's.
+   */
+  showHeading?: boolean;
 }
 
 export function FilamentSlotGrid({
@@ -80,6 +89,7 @@ export function FilamentSlotGrid({
   selectedPrinterName,
   compatIndex,
   disabled = false,
+  showHeading = true,
 }: FilamentSlotGridProps) {
   const { t } = useTranslation();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -99,10 +109,12 @@ export function FilamentSlotGrid({
   return (
     <div className="flex flex-col gap-2" data-testid="filament-slots">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-bambu-gray">
-          {t('slicer.filamentHeading')}
-        </h3>
-        <div className="flex items-center gap-1">
+        {showHeading && (
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-bambu-gray">
+            {t('slicer.filamentHeading')}
+          </h3>
+        )}
+        <div className="ml-auto flex items-center gap-1">
           <button
             type="button"
             onClick={onAddSlot}
