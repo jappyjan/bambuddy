@@ -43,6 +43,7 @@ import JSZip from 'jszip';
 import * as THREE from 'three';
 import { parse3MF, buildModelGroup, type Parsed3MFData } from '../../components/slicer/parse3mf';
 import { plateGridOrigin } from '../../components/slicer/plateGrid';
+import { UNSET_SLOT_COLOR } from '../../components/slicer/filamentSlots';
 
 // Relative to the vitest root (`frontend/`). `import.meta.url` is an http URL
 // under the jsdom environment, so it cannot be resolved to a path here.
@@ -109,6 +110,47 @@ const EXPECTED_PLATES: Record<number, string[]> = {
   7: ['18', '21', '33', '35'],
   8: ['71'],
 };
+
+/**
+ * A palette with one visibly distinct colour per slot, index 0 = slot 1 (#42).
+ *
+ * Deliberately *not* a gradient: an off-by-one in the palette lookup has to be
+ * unmistakable in the failure message, and "expected #0000ff, got #00ff00"
+ * says more than two neighbouring shades of the same hue would.
+ */
+const SLOT_1 = '#ff0000';
+const SLOT_2 = '#00ff00';
+const SLOT_3 = '#0000ff';
+const SLOT_4 = '#ffff00';
+const PALETTE = [SLOT_1, SLOT_2, SLOT_3, SLOT_4];
+
+/** Sorted, so an expectation states a set rather than a traversal order. */
+const sorted = (colors: string[]): string[] => [...new Set(colors)].sort();
+
+/** The distinct material colours under `node`, as sorted lowercase hex. */
+function meshColors(node: THREE.Object3D): string[] {
+  const colors: string[] = [];
+  node.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    colors.push(`#${(mesh.material as THREE.MeshPhongMaterial).color.getHexString()}`);
+  });
+  return sorted(colors);
+}
+
+/**
+ * What `meshColors` must return for an object: `PALETTE` looked up by the
+ * extruders its meshes actually carry.
+ *
+ * Derived from the parsed meshes rather than hard-coded, so this expectation
+ * cannot drift from the per-part extruders the `#40` test above pins — those
+ * are the assertion of record for *which* extruder each part uses; this one is
+ * only about the colour that extruder number selects.
+ */
+function expectedColors(data: Parsed3MFData, objectId: string): string[] {
+  const extruders = new Set(data.objects.get(objectId)!.meshes.map((mesh) => mesh.extruder));
+  return sorted([...extruders].map((extruder) => PALETTE[extruder] ?? UNSET_SLOT_COLOR));
+}
 
 function nodeFor(group: THREE.Group, objectId: string): THREE.Object3D {
   const node = group.children.find((child) => child.userData.objectId === objectId);
@@ -247,6 +289,89 @@ describe('parse3MF — Attractap V3, a real multi-plate split-model 3MF', () => 
       if ((child as THREE.Mesh).isMesh) meshes.push(child as THREE.Mesh);
     });
     expect(meshes).toHaveLength(2);
+  });
+
+  // -------------------------------------------------------------------------
+  // #42 — the slot colours actually reaching the geometry
+  // -------------------------------------------------------------------------
+
+  it('paints every plate at once, each mesh from its own slot (#42)', () => {
+    // `selectedPlateId: null` is the #41 scene: all eight plates in one go.
+    // Each object's material colours must be exactly the palette entries its
+    // extruders name — no more, no fewer, on every plate simultaneously.
+    const { group } = buildModelGroup(parsed, null, PALETTE);
+    expect(group.children).toHaveLength(16);
+    for (const objectId of Object.keys(EXPECTED)) {
+      expect(meshColors(nodeFor(group, objectId)), `object ${objectId}`).toEqual(
+        expectedColors(parsed, objectId),
+      );
+    }
+  });
+
+  it('indexes the palette by slot with no off-by-one (#42)', () => {
+    // **The assertion the ticket asks for by name.** Extruders are 1-based in
+    // the file and 0-based by the time `buildModelGroup` sees them, so
+    // `PALETTE[0]` is slot 1. The body prints in slots 2 and 3; the floor in
+    // slot 4. A shift either way is invisible on screen — every part still
+    // gets *a* colour from the list — so it is pinned numerically here.
+    const { group } = buildModelGroup(parsed, null, PALETTE);
+    // Object 16 = "body", extruders [1, 2] -> slots 2 and 3.
+    expect(meshColors(nodeFor(group, '16'))).toEqual(sorted([SLOT_2, SLOT_3]));
+    expect(meshColors(nodeFor(group, '16'))).not.toContain(SLOT_1);
+    expect(meshColors(nodeFor(group, '16'))).not.toContain(SLOT_4);
+    // Object 18 = "floor", extruder [3] -> slot 4, the last one.
+    expect(meshColors(nodeFor(group, '18'))).toEqual([SLOT_4]);
+    // Object 31, extruders [0, 2] -> slots 1 and 3. The only object in the
+    // file that reaches slot 1, so it is what distinguishes "indexed by slot"
+    // from "everything shifted down one".
+    expect(meshColors(nodeFor(group, '31'))).toEqual(sorted([SLOT_1, SLOT_3]));
+  });
+
+  it('keeps the same colours when a single plate is rendered (#42)', () => {
+    for (const [plateId, objectIds] of Object.entries(EXPECTED_PLATES)) {
+      const { group } = buildModelGroup(parsed, Number(plateId), PALETTE);
+      for (const objectId of objectIds) {
+        expect(
+          meshColors(nodeFor(group, objectId)),
+          `plate ${plateId} object ${objectId}`,
+        ).toEqual(expectedColors(parsed, objectId));
+      }
+    }
+  });
+
+  it('does not let a slot the plate never uses shift the ones it does (#42)', () => {
+    // Plate 1 paints with slots 2 and 3 only. Recolouring slot 1 — which
+    // nothing on that plate uses — must leave it pixel-identical.
+    const recoloured = [...PALETTE];
+    recoloured[0] = '#ff00ff';
+    const before = buildModelGroup(parsed, 1, PALETTE).group;
+    const after = buildModelGroup(parsed, 1, recoloured).group;
+    for (const objectId of EXPECTED_PLATES[1]) {
+      expect(meshColors(nodeFor(after, objectId)), `object ${objectId}`).toEqual(
+        meshColors(nodeFor(before, objectId)),
+      );
+      expect(meshColors(nodeFor(after, objectId))).not.toContain('#ff00ff');
+    }
+  });
+
+  it('gives an extruder past the end of the list the neutral, not slot 1 (#42)', () => {
+    // A two-slot list against a plate that paints with four. The parts it does
+    // not reach must read as "no filament here" — the same neutral the rail
+    // fills an unset badge with — rather than silently wrapping onto slot 1's
+    // colour or falling back to the as-designed green.
+    const { group } = buildModelGroup(parsed, null, [SLOT_1, SLOT_2]);
+    // Object 18's only extruder is 3, i.e. slot 4, which the list has no entry for.
+    expect(meshColors(nodeFor(group, '18'))).toEqual([UNSET_SLOT_COLOR]);
+    // Object 16 spans both sides of the boundary: slot 2 is supplied, slot 3 is not.
+    expect(meshColors(nodeFor(group, '16'))).toEqual(sorted([SLOT_2, UNSET_SLOT_COLOR]));
+  });
+
+  it('still uses the as-designed green when given no colours at all (#42)', () => {
+    // Unchanged behaviour, pinned because the neutral above is a *new* branch:
+    // a viewer with no slot state — `ModelViewerModal` against a printer with
+    // no reported AMS colours — must keep the green it has always drawn.
+    const { group } = buildModelGroup(parsed, null);
+    expect(meshColors(nodeFor(group, '16'))).toEqual(['#00ae42']);
   });
 });
 

@@ -17,11 +17,14 @@ import {
   insertSlotAfter,
   lastPlateUsedIndex,
   removeSlotAt,
+  resolveSlotColors,
   seedSlots,
   setSlotColorAt,
   slotColorPayload,
+  UNSET_SLOT_COLOR,
 } from '../../../components/slicer/filamentSlots';
 import type { PlateFilament } from '../../../types/plates';
+import type { UnifiedPresetsResponse } from '../../../api/client';
 
 const req = (slot: number, used: boolean | undefined, color = ''): PlateFilament => ({
   slot_id: slot,
@@ -139,5 +142,77 @@ describe('colour', () => {
     const undone = setSlotColorAt(set, 0, null);
     expect(undone[0].color).toBe('#FF0000');
     expect(slotColorPayload(undone)).toEqual([null, null]);
+  });
+});
+
+/**
+ * `resolveSlotColors` (#42) — the list the 3D stage is painted from *and* the
+ * list the rail's numbered badges are filled from. One function, so the two
+ * cannot disagree; these cases pin what it resolves to.
+ */
+describe('resolveSlotColors', () => {
+  const filament = (id: string, colour?: string) => ({
+    id,
+    name: id,
+    source: 'local' as const,
+    filament_type: 'PLA',
+    ...(colour === undefined ? {} : { filament_colour: colour }),
+  });
+
+  const PRESETS = {
+    orca_cloud: { printer: [], process: [], filament: [] },
+    cloud: { printer: [], process: [], filament: [] },
+    local: {
+      printer: [],
+      process: [],
+      filament: [filament('blue', '#0000FF'), filament('colourless')],
+    },
+    standard: { printer: [], process: [], filament: [] },
+    cloud_status: 'ok',
+    orca_cloud_status: 'ok',
+  } as unknown as UnifiedPresetsResponse;
+
+  const ref = (id: string) => ({ source: 'local' as const, id });
+
+  it('is one entry per slot, in slot order, with index 0 = slot 1', () => {
+    const two = seedSlots([req(1, true, '#FF0000'), req(2, true, '#00FF00')]);
+    expect(resolveSlotColors(two, PRESETS, [null, null])).toEqual(['#FF0000', '#00FF00']);
+  });
+
+  it('falls back to the picked profile only when the slot has no colour', () => {
+    const two = seedSlots([req(1, true, '#FF0000'), req(2, true, '')]);
+    // Slot 1 keeps the plate's colour; slot 2 has none, so its profile's shows.
+    expect(resolveSlotColors(two, PRESETS, [ref('blue'), ref('blue')])).toEqual([
+      '#FF0000',
+      '#0000FF',
+    ]);
+  });
+
+  it('prefers a colour the user chose over everything else', () => {
+    const two = setSlotColorAt(seedSlots([req(1, true, '#FF0000'), req(2, true, '')]), 0, '#123456');
+    expect(resolveSlotColors(two, PRESETS, [ref('blue'), ref('blue')])).toEqual([
+      '#123456',
+      '#0000FF',
+    ]);
+  });
+
+  it('puts the neutral at an unset slot\'s own index rather than leaving a hole', () => {
+    // Slot 2 has no plate colour and its profile carries none either. It must
+    // resolve to the neutral *in place* — an entry that fell through would
+    // slide slot 3's colour up onto slot 2's geometry.
+    const three = seedSlots([req(1, true, '#FF0000'), req(2, true, ''), req(3, true, '#00FF00')]);
+    expect(resolveSlotColors(three, PRESETS, [null, ref('colourless'), null])).toEqual([
+      '#FF0000',
+      UNSET_SLOT_COLOR,
+      '#00FF00',
+    ]);
+  });
+
+  it('resolves every slot to the neutral before the presets have loaded', () => {
+    const two = seedSlots([req(1, true, ''), req(2, true, '')]);
+    expect(resolveSlotColors(two, undefined, [ref('blue'), ref('blue')])).toEqual([
+      UNSET_SLOT_COLOR,
+      UNSET_SLOT_COLOR,
+    ]);
   });
 });

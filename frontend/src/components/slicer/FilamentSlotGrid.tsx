@@ -41,13 +41,12 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, Minus, MoreHorizontal, Plus } from 'lucide-react';
 import type { PresetRef, UnifiedPresetsResponse } from '../../api/client';
 import type { PrinterCompatibilityIndex } from '../../utils/slicerPrinterMatch';
-import { findPreset } from '../../utils/slicePresetPicker';
 import { PresetDropdown } from './PresetControls';
 import {
-  badgeColor,
   canInsertAfter,
   canRemoveLast,
   canRemoveSlotAt,
+  resolveSlotColors,
   type FilamentSlotState,
 } from './filamentSlots';
 
@@ -95,6 +94,10 @@ export function FilamentSlotGrid({
 
   const canAdd = !disabled && canInsertAfter(slots, slots.length - 1);
   const canDrop = !disabled && canRemoveLast(slots);
+  // The *same* call the 3D stage is painted from (#42) — one function, two
+  // consumers, so a badge and the model it describes cannot show different
+  // colours for the same slot.
+  const slotColors = resolveSlotColors(slots, presets, filamentPresets);
 
   return (
     <div className="flex flex-col gap-2" data-testid="filament-slots">
@@ -134,7 +137,7 @@ export function FilamentSlotGrid({
         // though the plate does not use it either.
         const isUsed = slot.used_in_plate !== false;
         const editable = isUsed || slot.userAdded;
-        const picked = findPreset(presets, filamentPresets[index] ?? null, 'filament');
+        const slotColor = slotColors[index];
         const label = slot.userAdded
           ? t('slicer.filamentSlotAdded', { index: index + 1 })
           : slot.type
@@ -156,7 +159,7 @@ export function FilamentSlotGrid({
                 shows *and* sets the colour. */}
             <label
               className="relative mb-0.5 inline-flex h-7 w-7 flex-shrink-0 cursor-pointer items-center justify-center rounded border border-bambu-dark-tertiary text-[11px] font-semibold"
-              style={{ backgroundColor: badgeColor(slot, picked?.filament_colour) }}
+              style={{ backgroundColor: slotColor }}
               title={t('slicer.slotColorTitle', { index: index + 1 })}
             >
               <span className="mix-blend-difference text-white" aria-hidden>
@@ -165,7 +168,7 @@ export function FilamentSlotGrid({
               <input
                 type="color"
                 aria-label={t('slicer.slotColor', { index: index + 1 })}
-                value={toColorInputValue(badgeColor(slot, picked?.filament_colour))}
+                value={toColorInputValue(slotColor)}
                 onChange={(event) => onSlotColorChange(index, event.target.value)}
                 disabled={disabled}
                 className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
