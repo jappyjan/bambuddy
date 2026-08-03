@@ -27,29 +27,52 @@
  * itself on request: `sections={['filaments']}` is the same JSX, the same
  * disabled rules, the same labels. Default is every section, which is the
  * desktop rail unchanged.
+ *
+ * ## Collapsing them (#46, rail.3)
+ *
+ * With `collapsible`, those same three groups become Bambu Studio's three
+ * disclosure panels — *Printer & quality*, *Filament*, *Print settings* — and
+ * each remembers whether it is open. Only the desktop page asks for it; the
+ * wizard already puts one group on each screen, so a chevron there would be a
+ * second, contradictory way to hide the step you are standing on.
+ *
+ * Three things are deliberate:
+ *
+ * 1. **Closed sections are hidden, not unmounted** (`keepMounted`). Nothing in
+ *    a closed section stops reaching the slice request either way — the page
+ *    owns every value the rail edits — but the *controls* own state of their
+ *    own that nothing else records: `PrinterPicker`'s unmatched model/diameter
+ *    pair (the only reason Slice is off, and the only record of what was
+ *    asked for), the settings editor's search text and tier. Unmounting would
+ *    throw those away on a chevron click.
+ * 2. **All three start open**, and each remembers its own state from there.
+ *    Both the default and where it is stored live in `railSections.ts`.
+ * 3. **No section scrolls.** The settings editor's field list is still the
+ *    rail's only scroll area — a closed section takes no height, and an open
+ *    one grows the editor rather than nesting a second scroller inside it.
  */
 
+import { useCallback, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, Palette, Printer, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import type { PresetRef, UnifiedPresetsResponse } from '../../api/client';
 import type { PrinterCompatibilityIndex } from '../../utils/slicerPrinterMatch';
+import { Collapsible } from '../Collapsible';
 import { FilamentSlotGrid } from './FilamentSlotGrid';
 import type { FilamentSlotState } from './filamentSlots';
 import { PresetDropdown } from './PresetControls';
 import { PrinterPicker } from './PrinterPicker';
 import { ProcessSettingsEditor } from './ProcessSettingsEditor';
 import type { ProcessField, ProcessOverrides, ResolvedProcess } from './processFields';
+import {
+  ALL_RAIL_SECTIONS,
+  storeSectionOpen,
+  storedSectionOpen,
+  type SlicerRailSection,
+} from './railSections';
 
-/**
- * A group of controls the rail can render on its own.
- *
- * - `presets` — printer model / nozzle / build plate, "slice as designed", process
- * - `filaments` — the per-slot filament grid
- * - `settings` — `ProcessSettingsEditor`
- */
-export type SlicerRailSection = 'presets' | 'filaments' | 'settings';
-
-const ALL_SECTIONS: SlicerRailSection[] = ['presets', 'filaments', 'settings'];
+export type { SlicerRailSection };
 
 export interface SlicerRailProps {
   presets: UnifiedPresetsResponse | undefined;
@@ -104,6 +127,12 @@ export interface SlicerRailProps {
    * three — the desktop rail. The mobile wizard (#24) asks for one at a time.
    */
   sections?: SlicerRailSection[];
+  /**
+   * Render each group as a collapsible section whose state is remembered
+   * (#46). Desktop only — the mobile wizard shows one group per step and must
+   * not offer a second way to hide it.
+   */
+  collapsible?: boolean;
   className?: string;
 }
 
@@ -139,7 +168,8 @@ export function SlicerRail({
   overrides,
   onOverridesChange,
   disabled = false,
-  sections = ALL_SECTIONS,
+  sections = ALL_RAIL_SECTIONS,
+  collapsible = false,
   className = '',
 }: SlicerRailProps) {
   const { t } = useTranslation();
@@ -152,6 +182,176 @@ export function SlicerRail({
   // and a settings-only rail is just the editor.
   const showPresetHeader = showPresetPickers || showFilaments;
 
+  const [openSections, setOpenSections] = useState<Record<SlicerRailSection, boolean>>(() => ({
+    presets: storedSectionOpen('presets'),
+    filaments: storedSectionOpen('filaments'),
+    settings: storedSectionOpen('settings'),
+  }));
+
+  // Written before the state update, not in an effect: the preference is the
+  // click, and an effect would also fire on the initial read-back, writing the
+  // default over a value the user had not touched.
+  const toggleSection = useCallback((section: SlicerRailSection, open: boolean) => {
+    storeSectionOpen(section, open);
+    setOpenSections((current) => ({ ...current, [section]: open }));
+  }, []);
+
+  /**
+   * A group, wrapped in its disclosure panel when the caller asked for one and
+   * handed back untouched when it did not — which is what keeps the wizard's
+   * steps and the flat rail literally the same JSX.
+   *
+   * `grow` marks the one section that takes the rail's leftover height (the
+   * settings editor). It only grows while open; a closed section that kept
+   * `flex-1` would hold a column of empty space under its own header.
+   */
+  const asSection = (
+    id: SlicerRailSection,
+    icon: ReactNode,
+    title: string,
+    collapsedSummary: ReactNode,
+    body: ReactNode,
+    grow = false,
+  ): ReactNode => {
+    if (!collapsible) return body;
+    const open = openSections[id];
+    const growing = grow && open;
+    return (
+      <Collapsible
+        open={open}
+        onToggle={(next) => toggleSection(id, next)}
+        // See the module header: hidden, never unmounted.
+        keepMounted
+        className={`border-t border-bambu-dark-tertiary pt-2 ${growing ? 'flex min-h-0 flex-1 flex-col' : ''}`}
+        summaryClassName="py-0.5"
+        contentClassName={growing ? 'mt-2 flex min-h-0 flex-1 flex-col' : 'mt-2'}
+        summary={
+          <div className="flex items-center gap-2" data-testid={`rail-section-${id}`}>
+            {icon}
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-bambu-gray">
+              {title}
+            </h2>
+            {/* What the section is holding while it is shut. Rendered only
+                when closed, so nothing is said twice on an open rail. */}
+            {!open && collapsedSummary != null && (
+              <span
+                data-testid={`rail-section-${id}-summary`}
+                className="ml-auto min-w-0 truncate text-[10px] text-bambu-gray/80"
+              >
+                {collapsedSummary}
+              </span>
+            )}
+          </div>
+        }
+      >
+        {body}
+      </Collapsible>
+    );
+  };
+
+  const filamentsChosen = filamentPresets
+    .slice(0, filamentSlots.length)
+    .filter((ref) => ref != null).length;
+  const overrideCount = Object.keys(overrides).length;
+
+  // The three groups, built once and then either wrapped in a disclosure
+  // panel or dropped straight into the rail — one definition, so a collapsible
+  // rail and a wizard step cannot drift apart. `presets` gates them because
+  // every control in them reads a preset list.
+  const printerGroup = presets ? (
+    <div className="flex flex-col gap-2">
+      {/* Printer model + build plate as cards, nozzle diameter below
+          them (#44). Produces the same single `PresetRef` the flat
+          dropdown did — see `PrinterPicker`, including why there is no
+          Flow control. Locked in embedded mode for the same reason the
+          modal locks its dropdown (#2611): the pick is unused on that
+          path, and changing it away from the design's target would drop
+          canUseEmbedded and yank the toggle out from under the user. */}
+      <PrinterPicker
+        data={presets}
+        value={printerPreset}
+        onChange={onPrinterPresetChange}
+        bedType={bedType}
+        onBedTypeChange={onBedTypeChange}
+        disabled={disabled || useEmbedded}
+      />
+
+      {canUseEmbedded && (
+        <label className="flex cursor-pointer select-none items-start gap-2 text-xs text-bambu-gray">
+          <input
+            type="checkbox"
+            checked={useEmbedded}
+            onChange={(event) => onUseEmbeddedChange(event.target.checked)}
+            disabled={disabled}
+            className="mt-0.5 cursor-pointer"
+          />
+          <span>
+            {t('slice.useEmbedded')}
+            <span className="block text-[10px] text-bambu-gray/70">
+              {t('slice.useEmbeddedHint')}
+            </span>
+          </span>
+        </label>
+      )}
+
+      <PresetDropdown
+        label={t('slice.process')}
+        slot="process"
+        data={presets}
+        value={processPreset}
+        onChange={onProcessPresetChange}
+        disabled={disabled || useEmbedded}
+        selectedPrinterName={selectedPrinterName}
+        compatIndex={compatIndex}
+        selectClassName="px-2 py-1.5 text-xs"
+      />
+    </div>
+  ) : null;
+
+  // Bambu Studio's Project Filaments panel (#45): numbered colour-carrying
+  // badges, add / remove, per-slot `⋯`. Disabled wholesale in embedded mode
+  // for the same reason the other pickers are — that path slices the design's
+  // own profiles, so a slot edit there would change nothing about the output.
+  const filamentGroup = presets ? (
+    <FilamentSlotGrid
+      presets={presets}
+      slots={filamentSlots}
+      slotsLoading={filamentSlotsLoading}
+      filamentPresets={filamentPresets}
+      onFilamentPresetChange={onFilamentPresetChange}
+      onAddSlot={onAddFilamentSlot}
+      onInsertSlotAfter={onInsertFilamentSlotAfter}
+      onRemoveSlot={onRemoveFilamentSlot}
+      onSlotColorChange={onFilamentSlotColorChange}
+      selectedPrinterName={selectedPrinterName}
+      compatIndex={compatIndex}
+      disabled={disabled || useEmbedded}
+      // The section header already says "Filament".
+      showHeading={!collapsible}
+    />
+  ) : null;
+
+  // The editor takes the remaining height and scrolls internally, so the
+  // preset triplet above it never leaves the viewport. Disabled wholesale in
+  // embedded mode: overrides patch the resolved process JSON, which that path
+  // does not send, so an override there would do nothing.
+  const settingsGroup = (
+    <ProcessSettingsEditor
+      className={
+        collapsible ? 'flex-1' : 'mt-1 flex-1 border-t border-bambu-dark-tertiary pt-2'
+      }
+      fields={processFields}
+      resolvedProcess={resolvedProcess}
+      overrides={overrides}
+      onOverridesChange={onOverridesChange}
+      disabled={disabled || useEmbedded}
+      isLoading={processFieldsLoading}
+      error={processFieldsError}
+      // The section header already says "Print settings", with the same icon.
+      showHeading={!collapsible}
+    />
+  );
+
   return (
     <aside
       data-testid="slicer-rail"
@@ -160,16 +360,22 @@ export function SlicerRail({
     >
       {showPresetHeader && (
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-bambu-gray">
-            {t('slicer.presetsHeading')}
-          </h2>
+          {/* Dropped when the groups below have headers of their own: a
+              fourth uppercase heading with no chevron reads as a section
+              that refuses to collapse. The Refresh stays — it reloads the
+              preset *lists* both sections read, so it belongs to neither. */}
+          {!collapsible && (
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-bambu-gray">
+              {t('slicer.presetsHeading')}
+            </h2>
+          )}
           <button
             type="button"
             onClick={onRefreshPresets}
             disabled={isRefreshing || disabled}
             title={t('slice.refreshPresetsTitle')}
             aria-label={t('slice.refreshPresets')}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-bambu-gray transition-colors hover:bg-bambu-dark-tertiary/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-bambu-gray transition-colors hover:bg-bambu-dark-tertiary/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
             {t('slice.refreshPresets')}
@@ -190,98 +396,43 @@ export function SlicerRail({
         </div>
       )}
 
-      {presets && showPresetHeader && (
-        <div className="flex flex-col gap-2">
-          {showPresetPickers && (
-            <>
-              {/* Printer model + build plate as cards, nozzle diameter below
-                  them (#44). Produces the same single `PresetRef` the flat
-                  dropdown did — see `PrinterPicker`, including why there is no
-                  Flow control. Locked in embedded mode for the same reason the
-                  modal locks its dropdown (#2611): the pick is unused on that
-                  path, and changing it away from the design's target would drop
-                  canUseEmbedded and yank the toggle out from under the user. */}
-              <PrinterPicker
-                data={presets}
-                value={printerPreset}
-                onChange={onPrinterPresetChange}
-                bedType={bedType}
-                onBedTypeChange={onBedTypeChange}
-                disabled={disabled || useEmbedded}
-              />
+      {showPresetPickers &&
+        printerGroup &&
+        asSection(
+          'presets',
+          <Printer className="h-3.5 w-3.5 shrink-0 text-bambu-green" aria-hidden="true" />,
+          t('slicer.sectionPrinterQuality'),
+          selectedPrinterName,
+          printerGroup,
+        )}
 
-              {canUseEmbedded && (
-                <label className="flex cursor-pointer select-none items-start gap-2 text-xs text-bambu-gray">
-                  <input
-                    type="checkbox"
-                    checked={useEmbedded}
-                    onChange={(event) => onUseEmbeddedChange(event.target.checked)}
-                    disabled={disabled}
-                    className="mt-0.5 cursor-pointer"
-                  />
-                  <span>
-                    {t('slice.useEmbedded')}
-                    <span className="block text-[10px] text-bambu-gray/70">
-                      {t('slice.useEmbeddedHint')}
-                    </span>
-                  </span>
-                </label>
-              )}
+      {showFilaments &&
+        filamentGroup &&
+        asSection(
+          'filaments',
+          <Palette className="h-3.5 w-3.5 shrink-0 text-bambu-green" aria-hidden="true" />,
+          t('slicer.filamentHeading'),
+          t('slicer.wizardChipFilamentSlots', {
+            chosen: filamentsChosen,
+            total: filamentSlots.length,
+          }),
+          filamentGroup,
+        )}
 
-              <PresetDropdown
-                label={t('slice.process')}
-                slot="process"
-                data={presets}
-                value={processPreset}
-                onChange={onProcessPresetChange}
-                disabled={disabled || useEmbedded}
-                selectedPrinterName={selectedPrinterName}
-                compatIndex={compatIndex}
-                selectClassName="px-2 py-1.5 text-xs"
-              />
-            </>
-          )}
-
-          {/* Bambu Studio's Project Filaments panel (#45): numbered
-              colour-carrying badges, add / remove, per-slot `⋯`. Disabled
-              wholesale in embedded mode for the same reason the other pickers
-              are — that path slices the design's own profiles, so a slot edit
-              there would change nothing about the output. */}
-          {showFilaments && (
-            <FilamentSlotGrid
-              presets={presets}
-              slots={filamentSlots}
-              slotsLoading={filamentSlotsLoading}
-              filamentPresets={filamentPresets}
-              onFilamentPresetChange={onFilamentPresetChange}
-              onAddSlot={onAddFilamentSlot}
-              onInsertSlotAfter={onInsertFilamentSlotAfter}
-              onRemoveSlot={onRemoveFilamentSlot}
-              onSlotColorChange={onFilamentSlotColorChange}
-              selectedPrinterName={selectedPrinterName}
-              compatIndex={compatIndex}
-              disabled={disabled || useEmbedded}
-            />
-          )}
-        </div>
-      )}
-
-      {/* The editor takes the remaining height and scrolls internally, so the
-          preset triplet above it never leaves the viewport. Disabled wholesale
-          in embedded mode: overrides patch the resolved process JSON, which
-          that path does not send, so an override there would do nothing. */}
-      {showSettings && (
-        <ProcessSettingsEditor
-          className="mt-1 flex-1 border-t border-bambu-dark-tertiary pt-2"
-          fields={processFields}
-          resolvedProcess={resolvedProcess}
-          overrides={overrides}
-          onOverridesChange={onOverridesChange}
-          disabled={disabled || useEmbedded}
-          isLoading={processFieldsLoading}
-          error={processFieldsError}
-        />
-      )}
+      {showSettings &&
+        asSection(
+          'settings',
+          <SlidersHorizontal
+            className="h-3.5 w-3.5 shrink-0 text-bambu-green"
+            aria-hidden="true"
+          />,
+          t('slice.settingsEditor.title'),
+          overrideCount > 0
+            ? t('slice.settingsEditor.overrideCount', { changed: overrideCount })
+            : t('slice.settingsEditor.noOverrides'),
+          settingsGroup,
+          true,
+        )}
     </aside>
   );
 }

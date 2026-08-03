@@ -4151,6 +4151,7 @@ export default {
     noSource: 'Nessun file da elaborare. Apri un file nel gestore file e scegli Elabora.',
     railLabel: 'Impostazioni di slicing',
     presetsHeading: 'Profili',
+    sectionPrinterQuality: 'Stampante e qualità',
     printerModel: 'Stampante',
     printerModelSelect: 'Seleziona una stampante',
     nozzleHeading: 'Ugello',

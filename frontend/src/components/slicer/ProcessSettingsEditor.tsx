@@ -72,6 +72,16 @@ export interface ProcessSettingsEditorProps {
   error?: string | null;
   /** Layout hook for the mount point (desktop rail vs wizard step). */
   className?: string;
+  /**
+   * Render the "Print settings" title row.
+   *
+   * Off when the rail wraps this editor in its own collapsible section (#46),
+   * whose header carries the same title and the same icon. Everything below
+   * the title — the subset note, the tier chips, the search box, the category
+   * chips and the scrolling field list — is unaffected: the section adds a
+   * header, it does not take the editor's own controls away.
+   */
+  showHeading?: boolean;
 }
 
 const CHIP = 'px-2 py-0.5 rounded-full text-xs transition-colors whitespace-nowrap';
@@ -85,6 +95,7 @@ export function ProcessSettingsEditor({
   isLoading = false,
   error = null,
   className = '',
+  showHeading = true,
 }: ProcessSettingsEditorProps) {
   const { t } = useTranslation();
   const [tier, setTier] = useState<'basic' | 'advanced'>('basic');
@@ -285,10 +296,12 @@ export function ProcessSettingsEditor({
 
   return (
     <div className={`flex flex-col min-h-0 ${className}`} data-testid="process-settings-editor">
-      <div className="flex items-center gap-2 mb-1">
-        <SlidersHorizontal className="w-3.5 h-3.5 text-bambu-green shrink-0" aria-hidden="true" />
-        <h3 className="text-xs font-semibold text-white">{t('slice.settingsEditor.title')}</h3>
-      </div>
+      {showHeading && (
+        <div className="flex items-center gap-2 mb-1">
+          <SlidersHorizontal className="w-3.5 h-3.5 text-bambu-green shrink-0" aria-hidden="true" />
+          <h3 className="text-xs font-semibold text-white">{t('slice.settingsEditor.title')}</h3>
+        </div>
+      )}
       {/* Says out loud that this is a curated subset — the editor must not
           read as "all the slicer's settings". */}
       <p className="text-[10px] text-bambu-gray mb-2">

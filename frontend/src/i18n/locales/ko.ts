@@ -3954,6 +3954,7 @@ export default {
     noSource: '슬라이스할 파일이 없습니다. 파일 관리자에서 파일을 열고 슬라이스를 선택하세요.',
     railLabel: '슬라이스 설정',
     presetsHeading: '프로필',
+    sectionPrinterQuality: '프린터 및 품질',
     printerModel: '프린터',
     printerModelSelect: '프린터 선택',
     nozzleHeading: '노즐',

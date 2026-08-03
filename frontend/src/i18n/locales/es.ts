@@ -4166,6 +4166,7 @@ export default {
     noSource: 'No hay ningún archivo que laminar. Abre un archivo en el gestor de archivos y elige Laminar.',
     railLabel: 'Ajustes de laminado',
     presetsHeading: 'Perfiles',
+    sectionPrinterQuality: 'Impresora y calidad',
     printerModel: 'Impresora',
     printerModelSelect: 'Selecciona una impresora',
     nozzleHeading: 'Boquilla',

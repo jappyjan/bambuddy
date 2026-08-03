@@ -4151,6 +4151,7 @@ export default {
     noSource: '没有可切片的文件。请在文件管理器中打开文件并选择“切片”。',
     railLabel: '切片设置',
     presetsHeading: '配置文件',
+    sectionPrinterQuality: '打印机与质量',
     printerModel: '打印机',
     printerModelSelect: '选择打印机',
     nozzleHeading: '喷嘴',

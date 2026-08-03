@@ -4151,6 +4151,7 @@ export default {
     noSource: 'Nenhum arquivo para fatiar. Abra um arquivo no gerenciador de arquivos e escolha Fatiar.',
     railLabel: 'Configurações de fatiamento',
     presetsHeading: 'Perfis',
+    sectionPrinterQuality: 'Impressora e qualidade',
     printerModel: 'Impressora',
     printerModelSelect: 'Selecione uma impressora',
     nozzleHeading: 'Bico',

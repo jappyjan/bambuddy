@@ -3945,6 +3945,7 @@ export default {
     noSource: 'Нет файла для нарезки. Откройте файл в менеджере файлов и выберите «Нарезать».',
     railLabel: 'Настройки нарезки',
     presetsHeading: 'Профили',
+    sectionPrinterQuality: 'Принтер и качество',
     printerModel: 'Принтер',
     printerModelSelect: 'Выберите принтер',
     nozzleHeading: 'Сопло',

@@ -4199,6 +4199,11 @@ export default {
     noSource: 'No file to slice. Open a file in the File Manager and choose Slice.',
     railLabel: 'Slice settings',
     presetsHeading: 'Profiles',
+    // The rail's three collapsible sections (#46). Two of them reuse the
+    // headings their contents already carried — `slicer.filamentHeading` and
+    // `slice.settingsEditor.title` — so the section header and the panel it
+    // opens cannot end up saying different things.
+    sectionPrinterQuality: 'Printer & quality',
     // The rail's printer group (#44) — Bambu Studio's own split: printer
     // model + build plate as cards, nozzle diameter below them. There is no
     // Flow control because no preset data carries flow; see
