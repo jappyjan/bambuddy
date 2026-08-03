@@ -151,6 +151,7 @@ const DE_COGNATES = [
   'Pause', 'Power', 'System', 'Problem', 'Designer', 'Extruder', 'Firmware',
   'Material', 'Original', 'Position', 'Webhook', 'Workflow', 'Slicer',
   'Pipeline', 'Pipelines', 'Filament {{n}}',  // #1425 — Slicer Pipelines (DE)
+  'Filament {{index}}',  // #45 — rail filament slot label; 'Filament' is the DE word too
   'parallel',  // #1425 PR C polish — "parallel" is the same word in German
   'Region', 'Normal', 'Orange', 'Branch', 'Budget', 'Commit', 'Global',
   'Version', 'Slot', 'Live', 'Rate', 'Host', 'Trend', 'Min', 'Admin', 'Cloud',
@@ -185,6 +186,7 @@ const FR_COGNATES = [
   'Token', 'Server', 'Port', 'Plate', 'Layer', 'Active', 'Total', 'Avatar',
   'Job', 'Modal', 'Pin', 'Pro', 'Mini', 'Studio', 'Excellent', 'Description',
   'Pipeline', 'Pipelines', 'Filament {{n}}',  // #1425 — Slicer Pipelines (FR)
+  'Filament {{index}}',  // #45 — rail filament slot label; 'filament' is the FR word too
   'Copies', '{{n}} copies', 'max {{n}}',  // #1425 PR C — French uses these forms verbatim
   'round robin',  // borrowed English term used as-is in French tech contexts
   'Action', 'Actions', 'Date', 'Type', 'Cache', 'Service', 'Configuration',
@@ -373,6 +375,7 @@ const TR_COGNATES = [
   'Bambu Cloud', 'Orca Cloud',  // brand names — same in every locale
   'AMS Filament Backup',  // Bambu Lab product/firmware feature name
   'Pipeline', 'Filament {{n}}',  // #1425 — Slicer Pipelines (TR)
+  'Filament {{index}}',  // #45 — rail filament slot label; 'filament' is the TR word too
   'Min', 'Normal', 'Platform', 'Net', 'Trend', 'Commit', 'Global', 'Proxy',
   'N/A', 'email',
   'STARTTLS (Port 587)', 'SSL/TLS (Port 465)',

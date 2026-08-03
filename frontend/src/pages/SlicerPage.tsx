@@ -17,6 +17,21 @@
  * gate are computed from that single object, so they cannot disagree about
  * what the user is currently looking at.
  *
+ * ## The filament slots (#45, rail.2)
+ *
+ * They used to be *derived* — `filamentReqsQuery`'s answer read straight
+ * through. Making them add/removable makes them **owned**: the plate seeds the
+ * list once per (source, plate) and the user edits it from there. Two things
+ * that follow, both easy to undo by accident:
+ *
+ * 1. **The slot list and `useSlicePresets`' profile list are spliced
+ *    together.** `filament_presets` is positional, so an insert that grows only
+ *    one of them slides every later slot's profile onto its neighbour — a
+ *    slice that succeeds and prints the wrong material. See `handleInsertSlotAfter`.
+ * 2. **Colours are overrides, not values.** Only a colour the user chose
+ *    travels; an untouched selection sends no `filament_colours` at all, which
+ *    is what keeps a plain slice from this page byte-identical to `SliceModal`'s.
+ *
  * ## Print now
  *
  * Enabled only while the last completed slice still matches the selection on
@@ -109,6 +124,16 @@ import {
   withTransformEdit,
   type PlateTransformEdits,
 } from '../components/slicer/plateLayout';
+import {
+  canInsertAfter,
+  canRemoveSlotAt,
+  insertSlotAfter,
+  removeSlotAt,
+  seedSlots,
+  setSlotColorAt,
+  slotColorPayload,
+  type FilamentSlotState,
+} from '../components/slicer/filamentSlots';
 import type { ObjectMetrics } from '../components/slicer/transformMath';
 import type { ObjectTransform, PlateLayout } from '../types/plateStage';
 import {
@@ -123,7 +148,6 @@ import {
   type SliceSelection,
 } from '../components/slicer/sliceSelection';
 import { PrintModal } from '../components/PrintModal';
-import type { PlateFilament } from '../types/plates';
 
 type SourceKind = 'libraryFile' | 'archive';
 
@@ -347,14 +371,43 @@ export function SlicerPage() {
     staleTime: 60_000,
   });
 
-  // One synthetic slot for STL / "no metadata" so the rail still works as a
-  // single dropdown, matching the modal's fallback.
-  const filamentSlots = useMemo<PlateFilament[]>(() => {
-    const reqs = filamentReqsQuery.data?.filaments ?? [];
-    return reqs.length > 0
-      ? (reqs as PlateFilament[])
-      : [{ slot_id: 1, type: '', color: '', used_grams: 0, used_meters: 0 }];
-  }, [filamentReqsQuery.data]);
+  // **Owned, not derived** (#45, rail.2). The slot list used to be
+  // `filamentReqsQuery`'s answer read straight through; making it add/removable
+  // means the page holds it and the plate only *seeds* it. `null` is "not
+  // seeded yet", which is distinct from "the user deleted everything" — the
+  // former re-seeds when the requirements arrive, the latter must not.
+  const [filamentSlots, setFilamentSlots] = useState<FilamentSlotState[] | null>(null);
+  const filamentReqs = filamentReqsQuery.data?.filaments;
+
+  // Re-seed on a new source or a new plate: a different plate has different
+  // requirements, and carrying the previous plate's edited slot list across
+  // would map one plate's materials onto another's geometry. Keyed on the same
+  // things `filamentReqsQuery` is keyed on, so the seed and its source cannot
+  // disagree.
+  useEffect(() => {
+    setFilamentSlots(null);
+  }, [source?.kind, source?.id, effectivePlateId]);
+
+  useEffect(() => {
+    if (filamentReqs === undefined) return;
+    setFilamentSlots((current) => (current === null ? seedSlots(filamentReqs) : current));
+  }, [filamentReqs]);
+
+  // A stable empty-ish list for the window between mount and the first seed, so
+  // the rail and `useSlicePresets` never see `null`. Seeded from nothing gives
+  // the one synthetic slot STL / "no metadata" sources have always shown.
+  const seededSlots = useMemo<FilamentSlotState[]>(
+    () => filamentSlots ?? seedSlots(undefined),
+    [filamentSlots],
+  );
+
+  // What the preset pre-pick scores against. Narrowed to (type, colour) on
+  // purpose — the hook's contract is `SliceFilamentSlot`, shared with
+  // `SliceModal`, and it must not learn about slot editing.
+  const presetSlots = useMemo(
+    () => seededSlots.map((slot) => ({ type: slot.type, color: slot.color })),
+    [seededSlots],
+  );
 
   const {
     presets,
@@ -368,6 +421,8 @@ export function SlicerPage() {
     setProcessPreset,
     filamentPresets,
     setFilamentPresetAt,
+    insertFilamentPresetAt,
+    removeFilamentPresetAt,
     bedType,
     setBedType,
     useEmbedded,
@@ -376,11 +431,50 @@ export function SlicerPage() {
     selectedPrinterName,
     compatIndex,
   } = useSlicePresets({
-    filamentSlots,
+    filamentSlots: presetSlots,
     embeddedPrinter: platesQuery.data?.embedded_printer ?? null,
     embeddedProcess: platesQuery.data?.embedded_process ?? null,
     enabled: source != null && !platesQuery.isLoading,
   });
+
+  // **Slot edits move both lists at once.** The slot list lives here and the
+  // per-slot profile list lives in `useSlicePresets`, and `filament_presets` is
+  // positional: splicing one without the other slides every later slot's
+  // profile onto its neighbour, which slices cleanly and prints the wrong
+  // material. Both setters run in the same handler, so React batches them and
+  // the hook's pre-pick effect sees a matched pair.
+  //
+  // Each edit is refused when it would move a slot the plate paints with; the
+  // rule and the reasoning are in `filamentSlots.ts`, and the rail renders the
+  // refusal as a disabled control rather than hiding it. Re-checked here rather
+  // than trusting the UI's own gating — a disabled button is a hint, not a
+  // guarantee.
+  const handleInsertSlotAfter = useCallback(
+    (index: number) => {
+      if (!canInsertAfter(seededSlots, index)) return;
+      setFilamentSlots(insertSlotAfter(seededSlots, index));
+      insertFilamentPresetAt(index + 1, null);
+    },
+    [seededSlots, insertFilamentPresetAt],
+  );
+
+  const handleAddSlot = useCallback(
+    () => handleInsertSlotAfter(seededSlots.length - 1),
+    [handleInsertSlotAfter, seededSlots.length],
+  );
+
+  const handleRemoveSlot = useCallback(
+    (index: number) => {
+      if (!canRemoveSlotAt(seededSlots, index)) return;
+      setFilamentSlots(removeSlotAt(seededSlots, index));
+      removeFilamentPresetAt(index);
+    },
+    [seededSlots, removeFilamentPresetAt],
+  );
+
+  const handleFilamentSlotColorChange = useCallback((index: number, color: string | null) => {
+    setFilamentSlots((current) => (current ? setSlotColorAt(current, index, color) : current));
+  }, []);
 
   // Curated field metadata, filtered server-side to the keys the configured
   // slicer actually has. That filtering depends on the sidecar exposing
@@ -425,11 +519,14 @@ export function SlicerPage() {
   }, [processFields, resolvedProcess]);
 
   // The single object both the request and the Print-now gate are derived from.
+  const filamentColors = useMemo(() => slotColorPayload(seededSlots), [seededSlots]);
+
   const selection = useMemo<SliceSelection>(
     () => ({
       printerPreset,
       processPreset,
       filamentPresets,
+      filamentColors,
       bedType,
       // Mirrors SliceModal: the flag is meaningless without the gate.
       useEmbedded: useEmbedded && canUseEmbedded,
@@ -441,6 +538,7 @@ export function SlicerPage() {
       printerPreset,
       processPreset,
       filamentPresets,
+      filamentColors,
       bedType,
       useEmbedded,
       canUseEmbedded,
@@ -626,8 +724,12 @@ export function SlicerPage() {
     onProcessPresetChange: setProcessPreset,
     filamentPresets,
     onFilamentPresetChange: setFilamentPresetAt,
-    filamentSlots,
+    filamentSlots: seededSlots,
     filamentSlotsLoading: filamentReqsQuery.isLoading,
+    onAddFilamentSlot: handleAddSlot,
+    onInsertFilamentSlotAfter: handleInsertSlotAfter,
+    onRemoveFilamentSlot: handleRemoveSlot,
+    onFilamentSlotColorChange: handleFilamentSlotColorChange,
     bedType,
     onBedTypeChange: setBedType,
     useEmbedded,

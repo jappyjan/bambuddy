@@ -1,8 +1,13 @@
 """Pydantic schemas for slice requests."""
 
+import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# ``#RRGGBB`` or ``#RRGGBBAA`` — the two spellings BambuStudio / OrcaSlicer
+# write into ``filament_colour``. 3MFs carry the 8-digit form.
+_HEX_COLOUR_RE = re.compile(r"#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?")
 
 
 class PresetRef(BaseModel):
@@ -67,6 +72,27 @@ class SliceRequest(BaseModel):
     # is empty so older clients keep working.
     filament_presets: list[PresetRef] = Field(default_factory=list)
 
+    # Per-slot filament colour overrides (#45), positionally aligned with
+    # ``filament_presets``: entry i colours slot i + 1. ``None`` in a position
+    # leaves that slot's profile colour untouched, and an omitted / empty list
+    # leaves every slot alone — so a client that never offers the control
+    # sends exactly what it sent before this field existed.
+    #
+    # Colour is a filament-profile property (``filament_colour``), not a
+    # process one, so it cannot ride along in ``process_overrides``. It matters
+    # beyond decoration: the produced 3MF carries the colours, which is what
+    # the printer's own slot mapping and Bambuddy's 3D view read.
+    filament_colours: list[str | None] = Field(
+        default_factory=list,
+        description=(
+            "Per-slot filament colour overrides, aligned index-by-index with "
+            "'filament_presets' (index 0 = slot 1). Each entry is a '#RRGGBB' / "
+            "'#RRGGBBAA' hex colour, or null to leave that slot's profile colour "
+            "alone. Omit for a slice that keeps every profile's own colour. "
+            "Entries past the end of 'filament_presets' are ignored."
+        ),
+    )
+
     plate: int | None = Field(
         default=None,
         ge=0,
@@ -119,6 +145,30 @@ class SliceRequest(BaseModel):
             "``curr_bed_type`` supplied here."
         ),
     )
+
+    @field_validator("filament_colours")
+    @classmethod
+    def validate_filament_colours(cls, value: list[str | None]) -> list[str | None]:
+        """Reject anything that isn't a hex colour, rather than writing it into
+        a filament profile and finding out at slice time.
+
+        The slicer reads ``filament_colour`` as ``#RRGGBB`` / ``#RRGGBBAA``; a
+        value it can't parse is either ignored (so the user's pick silently does
+        nothing) or trips the CLI's own config validation with a message that
+        names the profile rather than the request. A 422 here says which slot.
+        """
+        out: list[str | None] = []
+        for index, colour in enumerate(value):
+            if colour is None:
+                out.append(None)
+                continue
+            normalised = colour.strip()
+            if not _HEX_COLOUR_RE.fullmatch(normalised):
+                raise ValueError(
+                    f"filament_colours[{index}] must be a '#RRGGBB' or '#RRGGBBAA' hex colour (got {colour!r})"
+                )
+            out.append(normalised)
+        return out
 
     @model_validator(mode="after")
     def normalise_preset_refs(self) -> "SliceRequest":

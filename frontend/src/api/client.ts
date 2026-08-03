@@ -1567,6 +1567,14 @@ export interface SliceRequest {
   // backend validator promotes a singular into a one-element list when this
   // is omitted, so legacy single-color clients keep working unchanged.
   filament_presets?: PresetRef[];
+  // Per-slot filament colour overrides (#45), positionally aligned with
+  // `filament_presets`. `null` in a position leaves that slot's profile
+  // colour alone. Omitted entirely when the user set no colours, so a plain
+  // slice is unchanged from before this field existed. The backend patches
+  // `filament_colour` / `default_filament_colour` onto the resolved filament
+  // profile, which is what makes the colour reach the produced 3MF (and the
+  // printer's own slot mapping) rather than being frontend decoration.
+  filament_colours?: (string | null)[];
   plate?: number;
   export_3mf?: boolean;
   // Build-plate override (#1337). When omitted, the slicer uses the process
