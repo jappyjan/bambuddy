@@ -139,6 +139,7 @@ import {
   canRemoveSlotAt,
   insertSlotAfter,
   removeSlotAt,
+  resolveSlotColors,
   seedSlots,
   setSlotColorAt,
   slotColorPayload,
@@ -531,6 +532,24 @@ export function SlicerPage() {
   // The single object both the request and the Print-now gate are derived from.
   const filamentColors = useMemo(() => slotColorPayload(seededSlots), [seededSlots]);
 
+  // **What the stage is painted with (#42).** Two different lists, deliberately:
+  //
+  // - `filamentColors` above is the *request* payload — overrides only, `null`
+  //   everywhere the user did not choose, because only an override may travel.
+  // - `stageColors` is the *resolved* list — every entry a real colour, one per
+  //   slot, index 0 = slot 1. `buildModelGroup` indexes it by the parser's
+  //   0-based extruder, so it lines up with no shift.
+  //
+  // It is the same call `FilamentSlotGrid` fills its numbered badges from, so
+  // the model and the rail always agree about what colour slot N is — pinned in
+  // `pages/SlicerPageFilamentColors.test.tsx`. Painting the stage from the
+  // request payload instead would show `null` (i.e. nothing) for every slot the
+  // user has not personally coloured, which is almost all of them.
+  const stageColors = useMemo(
+    () => resolveSlotColors(seededSlots, presets, filamentPresets),
+    [seededSlots, presets, filamentPresets],
+  );
+
   const selection = useMemo<SliceSelection>(
     () => ({
       printerPreset,
@@ -760,6 +779,9 @@ export function SlicerPage() {
     url: modelUrl,
     fileType: platesMeta.length > 0 ? ('3mf' as const) : undefined,
     plates: stagePlates,
+    // Handed to both layouts, so the phone's wizard paints from exactly the
+    // same colours as the desktop stage.
+    filamentColors: stageColors,
     initialPlate: activePlate,
     onActivePlateChange: setActivePlate,
     // Archives get no handler, which is what makes the stage read-only —

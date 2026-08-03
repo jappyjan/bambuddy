@@ -15,6 +15,10 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import JSZip from 'jszip';
 import { swapYZ, type ObjectMetrics, type Vec3 } from './transformMath';
 import type { BedSize } from './plateGrid';
+// The one definition of "this slot has no colour" (#45). Imported rather than
+// restated so the stage's neutral and the rail badge's neutral are the same
+// grey; `filamentSlots` pulls in nothing but pure helpers.
+import { UNSET_SLOT_COLOR } from './filamentSlots';
 
 export interface MeshData {
   vertices: number[];
@@ -699,10 +703,21 @@ export function buildModelGroup(
   const { objects, buildItems } = parsedData;
   const group = new THREE.Group();
 
-  // Create materials for each extruder color
+  // Create materials for each extruder color.
+  //
+  // `extruder` is already 0-based here — the parser subtracts one off the
+  // 1-based `extruder` metadata — so `filamentColors` indexes straight in:
+  // `[0]` is slot 1. Adding a shift on either side paints every part with its
+  // neighbour's filament, which looks entirely plausible.
+  //
+  // A caller that supplies colours at all gets the neutral for an extruder its
+  // list does not reach (#42) rather than the as-designed green, so a slot the
+  // rail knows nothing about reads as "no filament here" instead of as a
+  // deliberate colour. Without a list — an STL, or a viewer with no slot state
+  // — the green stays.
   const getMaterial = (extruder: number): THREE.MeshPhongMaterial => {
-    const defaultColor = '#00ae42';
-    const colorStr = filamentColors?.[extruder] || defaultColor;
+    const fallback = filamentColors ? UNSET_SLOT_COLOR : '#00ae42';
+    const colorStr = filamentColors?.[extruder] || fallback;
     // Convert hex color string to THREE.js color
     const color = new THREE.Color(colorStr);
     return new THREE.MeshPhongMaterial({

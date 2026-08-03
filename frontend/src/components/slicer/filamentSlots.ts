@@ -51,8 +51,17 @@
  * colour is one field with a defined precedence: the user's pick if there is
  * one, else the plate's as-designed colour. `plateColor` is kept alongside so
  * "reset to as designed" is possible after an override.
+ *
+ * `badgeColor` is that precedence, and `resolveSlotColors` is the whole list of
+ * it. **Both the rail's badges and the 3D stage render from `resolveSlotColors`
+ * (#42)** — one call each, no second copy of the rule. A stage that resolved
+ * colour for itself would drift from the badge the moment either side changed,
+ * and the drift is invisible: both views would keep showing *a* plausible
+ * colour, just not the same one.
  */
 
+import type { PresetRef, UnifiedPresetsResponse } from '../../api/client';
+import { findPreset } from '../../utils/slicePresetPicker';
 import type { PlateFilament } from '../../types/plates';
 
 /**
@@ -228,4 +237,31 @@ export function badgeColor(
   presetColor: string | null | undefined,
 ): string {
   return slot.color || presetColor || UNSET_SLOT_COLOR;
+}
+
+/**
+ * Every slot's effective colour, in slot order — `[0]` is slot 1.
+ *
+ * This is the array the 3D stage is painted from (#42) *and* the array the
+ * rail's badges are filled from, so the two cannot disagree about what colour
+ * slot N is. The parser's extruder indices are already 0-based (it subtracts
+ * one off the 1-based `extruder` metadata), so this list indexes straight into
+ * `buildModelGroup`'s `filamentColors` with no shift — see
+ * `parse3mf.ts:getMaterial`.
+ *
+ * Every entry is a real colour: a slot with no colour of its own and no
+ * profile picked yet resolves to `UNSET_SLOT_COLOR` **at its own index**, so an
+ * unused slot never leaves a hole for a later slot to slide into.
+ */
+export function resolveSlotColors(
+  slots: FilamentSlotState[],
+  presets: UnifiedPresetsResponse | undefined,
+  filamentPresets: (PresetRef | null)[],
+): string[] {
+  return slots.map((slot, index) => {
+    const picked = presets
+      ? findPreset(presets, filamentPresets[index] ?? null, 'filament')
+      : null;
+    return badgeColor(slot, picked?.filament_colour);
+  });
 }
