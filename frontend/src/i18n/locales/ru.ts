@@ -3473,6 +3473,8 @@ export default {
     noFilesDescription: "Загрузите файлы, чтобы начать упорядочивать материалы для печати.",
     noMatchingFiles: "Подходящие файлы не найдены",
     noMatchingFilesDescription: "Нет файлов, соответствующих текущему поиску или фильтрам.",
+    filesLoadFailed: "Не удалось загрузить файлы",
+    filesLoadFailedDescription: "Не удалось загрузить список файлов. Проверьте подключение и повторите попытку.",
     clearFilters: "Сбросить фильтры",
     printedCount: "Напечатано: {{count}}×",
     slicedBadge: "НАРЕЗАН",

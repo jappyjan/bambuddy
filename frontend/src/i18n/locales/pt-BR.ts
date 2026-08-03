@@ -3657,6 +3657,8 @@ export default {
     noFilesDescription: 'Envie arquivos para começar a organizar seus arquivos relacionados à impressão.',
     noMatchingFiles: 'Nenhum arquivo correspondente',
     noMatchingFilesDescription: 'Nenhum arquivo corresponde aos seus critérios de pesquisa ou filtro.',
+    filesLoadFailed: 'Não foi possível carregar os arquivos',
+    filesLoadFailedDescription: 'Falha ao carregar a lista de arquivos. Verifique sua conexão e tente novamente.',
     clearFilters: 'Limpar filtros',
     printedCount: 'Impresso {{count}}x',
     slicedBadge: 'FATIADO',

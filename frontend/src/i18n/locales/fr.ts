@@ -3658,6 +3658,8 @@ export default {
     noFilesDescription: 'Téléversez des fichiers pour organiser.',
     noMatchingFiles: 'Aucun fichier correspondant',
     noMatchingFilesDescription: 'Ajustez votre recherche.',
+    filesLoadFailed: 'Impossible de charger les fichiers',
+    filesLoadFailedDescription: 'Le chargement de la liste des fichiers a échoué. Vérifiez votre connexion et réessayez.',
     clearFilters: 'Effacer filtres',
     printedCount: 'Imprimé {{count}}x',
     slicedBadge: 'TRANCHÉ',

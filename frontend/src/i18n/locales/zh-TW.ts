@@ -3657,6 +3657,8 @@ export default {
     noFilesDescription: '上傳檔案以開始組織您的列印相關檔案。',
     noMatchingFiles: '沒有匹配的檔案',
     noMatchingFilesDescription: '沒有檔案匹配您目前的搜尋或篩選條件。',
+    filesLoadFailed: '無法載入檔案',
+    filesLoadFailedDescription: '檔案清單載入失敗。請檢查網路連線後重試。',
     clearFilters: '清除篩選',
     printedCount: '已列印 {{count}} 次',
     slicedBadge: '已切片',

@@ -24,15 +24,14 @@ interface LinkFolderModalProps {
 }
 
 export function LinkFolderModal({ folder, onClose, onLink, isLoading, t }: LinkFolderModalProps) {
-  const [linkType, setLinkType] = useState<'project' | 'archive'>('project');
+  // Seeded from the existing link: a folder already bound to an archive opens
+  // on the archive tab, everything else on the project tab (#38).
+  const [linkType, setLinkType] = useState<'project' | 'archive'>(
+    folder.archive_id ? 'archive' : 'project'
+  );
   const [selectedId, setSelectedId] = useState<number | null>(
     folder.project_id || folder.archive_id || null
   );
-
-  // Initialize linkType based on existing link
-  useState(() => {
-    if (folder.archive_id) setLinkType('archive');
-  });
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],

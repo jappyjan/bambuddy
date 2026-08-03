@@ -3672,6 +3672,8 @@ export default {
     noFilesDescription: 'Suba archivos para empezar a organizar sus archivos relacionados con la impresión.',
     noMatchingFiles: 'No hay archivos coincidentes',
     noMatchingFilesDescription: 'Ningún archivo coincide con su búsqueda o los criterios de filtro actuales.',
+    filesLoadFailed: 'No se pudieron cargar los archivos',
+    filesLoadFailedDescription: 'No se pudo cargar la lista de archivos. Compruebe su conexión e inténtelo de nuevo.',
     clearFilters: 'Borrar filtros',
     printedCount: 'Impreso {{count}} veces',
     slicedBadge: 'LAMINADO',

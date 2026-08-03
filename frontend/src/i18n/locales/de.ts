@@ -3669,6 +3669,8 @@ export default {
     noFilesDescription: 'Laden Sie Dateien hoch, um Ihre Druckdateien zu organisieren.',
     noMatchingFiles: 'Keine passenden Dateien',
     noMatchingFilesDescription: 'Keine Dateien entsprechen Ihren aktuellen Such- oder Filterkriterien.',
+    filesLoadFailed: 'Dateien konnten nicht geladen werden',
+    filesLoadFailedDescription: 'Die Dateiliste konnte nicht geladen werden. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.',
     clearFilters: 'Filter zurücksetzen',
     printedCount: '{{count}}x gedruckt',
     slicedBadge: 'GESLICED',

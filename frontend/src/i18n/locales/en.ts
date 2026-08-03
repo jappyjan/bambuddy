@@ -3698,6 +3698,8 @@ export default {
     noFilesDescription: 'Upload files to start organizing your print-related files.',
     noMatchingFiles: 'No matching files',
     noMatchingFilesDescription: 'No files match your current search or filter criteria.',
+    filesLoadFailed: 'Could not load files',
+    filesLoadFailedDescription: 'The file listing failed to load. Check your connection and try again.',
     clearFilters: 'Clear filters',
     printedCount: 'Printed {{count}}x',
     slicedBadge: 'SLICED',
