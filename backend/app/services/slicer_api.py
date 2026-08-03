@@ -201,6 +201,21 @@ class SlicerApiService:
         ``{name, base_id}`` (alphabetised, instantiable presets only — abstract
         bases like `fdm_filament_pla` are filtered out by the sidecar).
 
+        Filament entries additionally carry ``filament_type`` and
+        ``filament_colour``, which ``_fetch_bundled_presets`` copies onto the
+        ``UnifiedPreset`` so the per-slot filament pre-pick can match a plate's
+        required material. **Both are resolved through the profile's
+        ``inherits:`` chain**, and only the fork images do so: a concrete BBL
+        filament preset is a thin per-printer delta that states no material of
+        its own, so an older sidecar reads the leaf file and reports
+        ``filament_type: null`` for *every* bundled preset. That left the
+        pre-pick with nothing to score against, and an ABS plate pre-picking
+        `Generic TPU` was the visible result (#47).
+
+        ``filament_colour`` is legitimately ``null`` across the whole bundled
+        tier on both slicers — colour is a runtime spool attribute, not a
+        profile one — so an empty colour here is data, not a degraded response.
+
         Returns an empty-shaped dict when the sidecar is unreachable so the
         unified-presets endpoint can degrade to "no standard tier" without
         crashing the modal — cloud + local-imported profiles still render.
