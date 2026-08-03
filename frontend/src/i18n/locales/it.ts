@@ -4167,6 +4167,27 @@ export default {
     noEstimate: 'Nessuna stima disponibile',
     printQueued: 'Stampa in coda',
     processFieldsFailed: 'Impossibile caricare l’elenco delle impostazioni.',
+    wizardStepOf: 'Passaggio {{current}} di {{total}}',
+    wizardPrinterTitle: 'Quale stampante?',
+    wizardFilamentsTitle: 'Quali filamenti?',
+    wizardSettingsTitle: 'Qualche modifica?',
+    wizardReviewTitle: 'Pronto per lo slicing',
+    wizardNext: 'Avanti',
+    wizardNeedsPrinter: 'Scegli un profilo stampante e uno di processo per continuare.',
+    wizardNeedsFilaments: 'Scegli un profilo filamento per ogni slot per continuare.',
+    wizardOpenViewport: 'Apri la vista 3D',
+    wizardCloseViewport: 'Chiudi la vista 3D',
+    wizardViewportLabel: 'Vista 3D',
+    wizardModelPreview: 'Anteprima del modello',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: 'Le tue scelte: tocca per modificarle',
+    wizardChipPrinter: 'Stampante',
+    wizardChipFilaments: 'Filamenti',
+    wizardChipSettings: 'Impostazioni',
+    wizardChipNothingChosen: 'Non hai ancora scelto nulla',
+    wizardChipFilamentSlots: '{{chosen}} slot su {{total}} impostati',
+    wizardBackToReview: 'Torna al riepilogo',
   },
 
   spoolman: {

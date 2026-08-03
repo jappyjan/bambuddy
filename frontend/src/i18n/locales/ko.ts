@@ -3970,6 +3970,27 @@ export default {
     noEstimate: '아직 예상치가 없습니다',
     printQueued: '인쇄를 대기열에 추가했습니다',
     processFieldsFailed: '설정 목록을 불러오지 못했습니다.',
+    wizardStepOf: '{{total}}단계 중 {{current}}단계',
+    wizardPrinterTitle: '어떤 프린터인가요?',
+    wizardFilamentsTitle: '어떤 필라멘트인가요?',
+    wizardSettingsTitle: '조정할 항목이 있나요?',
+    wizardReviewTitle: '슬라이스 준비 완료',
+    wizardNext: '다음',
+    wizardNeedsPrinter: '계속하려면 프린터 프로필과 프로세스 프로필을 선택하세요.',
+    wizardNeedsFilaments: '계속하려면 모든 슬롯에 필라멘트 프로필을 선택하세요.',
+    wizardOpenViewport: '3D 보기 열기',
+    wizardCloseViewport: '3D 보기 닫기',
+    wizardViewportLabel: '3D 보기',
+    wizardModelPreview: '모델 미리보기',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: '현재 선택 — 탭하여 변경',
+    wizardChipPrinter: '프린터',
+    wizardChipFilaments: '필라멘트',
+    wizardChipSettings: '설정',
+    wizardChipNothingChosen: '아직 선택하지 않음',
+    wizardChipFilamentSlots: '{{total}}개 슬롯 중 {{chosen}}개 설정됨',
+    wizardBackToReview: '검토 화면으로 돌아가기',
   },
 
   spoolman: {

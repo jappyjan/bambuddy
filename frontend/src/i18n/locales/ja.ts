@@ -4179,6 +4179,27 @@ export default {
     noEstimate: '見積もりはまだありません',
     printQueued: '印刷をキューに追加しました',
     processFieldsFailed: '設定一覧を読み込めませんでした。',
+    wizardStepOf: 'ステップ {{current}} / {{total}}',
+    wizardPrinterTitle: 'どのプリンター？',
+    wizardFilamentsTitle: 'どのフィラメント？',
+    wizardSettingsTitle: '調整しますか？',
+    wizardReviewTitle: 'スライスの準備完了',
+    wizardNext: '次へ',
+    wizardNeedsPrinter: '続けるにはプリンタープロファイルとプロセスプロファイルを選んでください。',
+    wizardNeedsFilaments: '続けるにはすべてのスロットにフィラメントプロファイルを選んでください。',
+    wizardOpenViewport: '3Dビューを開く',
+    wizardCloseViewport: '3Dビューを閉じる',
+    wizardViewportLabel: '3Dビュー',
+    wizardModelPreview: 'モデルのプレビュー',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: '現在の選択 — タップして変更',
+    wizardChipPrinter: 'プリンター',
+    wizardChipFilaments: 'フィラメント',
+    wizardChipSettings: '設定',
+    wizardChipNothingChosen: 'まだ選択されていません',
+    wizardChipFilamentSlots: '{{total}} スロット中 {{chosen}} 件を設定済み',
+    wizardBackToReview: '確認画面に戻る',
   },
 
   spoolman: {

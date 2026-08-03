@@ -4167,6 +4167,27 @@ export default {
     noEstimate: '暂无预估',
     printQueued: '打印已加入队列',
     processFieldsFailed: '无法加载设置列表。',
+    wizardStepOf: '第 {{current}} 步，共 {{total}} 步',
+    wizardPrinterTitle: '选择哪台打印机？',
+    wizardFilamentsTitle: '选择哪些耗材？',
+    wizardSettingsTitle: '需要调整吗？',
+    wizardReviewTitle: '准备切片',
+    wizardNext: '下一步',
+    wizardNeedsPrinter: '请选择打印机配置和工艺配置后继续。',
+    wizardNeedsFilaments: '请为每个槽位选择耗材配置后继续。',
+    wizardOpenViewport: '打开 3D 视图',
+    wizardCloseViewport: '关闭 3D 视图',
+    wizardViewportLabel: '3D 视图',
+    wizardModelPreview: '模型预览',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: '你的选择 — 点按即可更改',
+    wizardChipPrinter: '打印机',
+    wizardChipFilaments: '耗材',
+    wizardChipSettings: '设置',
+    wizardChipNothingChosen: '尚未选择',
+    wizardChipFilamentSlots: '已设置 {{total}} 个槽位中的 {{chosen}} 个',
+    wizardBackToReview: '返回确认',
   },
 
   spoolman: {

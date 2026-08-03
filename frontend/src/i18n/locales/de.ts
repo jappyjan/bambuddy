@@ -4179,6 +4179,27 @@ export default {
     noEstimate: 'Noch keine Schätzung',
     printQueued: 'Druck eingereiht',
     processFieldsFailed: 'Die Einstellungsliste konnte nicht geladen werden.',
+    wizardStepOf: 'Schritt {{current}} von {{total}}',
+    wizardPrinterTitle: 'Welcher Drucker?',
+    wizardFilamentsTitle: 'Welche Filamente?',
+    wizardSettingsTitle: 'Anpassungen?',
+    wizardReviewTitle: 'Bereit zum Slicen',
+    wizardNext: 'Weiter',
+    wizardNeedsPrinter: 'Wähle ein Drucker- und ein Prozessprofil, um fortzufahren.',
+    wizardNeedsFilaments: 'Wähle für jeden Slot ein Filamentprofil, um fortzufahren.',
+    wizardOpenViewport: '3D-Ansicht öffnen',
+    wizardCloseViewport: '3D-Ansicht schließen',
+    wizardViewportLabel: '3D-Ansicht',
+    wizardModelPreview: 'Modellvorschau',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: 'Deine Auswahl – zum Ändern tippen',
+    wizardChipPrinter: 'Drucker',
+    wizardChipFilaments: 'Filamente',
+    wizardChipSettings: 'Einstellungen',
+    wizardChipNothingChosen: 'Noch nichts ausgewählt',
+    wizardChipFilamentSlots: '{{chosen}} von {{total}} Slots belegt',
+    wizardBackToReview: 'Zurück zur Übersicht',
   },
 
   spoolman: {

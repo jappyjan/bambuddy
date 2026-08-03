@@ -3961,6 +3961,27 @@ export default {
     noEstimate: 'Оценки пока нет',
     printQueued: 'Печать добавлена в очередь',
     processFieldsFailed: 'Не удалось загрузить список настроек.',
+    wizardStepOf: 'Шаг {{current}} из {{total}}',
+    wizardPrinterTitle: 'Какой принтер?',
+    wizardFilamentsTitle: 'Какие филаменты?',
+    wizardSettingsTitle: 'Нужны изменения?',
+    wizardReviewTitle: 'Готово к нарезке',
+    wizardNext: 'Далее',
+    wizardNeedsPrinter: 'Выберите профиль принтера и профиль процесса, чтобы продолжить.',
+    wizardNeedsFilaments: 'Выберите профиль филамента для каждого слота, чтобы продолжить.',
+    wizardOpenViewport: 'Открыть 3D-вид',
+    wizardCloseViewport: 'Закрыть 3D-вид',
+    wizardViewportLabel: '3D-вид',
+    wizardModelPreview: 'Предпросмотр модели',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: 'Ваш выбор — нажмите, чтобы изменить',
+    wizardChipPrinter: 'Принтер',
+    wizardChipFilaments: 'Филаменты',
+    wizardChipSettings: 'Настройки',
+    wizardChipNothingChosen: 'Пока ничего не выбрано',
+    wizardChipFilamentSlots: 'Задано слотов: {{chosen}} из {{total}}',
+    wizardBackToReview: 'Назад к обзору',
   },
 
   spoolman: {

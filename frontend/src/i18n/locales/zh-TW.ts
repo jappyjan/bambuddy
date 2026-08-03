@@ -4167,6 +4167,27 @@ export default {
     noEstimate: '尚無預估',
     printQueued: '列印已加入佇列',
     processFieldsFailed: '無法載入設定清單。',
+    wizardStepOf: '第 {{current}} 步，共 {{total}} 步',
+    wizardPrinterTitle: '選擇哪台印表機？',
+    wizardFilamentsTitle: '選擇哪些耗材？',
+    wizardSettingsTitle: '需要調整嗎？',
+    wizardReviewTitle: '準備切片',
+    wizardNext: '下一步',
+    wizardNeedsPrinter: '請選擇印表機設定檔與流程設定檔後繼續。',
+    wizardNeedsFilaments: '請為每個插槽選擇耗材設定檔後繼續。',
+    wizardOpenViewport: '開啟 3D 檢視',
+    wizardCloseViewport: '關閉 3D 檢視',
+    wizardViewportLabel: '3D 檢視',
+    wizardModelPreview: '模型預覽',
+    // Review-first (#31, step-6.2) — the chips summarising the steps behind
+    // Review, and the way back from one.
+    wizardReviewSummary: '你的選擇 — 點按即可變更',
+    wizardChipPrinter: '印表機',
+    wizardChipFilaments: '耗材',
+    wizardChipSettings: '設定',
+    wizardChipNothingChosen: '尚未選擇',
+    wizardChipFilamentSlots: '已設定 {{total}} 個插槽中的 {{chosen}} 個',
+    wizardBackToReview: '返回確認',
   },
 
   spoolman: {

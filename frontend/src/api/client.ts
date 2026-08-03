@@ -6920,6 +6920,12 @@ export interface LibraryFile {
   print_time_seconds: number | null;
   filament_used_grams: number | null;
   sliced_for_model: string | null;
+  // Slice provenance, mirroring `LibraryFileListItem`. `slice_count` is derived
+  // server-side as a COUNT of non-trashed sliced children, so a file whose
+  // slices were all trashed reads as never-sliced again. Optional so a mock or
+  // a legacy caller constructing a LibraryFile by hand still type-checks.
+  sliced_from_file_id?: number | null;
+  slice_count?: number;
 }
 
 export interface LibraryTagSummary {

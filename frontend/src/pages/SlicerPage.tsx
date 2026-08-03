@@ -53,13 +53,40 @@
  * Both must produce the same request for the same selection;
  * `__tests__/pages/SlicerPage.test.tsx` pins that against the modal's real
  * dispatch rather than a copy of its body builder.
+ *
+ * ## The phone (#24, step-6.1)
+ *
+ * A phone gets `MobileSliceWizard` instead of the rail-beside-stage tree —
+ * **only the layout changes.** Every hook above runs identically on both, and
+ * the wizard is handed the same `canSlice`, `canPrintNow`, `estimate` and
+ * `handleSlice` this page already computed; it re-derives none of them. That is
+ * the whole reason the phone cannot slice or print something different from the
+ * desktop: there is no second copy of the rules to disagree with.
+ *
+ * ## Review-first (#31, step-6.2)
+ *
+ * The one thing the phone branch decides for itself is **which step the wizard
+ * opens on**, from the source's `slice_count`: a file that already has a sliced
+ * child opens on Review, where chips summarise the three steps behind it. The
+ * presets there are not restored from anywhere — `useSlicePresets` re-picks
+ * them deterministically from the same 3MF, which is why re-opening a file
+ * reproduces its selection.
+ *
+ * Two constraints shape the code below and are easy to undo by accident:
+ *
+ * 1. `MobileSliceWizard` reads `initialStep` once, at mount. The count arrives
+ *    over the network, so the wizard is **withheld until the query settles**
+ *    rather than seeded afterwards — see the mobile branch.
+ * 2. **`slice_count` never touches Print now.** That gate is the fingerprint
+ *    comparison below and nothing else; a previous slice's output is not in
+ *    `lastSlice`, and mounting on Review must not imply it is.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, FileQuestion } from 'lucide-react';
+import { ArrowLeft, FileQuestion, Loader2 } from 'lucide-react';
 import {
   api,
   type PresetRef,
@@ -68,7 +95,10 @@ import {
 } from '../api/client';
 import { useSliceJobTracker } from '../contexts/SliceJobTrackerContext';
 import { useToast } from '../contexts/ToastContext';
+import { useIsMobile } from '../hooks/useIsMobile';
 import { useSlicePresets } from '../hooks/useSlicePresets';
+import { MobileSliceWizard } from '../components/slicer/MobileSliceWizard';
+import { initialStepForSource } from '../components/slicer/wizardSteps';
 import { PlateStage } from '../components/slicer/PlateStage';
 import { SliceActionBar } from '../components/slicer/SliceActionBar';
 import { SlicerRail } from '../components/slicer/SlicerRail';
@@ -118,6 +148,7 @@ function sameMetrics(a: ObjectMetrics | undefined, b: ObjectMetrics): boolean {
 export function SlicerPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [searchParams] = useSearchParams();
   const { trackJob } = useSliceJobTracker();
   const { showToast } = useToast();
@@ -164,6 +195,17 @@ export function SlicerPage() {
   const filename = platesQuery.data?.filename ?? '';
   const platesMeta = useMemo(() => platesQuery.data?.plates ?? [], [platesQuery.data]);
   const isMultiPlate = !!platesQuery.data?.is_multi_plate && platesMeta.length > 1;
+
+  // Has this file been sliced before? (#31, step-6.2.) `slice_count` is a
+  // server-derived COUNT of non-trashed sliced children — the only thing on
+  // this page that reads it is which step the phone wizard opens on. Library
+  // files only: an archive has no such field, and so always starts at step 1.
+  const sourceFileQuery = useQuery({
+    queryKey: ['libraryFile', source?.id],
+    queryFn: async () => api.getLibraryFile(source!.id),
+    enabled: source?.kind === 'libraryFile',
+    staleTime: 60_000,
+  });
 
   // Saved arrangement (spec §4). Library files only — archives carry the same
   // column but expose no endpoint yet. Absent / null / wrong-version leaves
@@ -542,6 +584,17 @@ export function SlicerPage() {
         ? api.getLibraryFileDownloadUrl(source.id)
         : api.getArchiveDownload(source.id);
 
+  // The phone's persistent model strip. Per-plate where the source has plates,
+  // so the picture follows the plate tabs rather than always showing plate 1.
+  const thumbnailUrl =
+    source == null
+      ? null
+      : source.kind === 'archive'
+        ? api.getArchiveThumbnail(source.id)
+        : isMultiPlate
+          ? api.getLibraryFilePlateThumbnail(source.id, effectivePlateId)
+          : api.getLibraryFileThumbnailUrl(source.id);
+
   if (source == null) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 p-8 text-center text-bambu-gray">
@@ -555,6 +608,134 @@ export function SlicerPage() {
           {t('slicer.backToFiles')}
         </button>
       </div>
+    );
+  }
+
+  // Built once and handed to whichever layout is showing, so the phone and the
+  // desktop are literally rendering the same values — not two lists that have
+  // to be kept in step by hand.
+  const railProps = {
+    presets,
+    presetsLoading: presetsLoading || platesQuery.isLoading,
+    presetsError,
+    isRefreshing,
+    onRefreshPresets: refreshPresets,
+    printerPreset,
+    onPrinterPresetChange: setPrinterPreset,
+    processPreset,
+    onProcessPresetChange: setProcessPreset,
+    filamentPresets,
+    onFilamentPresetChange: setFilamentPresetAt,
+    filamentSlots,
+    filamentSlotsLoading: filamentReqsQuery.isLoading,
+    bedType,
+    onBedTypeChange: setBedType,
+    useEmbedded,
+    onUseEmbeddedChange: setUseEmbedded,
+    canUseEmbedded,
+    selectedPrinterName,
+    compatIndex,
+    processFields,
+    resolvedProcess,
+    processFieldsLoading: processFieldsQuery.isLoading,
+    processFieldsError: processFieldsQuery.isError ? t('slicer.processFieldsFailed') : null,
+    overrides,
+    onOverridesChange: setOverrides,
+    disabled: isSlicing,
+  };
+
+  const stageProps = {
+    url: modelUrl,
+    fileType: platesMeta.length > 0 ? ('3mf' as const) : undefined,
+    plates: stagePlates,
+    initialPlate: activePlate,
+    onActivePlateChange: setActivePlate,
+    // Archives get no handler, which is what makes the stage read-only —
+    // the same rule on both layouts, decided in exactly one place.
+    onTransformChange: layoutEditable ? handleTransformChange : undefined,
+    onObjectMetricsChange: handleObjectMetrics,
+  };
+
+  const actionBarProps = {
+    estimate,
+    contextLabel,
+    onSlice: handleSlice,
+    canSlice,
+    isSlicing,
+    onPrintNow: () => setPrintOpen(true),
+    canPrintNow,
+    hasCompletedSlice: lastSlice != null,
+    onSaveLayout: handleSaveLayout,
+    canSaveLayout,
+    saveLayoutHint,
+    onResetLayout: handleResetLayout,
+    canResetLayout,
+    resetLayoutHint,
+    isSavingLayout: layoutMutation.isPending,
+  };
+
+  // Print now hands the *produced* file to the existing PrintModal — the
+  // slice's output, not the source that was sliced.
+  const printModal =
+    printOpen && lastSlice && canPrintNow ? (
+      <PrintModal
+        mode="create"
+        archiveName={lastSlice.target.name}
+        {...(lastSlice.target.kind === 'libraryFile'
+          ? { libraryFileId: lastSlice.target.id }
+          : { archiveId: lastSlice.target.id })}
+        onClose={() => setPrintOpen(false)}
+        onSuccess={() => {
+          setPrintOpen(false);
+          showToast(t('slicer.printQueued'), 'success');
+        }}
+      />
+    ) : null;
+
+  // The only fork. Everything above ran for both.
+  if (isMobile) {
+    // **Review-first is decided before the wizard exists, not after** (#31,
+    // step-6.2). `initialStep` is read once, in a `useState` initialiser, on
+    // purpose: an effect that moved the step later would move it out from under
+    // a user who had already tapped Next. So the answer has to be in hand at
+    // mount, and the page holds the wizard back for the one render or two that
+    // `slice_count` takes to arrive. The alternative — mount at step 1 and
+    // remount on a changing `key` — reaches Review too, but by throwing away
+    // whatever the user did in between, which is the same bug wearing a hat.
+    //
+    // An errored query settles as "never sliced": `isPending` goes false, and
+    // starting at step 1 is the honest fallback when the count is unknown. A
+    // disabled query (archive) stays pending forever, hence the kind check
+    // first — archives have no `slice_count` and never wait for one.
+    const sliceCountSettled = source.kind !== 'libraryFile' || !sourceFileQuery.isPending;
+    if (!sliceCountSettled) {
+      return (
+        <div
+          data-testid="wizard-loading"
+          className="flex min-h-[calc(100vh-64px)] items-center justify-center gap-2 p-8 text-sm text-bambu-gray"
+        >
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {t('common.loading')}
+        </div>
+      );
+    }
+    return (
+      <>
+        <MobileSliceWizard
+          filename={filename}
+          onBack={handleBack}
+          errorMessage={errorMessage}
+          rail={railProps}
+          stage={stageProps}
+          actions={actionBarProps}
+          thumbnailUrl={thumbnailUrl}
+          // Never a gate on Print now — `actionBarProps.canPrintNow` is
+          // untouched by this. A file having been sliced before says nothing
+          // about whether that output matches what is on screen now.
+          initialStep={initialStepForSource(sourceFileQuery.data?.slice_count)}
+        />
+        {printModal}
+      </>
     );
   }
 
@@ -584,86 +765,16 @@ export function SlicerPage() {
       )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
-        <SlicerRail
-          className="w-full lg:w-80 lg:flex-shrink-0"
-          presets={presets}
-          presetsLoading={presetsLoading || platesQuery.isLoading}
-          presetsError={presetsError}
-          isRefreshing={isRefreshing}
-          onRefreshPresets={refreshPresets}
-          printerPreset={printerPreset}
-          onPrinterPresetChange={setPrinterPreset}
-          processPreset={processPreset}
-          onProcessPresetChange={setProcessPreset}
-          filamentPresets={filamentPresets}
-          onFilamentPresetChange={setFilamentPresetAt}
-          filamentSlots={filamentSlots}
-          filamentSlotsLoading={filamentReqsQuery.isLoading}
-          bedType={bedType}
-          onBedTypeChange={setBedType}
-          useEmbedded={useEmbedded}
-          onUseEmbeddedChange={setUseEmbedded}
-          canUseEmbedded={canUseEmbedded}
-          selectedPrinterName={selectedPrinterName}
-          compatIndex={compatIndex}
-          processFields={processFields}
-          resolvedProcess={resolvedProcess}
-          processFieldsLoading={processFieldsQuery.isLoading}
-          processFieldsError={
-            processFieldsQuery.isError ? t('slicer.processFieldsFailed') : null
-          }
-          overrides={overrides}
-          onOverridesChange={setOverrides}
-          disabled={isSlicing}
-        />
+        <SlicerRail {...railProps} className="w-full lg:w-80 lg:flex-shrink-0" />
 
         <PlateStage
+          {...stageProps}
           className="min-h-[24rem] flex-1 overflow-hidden rounded-lg border border-bambu-dark-tertiary bg-bambu-dark-secondary lg:min-h-0"
-          url={modelUrl}
-          fileType={platesMeta.length > 0 ? '3mf' : undefined}
-          plates={stagePlates}
-          initialPlate={activePlate}
-          onActivePlateChange={setActivePlate}
-          onTransformChange={layoutEditable ? handleTransformChange : undefined}
-          onObjectMetricsChange={handleObjectMetrics}
-          actionBar={
-            <SliceActionBar
-              estimate={estimate}
-              contextLabel={contextLabel}
-              onSlice={handleSlice}
-              canSlice={canSlice}
-              isSlicing={isSlicing}
-              onPrintNow={() => setPrintOpen(true)}
-              canPrintNow={canPrintNow}
-              hasCompletedSlice={lastSlice != null}
-              onSaveLayout={handleSaveLayout}
-              canSaveLayout={canSaveLayout}
-              saveLayoutHint={saveLayoutHint}
-              onResetLayout={handleResetLayout}
-              canResetLayout={canResetLayout}
-              resetLayoutHint={resetLayoutHint}
-              isSavingLayout={layoutMutation.isPending}
-            />
-          }
+          actionBar={<SliceActionBar {...actionBarProps} />}
         />
       </div>
 
-      {/* Print now hands the *produced* file to the existing PrintModal — the
-          slice's output, not the source that was sliced. */}
-      {printOpen && lastSlice && canPrintNow && (
-        <PrintModal
-          mode="create"
-          archiveName={lastSlice.target.name}
-          {...(lastSlice.target.kind === 'libraryFile'
-            ? { libraryFileId: lastSlice.target.id }
-            : { archiveId: lastSlice.target.id })}
-          onClose={() => setPrintOpen(false)}
-          onSuccess={() => {
-            setPrintOpen(false);
-            showToast(t('slicer.printQueued'), 'success');
-          }}
-        />
-      )}
+      {printModal}
     </div>
   );
 }
