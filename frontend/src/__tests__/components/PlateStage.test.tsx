@@ -31,10 +31,16 @@ import {
 } from '../../components/slicer/plateLayout';
 import type { ObjectMetrics } from '../../components/slicer/transformMath';
 import type { PlateMetadata } from '../../types/plates';
-import type { ObjectTransform, PlateLayout, StagePlate } from '../../types/plateStage';
+import type {
+  ObjectTransform,
+  PlateLayout,
+  PlateScreenAnchor,
+  StagePlate,
+} from '../../types/plateStage';
 
 interface MockViewerProps {
   selectedPlateId?: number | null;
+  plates?: number[] | null;
   buildVolume?: { x: number; y: number; z: number };
   interactive?: boolean;
   gizmoMode?: string | null;
@@ -44,6 +50,8 @@ interface MockViewerProps {
   onObjectTransform?: (objectId: string, transform: ObjectTransform) => void;
   onObjectPick?: (objectId: string) => void;
   onObjectMetrics?: (metrics: Record<string, ObjectMetrics>) => void;
+  onPlatePick?: (plateIndex: number) => void;
+  onPlateAnchors?: (anchors: Record<number, PlateScreenAnchor>) => void;
 }
 
 let viewerProps: MockViewerProps = {};
@@ -65,6 +73,7 @@ vi.mock('../../components/ModelViewer', () => ({
         data-selected-object={String(props.selectedObjectId ?? '')}
         data-touch-targets={String(!!props.touchTargets)}
         data-object-transforms={JSON.stringify(props.objectTransforms ?? {})}
+        data-plates={(props.plates ?? []).join(',')}
       />
     );
   },
@@ -92,6 +101,11 @@ function renderStage(props: Partial<ComponentProps<typeof PlateStage>> = {}) {
 
 function viewer() {
   return screen.getByTestId('model-viewer');
+}
+
+/** One of the plate labels — in the scene when the viewport has placed them. */
+function plateButton(name: string): HTMLElement {
+  return within(screen.getByRole('group', { name: 'Plates' })).getByRole('button', { name });
 }
 
 /** What the viewport is currently being told about one object's placement. */
@@ -160,31 +174,88 @@ beforeEach(() => {
 });
 
 describe('PlateStage', () => {
-  describe('plate tabs', () => {
+  describe('plates (#41)', () => {
     it('opens on the first plate and drives the viewport with it', () => {
       renderStage();
       expect(viewer()).toHaveAttribute('data-selected-plate', '1');
-      expect(screen.getByRole('tab', { name: 'Plate 1' })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      );
+      expect(plateButton('Plate 1')).toHaveAttribute('aria-pressed', 'true');
     });
 
-    it('changes the rendered plate when another tab is clicked', async () => {
+    it('lays every plate out at once, without filtering to the active one', () => {
+      // The whole point of #41: one scene, all the beds. `selectedPlateId`
+      // stops meaning "the only plate drawn" and starts meaning "the plate that
+      // will be sliced" — but it has to keep meaning the second one.
+      renderStage();
+      expect(viewer()).toHaveAttribute('data-plates', '1,2');
+      expect(viewer()).toHaveAttribute('data-selected-plate', '1');
+    });
+
+    it('hands the viewport a transform for every plate on screen', () => {
+      // Objects on the plates that are *not* active are still drawn, and
+      // `ModelViewer` resets any node it is given no transform for. A map
+      // covering only the active plate would quietly un-arrange the rest.
+      renderStage();
+      const transforms = JSON.parse(viewer().getAttribute('data-object-transforms') ?? '{}');
+      expect(Object.keys(transforms).sort()).toEqual(['2', '7']);
+    });
+
+    it('changes the active plate when another plate label is clicked', async () => {
       const user = userEvent.setup();
       renderStage();
 
-      await user.click(screen.getByRole('tab', { name: 'Plate 2' }));
+      await user.click(plateButton('Plate 2'));
 
       expect(viewer()).toHaveAttribute('data-selected-plate', '2');
-      expect(screen.getByRole('tab', { name: 'Plate 2' })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      );
-      expect(screen.getByRole('tab', { name: 'Plate 1' })).toHaveAttribute(
-        'aria-selected',
-        'false',
-      );
+      expect(plateButton('Plate 2')).toHaveAttribute('aria-pressed', 'true');
+      expect(plateButton('Plate 1')).toHaveAttribute('aria-pressed', 'false');
+      // Still every plate in the scene — activating one is not filtering.
+      expect(viewer()).toHaveAttribute('data-plates', '1,2');
+    });
+
+    it('makes a plate active when its bed is clicked in the scene', () => {
+      // The affordance that replaces the tab strip: the beds themselves.
+      const onActivePlateChange = vi.fn();
+      renderStage({ onActivePlateChange });
+
+      act(() => viewerProps.onPlatePick?.(2));
+
+      expect(viewer()).toHaveAttribute('data-selected-plate', '2');
+      expect(onActivePlateChange).toHaveBeenCalledWith(2);
+    });
+
+    it('ignores a bed click naming a plate the caller does not offer', () => {
+      const onActivePlateChange = vi.fn();
+      renderStage({ onActivePlateChange });
+
+      act(() => viewerProps.onPlatePick?.(9));
+
+      expect(viewer()).toHaveAttribute('data-selected-plate', '1');
+      expect(onActivePlateChange).not.toHaveBeenCalled();
+    });
+
+    it('follows an object picked on another plate to that plate', () => {
+      // Selection works across plates now, and the active plate has to follow
+      // it: otherwise the gizmo would move an object on plate 2 while Slice
+      // still targeted plate 1.
+      const onActivePlateChange = vi.fn();
+      renderStage({ onActivePlateChange });
+
+      act(() => viewerProps.onObjectPick?.('7'));
+
+      expect(viewer()).toHaveAttribute('data-selected-plate', '2');
+      expect(viewer()).toHaveAttribute('data-selected-object', '7');
+      expect(onActivePlateChange).toHaveBeenCalledWith(2);
+    });
+
+    it('files a transform against the plate the object stands on', () => {
+      const onTransformChange = vi.fn();
+      renderStage({ onTransformChange });
+
+      act(() => viewerProps.onObjectPick?.('7'));
+      const moved: ObjectTransform = { position: [1, 2, 3], rotation: [0, 0, 0], scale: [1, 1, 1] };
+      dragGizmo('7', moved);
+
+      expect(onTransformChange).toHaveBeenCalledWith(2, '7', moved);
     });
 
     it('reports plate switches to the caller (#15 invalidates a slice on this)', async () => {
@@ -192,12 +263,12 @@ describe('PlateStage', () => {
       const onActivePlateChange = vi.fn();
       renderStage({ onActivePlateChange });
 
-      await user.click(screen.getByRole('tab', { name: 'Plate 2' }));
+      await user.click(plateButton('Plate 2'));
       expect(onActivePlateChange).toHaveBeenCalledWith(2);
 
-      // Re-clicking the active tab is not a change.
+      // Re-selecting the active plate is not a change.
       onActivePlateChange.mockClear();
-      await user.click(screen.getByRole('tab', { name: 'Plate 2' }));
+      await user.click(plateButton('Plate 2'));
       expect(onActivePlateChange).not.toHaveBeenCalled();
     });
 
@@ -211,14 +282,16 @@ describe('PlateStage', () => {
       });
 
       expect(viewer()).toHaveAttribute('data-selected-plate', '2');
-      expect(screen.getByRole('tab', { name: 'Lid' })).toHaveAttribute('aria-selected', 'true');
-      expect(screen.getByRole('tab', { name: 'Body' })).toBeInTheDocument();
+      expect(plateButton('Lid')).toHaveAttribute('aria-pressed', 'true');
+      expect(plateButton('Body')).toBeInTheDocument();
     });
 
-    it('hides the tab strip for a single-plate source', () => {
+    it('shows no plate labels for a single-plate source', () => {
       renderStage({ plates: [plate(1, ['2'])] });
-      expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Plates' })).not.toBeInTheDocument();
       expect(viewer()).toHaveAttribute('data-selected-plate', '1');
+      // One plate is not a grid; the viewport keeps its single-bed layout.
+      expect(viewer()).toHaveAttribute('data-plates', '');
     });
 
     it('falls back to the first plate when the active one disappears', () => {
@@ -227,6 +300,88 @@ describe('PlateStage', () => {
 
       rerender(<PlateStage url="/model.3mf" plates={[plate(1, ['2'])]} />);
       expect(viewer()).toHaveAttribute('data-selected-plate', '1');
+    });
+
+    describe('labels in the scene', () => {
+      const ANCHORS: Record<number, PlateScreenAnchor> = {
+        1: { label: { x: 120, y: 40 }, badge: { x: 200, y: 180 }, visible: true },
+        2: { label: { x: 520, y: 44 }, badge: { x: 600, y: 184 }, visible: true },
+      };
+
+      it('pins each plate name over its own bed once the viewport projects them', () => {
+        renderStage();
+
+        // Before the scene has drawn: a strip, so the plates are still
+        // reachable in an environment with no WebGL at all.
+        expect(plateButton('Plate 2')).not.toHaveStyle({ position: 'absolute' });
+
+        act(() => viewerProps.onPlateAnchors?.(ANCHORS));
+
+        expect(plateButton('Plate 2')).toHaveStyle({ left: '520px', top: '44px' });
+        expect(plateButton('Plate 1')).toHaveStyle({ left: '120px', top: '40px' });
+      });
+
+      it('numbers the plates the way Studio does', () => {
+        renderStage({ plates: [plate(1, ['2']), plate(2, ['7']), plate(10, ['9'])] });
+        act(() =>
+          viewerProps.onPlateAnchors?.({
+            ...ANCHORS,
+            10: { label: { x: 90, y: 300 }, badge: { x: 150, y: 420 }, visible: true },
+          }),
+        );
+
+        expect(screen.getByText('01')).toBeInTheDocument();
+        expect(screen.getByText('02')).toBeInTheDocument();
+        expect(screen.getByText('10')).toBeInTheDocument();
+      });
+
+      it('keeps a plate the camera cannot see in the tab order', () => {
+        // Hidden, not removed: orbiting past a plate must not shuffle the
+        // keyboard order of the ones that are left.
+        renderStage();
+        act(() =>
+          viewerProps.onPlateAnchors?.({
+            ...ANCHORS,
+            2: { ...ANCHORS[2], visible: false },
+          }),
+        );
+
+        expect(plateButton('Plate 2')).toBeInTheDocument();
+        expect(plateButton('Plate 2').className).toContain('opacity-0');
+      });
+
+      it('still selects the plate when its label is clicked', async () => {
+        const user = userEvent.setup();
+        const onActivePlateChange = vi.fn();
+        renderStage({ onActivePlateChange });
+        act(() => viewerProps.onPlateAnchors?.(ANCHORS));
+
+        await user.click(plateButton('Plate 2'));
+
+        expect(onActivePlateChange).toHaveBeenCalledWith(2);
+        expect(viewer()).toHaveAttribute('data-selected-plate', '2');
+      });
+    });
+
+    describe('the phone (#11 renders this same stage)', () => {
+      it('keeps one plate at a time and the name strip', async () => {
+        // Eight beds on a 375 px screen are unreadable, unhittable and the most
+        // geometry on the device least able to draw it.
+        const user = userEvent.setup();
+        renderStage({ multiPlate: false });
+
+        expect(viewer()).toHaveAttribute('data-plates', '');
+        expect(viewer()).toHaveAttribute('data-selected-plate', '1');
+
+        await user.click(plateButton('Plate 2'));
+        expect(viewer()).toHaveAttribute('data-selected-plate', '2');
+      });
+
+      it('renders only the active plate\'s transforms', () => {
+        renderStage({ multiPlate: false });
+        const transforms = JSON.parse(viewer().getAttribute('data-object-transforms') ?? '{}');
+        expect(Object.keys(transforms)).toEqual(['2']);
+      });
     });
   });
 
@@ -246,7 +401,7 @@ describe('PlateStage', () => {
       const user = userEvent.setup();
       renderStage();
 
-      await user.click(screen.getByRole('tab', { name: 'Plate 2' }));
+      await user.click(plateButton('Plate 2'));
 
       expect(screen.getByLabelText('Position X')).toHaveTextContent('20.0');
       expect(screen.getByLabelText('Position Y')).toHaveTextContent('40.0');

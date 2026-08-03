@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import JSZip from 'jszip';
 import { swapYZ, type ObjectMetrics, type Vec3 } from './transformMath';
+import type { BedSize } from './plateGrid';
 
 export interface MeshData {
   vertices: number[];
@@ -49,6 +50,16 @@ export interface Parsed3MFData {
   buildItems: BuildItem[];
   plateBounds: Map<number, { minX: number; minY: number; maxX: number; maxY: number }>;
   plateOffsets: Map<number, { offsetX: number; offsetY: number }>;
+  /**
+   * The bed this project was authored for, from `printable_area` in
+   * `Metadata/project_settings.config`; `null` when the file does not say.
+   *
+   * Not the same thing as the printer selected in the rail, and #41 needs
+   * exactly this one: a multi-plate export bakes each plate's grid offset into
+   * its build items, and the stride of that grid is a function of the bed the
+   * *authoring* slicer used. See `plateGrid.ts`.
+   */
+  bedSize: BedSize | null;
 }
 
 // Yield to the browser event loop so the main thread can repaint, process
@@ -183,6 +194,37 @@ function componentPath(compEl: Element): string | null {
   return compEl.getAttribute('p:path') || compEl.getAttributeNS(PRODUCTION_NS, 'path') || null;
 }
 
+/**
+ * The bed footprint from a project's `printable_area`, or `null`.
+ *
+ * The value is the bed outline as `"XxY"` corner strings — `["0x0", "340x0",
+ * "340x320", "0x320"]` for an H2S — so the footprint is the extent of those
+ * corners rather than the last one. Anything unparseable, degenerate or
+ * non-rectangular-looking yields `null`, and the caller falls back to the
+ * printer's own build volume.
+ */
+function parsePrintableArea(raw: unknown): BedSize | null {
+  if (!Array.isArray(raw) || raw.length < 3) return null;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const corner of raw) {
+    if (typeof corner !== 'string') return null;
+    const [xPart, yPart] = corner.split('x');
+    const x = Number.parseFloat(xPart);
+    const y = Number.parseFloat(yPart);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+  const x = maxX - minX;
+  const y = maxY - minY;
+  return x > 0 && y > 0 ? { x, y } : null;
+}
+
 function parsePlateIdFromAttributes(element: Element): number | null {
   const plateAttribute = Array.from(element.attributes).find((attr) => {
     const name = attr.name.toLowerCase();
@@ -212,7 +254,21 @@ export async function parse3MF(arrayBuffer: ArrayBuffer): Promise<Parsed3MFData>
   const buildItems: BuildItem[] = [];
   const plateBounds = new Map<number, { minX: number; minY: number; maxX: number; maxY: number }>();
   const plateOffsets = new Map<number, { offsetX: number; offsetY: number }>();
+  let bedSize: BedSize | null = null;
   const parser = new DOMParser();
+
+  // The authoring slicer's bed, which is what the multi-plate grid strides by
+  // (#41). Read before anything else so every exit below can report it.
+  const projectSettingsFile = zip.files['Metadata/project_settings.config'];
+  if (projectSettingsFile) {
+    try {
+      const settings = JSON.parse(await projectSettingsFile.async('string')) as Record<string, unknown>;
+      bedSize = parsePrintableArea(settings.printable_area);
+    } catch {
+      // A missing or malformed project config is not a parse failure: the
+      // viewer falls back to the selected printer's build volume.
+    }
+  }
 
   // Helper to load and parse a model file from the zip
   async function loadModelFile(path: string): Promise<Document | null> {
@@ -470,11 +526,11 @@ export async function parse3MF(arrayBuffer: ArrayBuffer): Promise<Parsed3MFData>
         }
       }
     }
-    return { objects, buildItems, plateBounds, plateOffsets };
+    return { objects, buildItems, plateBounds, plateOffsets, bedSize };
   }
 
   const mainDoc = await loadModelFile(mainModelPath);
-  if (!mainDoc) return { objects, buildItems, plateBounds, plateOffsets };
+  if (!mainDoc) return { objects, buildItems, plateBounds, plateOffsets, bedSize };
 
   // Seed the index with the root model so a same-file `<component>` (one with
   // no `p:path`) resolves through exactly the same code path as an external one.
@@ -594,7 +650,7 @@ export async function parse3MF(arrayBuffer: ArrayBuffer): Promise<Parsed3MFData>
     }
   }
 
-  return { objects, buildItems, plateBounds, plateOffsets };
+  return { objects, buildItems, plateBounds, plateOffsets, bedSize };
 }
 
 function createGeometryFromMesh(mesh: MeshData): THREE.BufferGeometry {

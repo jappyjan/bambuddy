@@ -39,6 +39,28 @@
  * {@link PlateStageProps.onObjectMetricsChange}: `position = anchor + delta`,
  * with `rotation` and `scale` passed through unchanged. Writing the delta
  * straight out would drag every object to the bed's front-left corner.
+ *
+ * ## Every plate at once (#41)
+ *
+ * On anything wider than a phone the stage shows **all** the plates side by
+ * side, the way Bambu Studio does — a 3-wide grid of beds on one floor that you
+ * orbit across (`plateGrid.ts` reconstructs where each bed goes). The plate
+ * names that used to live in a tab strip are now **labels in the scene**, each
+ * a real button pinned over its own bed by the projection the viewport reports
+ * on `onPlateAnchors`. That is what makes the tab strip redundant rather than
+ * merely missing: the labels select, they are focusable, and a screen reader
+ * still reads a list of plates.
+ *
+ * Two things survive that change and must keep surviving it:
+ *
+ * 1. **There is still an active plate.** Slicing targets one
+ *    (`SliceRequest.plate`), and `onActivePlateChange` is what carries it into
+ *    `selection.plates` → `selectionFingerprint` → the Print-now gate. Clicking
+ *    a bed, a label, or an object standing on another plate all change it.
+ * 2. **The phone keeps one plate at a time.** Eight beds on a 375 px screen are
+ *    unreadable and unhittable, and it is strictly more geometry on the device
+ *    least able to draw it — so `multiPlate` defaults to "not a phone", and the
+ *    wizard keeps the name strip it always had.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -47,7 +69,13 @@ import { useTranslation } from 'react-i18next';
 import { Grid2x2, Maximize, Move, RotateCw, SendToBack } from 'lucide-react';
 import { ModelViewer, type GizmoMode } from '../ModelViewer';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import type { ObjectTransform, StageObject, StagePlate } from '../../types/plateStage';
+import type {
+  ObjectTransform,
+  PlateScreenAnchor,
+  StageObject,
+  StagePlate,
+} from '../../types/plateStage';
+import { plateNumberBadge } from './plateGrid';
 import {
   autoArrangeTransforms,
   layFlatTransform,
@@ -74,17 +102,32 @@ export interface PlateStageProps {
   /** Explicit file type; `ModelViewer` sniffs the URL extension when absent. */
   fileType?: string;
   /**
-   * Plates to offer as tabs, in display order. A single-plate or non-3MF
-   * source passes one plate and gets no tab strip.
+   * Plates to show, in display order. A single-plate or non-3MF source passes
+   * one plate and gets no plate labels at all.
    */
   plates: StagePlate[];
+  /**
+   * Lay every plate out side by side in one scene (#41). Defaults to "not a
+   * phone": the mobile wizard renders this same viewport, and a grid of beds is
+   * both illegible and needlessly heavy on a handset. `false` keeps the
+   * one-plate-at-a-time view with a name strip.
+   */
+  multiPlate?: boolean;
   /** The selected printer's build volume — the bed is drawn at this size. */
   buildVolume?: BuildVolume;
   /** Per-slot filament colours, used to tint the meshes. */
   filamentColors?: string[];
   /** 1-indexed plate to open on. Defaults to the first plate given. */
   initialPlate?: number;
-  /** Fired when the user picks a different plate tab. */
+  /**
+   * Fired when the user makes a different plate active — by its label, its bed,
+   * or by selecting an object standing on it.
+   *
+   * **Load-bearing.** `SlicerPage` feeds this into `selection.plates`, which
+   * feeds `selectionFingerprint`, which gates Print now. A plate change that
+   * did not reach the caller would leave a completed slice looking valid while
+   * the user prepared a different plate.
+   */
   onActivePlateChange?: (plateIndex: number) => void;
   /** Fired when the selected object changes, including on a plate switch. */
   onSelectedObjectChange?: (objectId: string | null) => void;
@@ -123,6 +166,7 @@ export function PlateStage({
   url,
   fileType,
   plates,
+  multiPlate,
   buildVolume,
   filamentColors,
   initialPlate,
@@ -144,6 +188,12 @@ export function PlateStage({
   const [pickedObjectId, setPickedObjectId] = useState<string | null>(null);
   const [gizmoMode, setGizmoMode] = useState<GizmoMode>('translate');
   const [metrics, setMetrics] = useState<Record<string, ObjectMetrics>>({});
+  // Where the viewport says each plate's label currently is. Empty until the
+  // scene has drawn a frame — and always empty where there is no WebGL at all,
+  // which is why the labels fall back to a strip rather than disappearing.
+  const [plateAnchors, setPlateAnchors] = useState<Record<number, PlateScreenAnchor>>({});
+
+  const showAllPlates = (multiPlate ?? !isMobile) && plates.length > 1;
 
   // A plate the caller no longer offers (the file was swapped, or a layout
   // reload dropped a plate) would leave the viewport pointed at nothing, so
@@ -187,15 +237,31 @@ export function PlateStage({
   const handlePlateClick = useCallback(
     (plateIndex: number) => {
       if (plateIndex === resolvedPlate) return;
+      if (!plates.some((plate) => plate.index === plateIndex)) return;
       setActivePlate(plateIndex);
       onActivePlateChange?.(plateIndex);
     },
-    [resolvedPlate, onActivePlateChange],
+    [plates, resolvedPlate, onActivePlateChange],
   );
 
-  const handleObjectClick = useCallback((objectId: string) => {
-    setPickedObjectId(objectId);
-  }, []);
+  /**
+   * Select an object — and, with every plate on screen at once, follow it to
+   * whichever plate it is standing on.
+   *
+   * Without that, clicking a part on plate 5 would attach the gizmo to it while
+   * the page still sliced plate 1, and every transform it emitted would be
+   * filed against the wrong plate.
+   */
+  const handleObjectClick = useCallback(
+    (objectId: string) => {
+      const owner = plates.find((plate) =>
+        plate.objects.some((object) => object.id === objectId),
+      );
+      if (owner && owner.index !== resolvedPlate) handlePlateClick(owner.index);
+      setPickedObjectId(objectId);
+    },
+    [handlePlateClick, plates, resolvedPlate],
+  );
 
   const objectLabel = useCallback(
     (object: StageObject) => object.name || t('plateStage.objectFallback', { id: object.id }),
@@ -204,30 +270,55 @@ export function PlateStage({
 
   const editable = onTransformChange != null;
 
+  /** The plates whose geometry is on screen — all of them, or just the active one. */
+  const renderedPlates = useMemo(
+    () => (showAllPlates ? plates : currentPlate ? [currentPlate] : []),
+    [showAllPlates, plates, currentPlate],
+  );
+
+  // Every rendered object's placement, keyed by 3MF object id (unique across
+  // plates). It has to cover *all* the plates on screen, not just the active
+  // one: `ModelViewer` resets any node it is not given a transform for back to
+  // as-designed, so a partial map would silently un-arrange the other plates.
+  //
   // Identity is stable per plate render, so `ModelViewer`'s apply effect does
   // not churn the scene graph on unrelated parent renders.
   const objectTransforms = useMemo(() => {
     const map: Record<string, ObjectTransform> = {};
-    for (const object of objects) map[object.id] = object.transform;
+    for (const plate of renderedPlates) {
+      for (const object of plate.objects) map[object.id] = object.transform;
+    }
     return map;
-  }, [objects]);
+  }, [renderedPlates]);
+
+  /** Which plate an object stands on, so a transform is filed against it. */
+  const plateOfObject = useCallback(
+    (objectId: string) =>
+      renderedPlates.find((plate) => plate.objects.some((object) => object.id === objectId)) ??
+      null,
+    [renderedPlates],
+  );
 
   const emitTransform = useCallback(
     (objectId: string, transform: ObjectTransform) => {
-      onTransformChange?.(resolvedPlate, objectId, transform);
+      // The object's own plate, not the active one. They agree today — picking
+      // an object activates its plate — but a transform filed against the wrong
+      // plate saves cleanly and applies to nothing.
+      const owner = plateOfObject(objectId);
+      onTransformChange?.(owner?.index ?? resolvedPlate, objectId, transform);
     },
-    [onTransformChange, resolvedPlate],
+    [onTransformChange, plateOfObject, resolvedPlate],
   );
 
   const handleGizmoTransform = useCallback(
     (objectId: string, transform: ObjectTransform) => {
       // The gizmo can only move what is selected, but the pick that selected it
       // is the caller's state; guard so a stale drag cannot address an object
-      // that has since left the plate.
-      if (!objects.some((object) => object.id === objectId)) return;
+      // that has since left the stage.
+      if (!plateOfObject(objectId)) return;
       emitTransform(objectId, transform);
     },
-    [emitTransform, objects],
+    [emitTransform, plateOfObject],
   );
 
   const handleLayFlat = useCallback(() => {
@@ -251,9 +342,14 @@ export function PlateStage({
     }
   }, [buildVolume, emitTransform, metrics, objects]);
 
-  const showPlateTabs = plates.length > 1;
+  const showPlateLabels = plates.length > 1;
   const showObjectPicker = objects.length > 1;
-  const toolbarTop = showPlateTabs ? 'top-12' : 'top-2';
+  // A label pinned to its own bed is out of the toolbar's way; a strip along
+  // the top is not.
+  const anchored = showAllPlates && Object.keys(plateAnchors).length > 0;
+  const toolbarTop = showPlateLabels && !anchored ? 'top-12' : 'top-2';
+
+  const plateIndexes = useMemo(() => plates.map((plate) => plate.index), [plates]);
 
   return (
     <div className={`flex flex-col ${className}`}>
@@ -264,6 +360,7 @@ export function PlateStage({
           buildVolume={buildVolume}
           filamentColors={filamentColors}
           selectedPlateId={resolvedPlate}
+          plates={showAllPlates ? plateIndexes : null}
           interactive={editable}
           objectTransforms={objectTransforms}
           selectedObjectId={selectedObjectId}
@@ -272,35 +369,19 @@ export function PlateStage({
           onObjectTransform={handleGizmoTransform}
           onObjectPick={handleObjectClick}
           onObjectMetrics={handleObjectMetrics}
+          onPlatePick={handlePlateClick}
+          onPlateAnchors={setPlateAnchors}
           className="w-full h-full"
         />
 
-        {showPlateTabs && (
-          <div
-            role="tablist"
-            aria-label={t('modelViewer.plates')}
-            className="absolute top-2 left-2 flex flex-wrap gap-1"
-          >
-            {plates.map((plate) => {
-              const active = plate.index === resolvedPlate;
-              return (
-                <button
-                  key={plate.index}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => handlePlateClick(plate.index)}
-                  className={`px-2 py-1 text-xs rounded border transition-colors ${
-                    active
-                      ? 'bg-bambu-green border-bambu-green text-white'
-                      : 'bg-black/45 border-bambu-dark-tertiary text-bambu-gray-light hover:text-white'
-                  }`}
-                >
-                  {plate.name || t('modelViewer.plateNumber', { number: plate.index })}
-                </button>
-              );
-            })}
-          </div>
+        {showPlateLabels && (
+          <PlateLabels
+            plates={plates}
+            activePlate={resolvedPlate}
+            anchors={anchored ? plateAnchors : null}
+            onSelect={handlePlateClick}
+            touch={touch}
+          />
         )}
 
         {(editable || toolbar) && (
@@ -383,6 +464,119 @@ export function PlateStage({
       {actionBar && (
         <div className="border-t border-bambu-dark-tertiary bg-bambu-dark/95">{actionBar}</div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The plate names, as labels in the scene (#41) — Bambu Studio's affordance,
+ * and the reason the tab strip is gone rather than merely hidden.
+ *
+ * Two layouts, one control:
+ *
+ * - **Anchored**, once the viewport has projected the beds: each name is pinned
+ *   above its own plate and a `01`-style badge sits at the plate's near corner,
+ *   both following the camera.
+ * - **Stripped**, when there are no projections to use — the phone's
+ *   one-plate-at-a-time view, and any environment without WebGL. The same
+ *   buttons, laid along the top edge.
+ *
+ * They are `<button>`s in both layouts, not canvas text, so the plate list
+ * stays keyboard-reachable and screen-reader-readable. A plate the camera
+ * cannot see keeps its button in the tab order rather than vanishing from it;
+ * it is simply invisible until focused.
+ */
+function PlateLabels({
+  plates,
+  activePlate,
+  anchors,
+  onSelect,
+  touch,
+}: {
+  plates: StagePlate[];
+  activePlate: number;
+  /** Projected positions, or `null` for the strip layout. */
+  anchors: Record<number, PlateScreenAnchor> | null;
+  onSelect: (plateIndex: number) => void;
+  touch: boolean;
+}) {
+  const { t } = useTranslation();
+
+  const label = (plate: StagePlate) =>
+    plate.name || t('modelViewer.plateNumber', { number: plate.index });
+
+  const buttonClass = (active: boolean) =>
+    `rounded border transition-colors ${touch ? 'px-3 py-1.5 text-xs' : 'px-2 py-1 text-xs'} ${
+      active
+        ? 'bg-bambu-green border-bambu-green text-white'
+        : 'bg-black/45 border-bambu-dark-tertiary text-bambu-gray-light hover:text-white'
+    }`;
+
+  if (!anchors) {
+    return (
+      <div
+        role="group"
+        aria-label={t('modelViewer.plates')}
+        className="absolute top-2 left-2 flex flex-wrap gap-1"
+      >
+        {plates.map((plate) => (
+          <button
+            key={plate.index}
+            type="button"
+            aria-pressed={plate.index === activePlate}
+            onClick={() => onSelect(plate.index)}
+            className={buttonClass(plate.index === activePlate)}
+          >
+            {label(plate)}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      role="group"
+      aria-label={t('modelViewer.plates')}
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+    >
+      {plates.map((plate) => {
+        const anchor = anchors[plate.index];
+        if (!anchor) return null;
+        const active = plate.index === activePlate;
+        return (
+          <div key={plate.index}>
+            <button
+              type="button"
+              aria-pressed={active}
+              onClick={() => onSelect(plate.index)}
+              style={{
+                left: `${anchor.label.x}px`,
+                top: `${anchor.label.y}px`,
+                transform: 'translate(-50%, calc(-100% - 10px))',
+              }}
+              className={`pointer-events-auto absolute whitespace-nowrap ${buttonClass(active)} ${
+                anchor.visible ? '' : 'opacity-0 focus:opacity-100'
+              }`}
+            >
+              {label(plate)}
+            </button>
+            <span
+              aria-hidden="true"
+              style={{
+                left: `${anchor.badge.x}px`,
+                top: `${anchor.badge.y}px`,
+                transform: 'translate(-50%, -50%)',
+              }}
+              className={`absolute select-none text-sm font-semibold tabular-nums ${
+                active ? 'text-bambu-green' : 'text-bambu-gray'
+              } ${anchor.visible ? '' : 'opacity-0'}`}
+            >
+              {plateNumberBadge(plate.index)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

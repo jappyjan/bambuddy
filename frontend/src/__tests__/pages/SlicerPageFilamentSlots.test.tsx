@@ -392,7 +392,9 @@ describe('SlicerPage — filament slots', () => {
     await user.click(screen.getByRole('button', { name: 'Add a filament slot' }));
     await waitFor(() => expect(screen.getByTestId('filament-slot-5')).toBeDefined());
 
-    await user.click(screen.getByRole('tab', { name: /Plate 2/i }));
+    // Since #41 the plates are labels in the scene, not a tab strip — the
+    // plate change this test rides on is otherwise unchanged.
+    await user.click(screen.getByRole('button', { name: /Plate 2/i }));
     await waitFor(() => expect(screen.queryByTestId('filament-slot-3')).toBeNull());
     expect(screen.getByTestId('filament-slot-2')).toBeDefined();
   });
