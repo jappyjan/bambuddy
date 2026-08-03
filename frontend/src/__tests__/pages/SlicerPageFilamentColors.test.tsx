@@ -120,6 +120,12 @@ const PRESETS: UnifiedPresetsResponse = {
  * 4. plate colour green, and `used_in_plate: false` — a slot the plate never
  *    paints with, sitting *after* the colourless one so a mis-indexed neutral
  *    would visibly swallow it
+ *
+ * The pre-pick lands a profile of the same colour on each of these, so the
+ * baseline below is the same under #45's precedence and #49's — which is the
+ * point of #49: on a well-formed file the flip is invisible. The two cases that
+ * pin the new rule therefore have to *create* the divergence by loading a
+ * different profile into a slot the file already coloured.
  */
 const FILAMENTS = [
   { slot_id: 1, type: 'PLA', color: RED, used_grams: 5, used_meters: 2, used_in_plate: true },
@@ -263,6 +269,45 @@ describe('SlicerPage — filament colours on the plate', () => {
     await user.selectOptions(screen.getByLabelText('Filament 3 (PETG)'), 'local:yellow');
     await waitFor(() => expect(viewerProps.filamentColors?.[2]).toBe(YELLOW));
     expect(viewerProps.filamentColors).toEqual([RED, BLUE, YELLOW, GREEN]);
+  });
+
+  it('recolours a slot the file gave a colour to, when its profile changes (#49)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await waitForReady();
+
+    // **The behaviour #49 changed.** Slot 1 was authored red and pre-picks the
+    // red profile, so the flip is invisible until the two disagree. Loading
+    // yellow into the slot has to move the stage: under #45's rule the embedded
+    // red won and the preview kept showing a colour the slice would not
+    // produce. The badge follows in the same breath — one function, two views.
+    await user.selectOptions(screen.getByLabelText('Filament 1 (PLA)'), 'local:yellow');
+    await waitFor(() => expect(viewerProps.filamentColors?.[0]).toBe(YELLOW));
+    expect(badgeStyleColor(1)).toBe(asRgb(YELLOW));
+    // Nothing else moved: slot 4's green is still the plate's, because its own
+    // profile pre-picked green too.
+    expect(viewerProps.filamentColors?.slice(1)).toEqual([BLUE, UNSET_SLOT_COLOR, GREEN]);
+  });
+
+  it('keeps a hand-picked colour when the profile changes underneath it (#49)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await waitForReady();
+
+    // The one thing the new precedence must not do. `slot.color` carries the
+    // user's pick *and* the plate's as-designed colour, so a `presetColor ||
+    // slot.color` swap would silently repaint this slot yellow.
+    fireEvent.change(screen.getByLabelText('Colour of filament 1'), {
+      target: { value: '#123456' },
+    });
+    await waitFor(() => expect(viewerProps.filamentColors?.[0]).toBe('#123456'));
+
+    await user.selectOptions(screen.getByLabelText('Filament 1 (PLA)'), 'local:yellow');
+    // Slot 3 is the witness that the selection actually took effect somewhere.
+    await user.selectOptions(screen.getByLabelText('Filament 3 (PETG)'), 'local:yellow');
+    await waitFor(() => expect(viewerProps.filamentColors?.[2]).toBe(YELLOW));
+    expect(viewerProps.filamentColors?.[0]).toBe('#123456');
+    expect(badgeStyleColor(1)).toBe(asRgb('#123456'));
   });
 
   it('recolours the stage when the user picks a colour on the badge', async () => {

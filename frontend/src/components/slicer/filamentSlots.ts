@@ -49,8 +49,10 @@
  * Bambu Studio carries a slot's colour on its numbered badge rather than in a
  * separate control, and #42 paints the 3D view from the same value, so a slot's
  * colour is one field with a defined precedence: the user's pick if there is
- * one, else the plate's as-designed colour. `plateColor` is kept alongside so
- * "reset to as designed" is possible after an override.
+ * one, else the colour of the filament profile picked for the slot, else the
+ * plate's as-designed colour (#49 — see `badgeColor` for why the profile
+ * outranks the file). `plateColor` is kept alongside so "reset to as designed"
+ * is possible after an override.
  *
  * `badgeColor` is that precedence, and `resolveSlotColors` is the whole list of
  * it. **Both the rail's badges and the 3D stage render from `resolveSlotColors`
@@ -227,16 +229,45 @@ export function slotColorPayload(slots: FilamentSlotState[]): (string | null)[] 
 export const UNSET_SLOT_COLOR = '#6b7280';
 
 /**
- * What a slot's numbered badge is filled with: the effective slot colour when
- * there is one, else the colour of the filament profile picked for it, else a
- * neutral grey. The badge is the only place colour is surfaced (comment 153),
- * so it has to fall back rather than render nothing.
+ * What a slot's numbered badge is filled with, in precedence order (#49):
+ *
+ * 1. **the user's own colour pick** (`colorSet`) — never overridden by anything;
+ * 2. **the picked filament profile's colour** (`presetColor`);
+ * 3. **the plate's as-designed colour** (`slot.color`, seeded from the 3MF);
+ * 4. a neutral grey.
+ *
+ * ## Why the profile outranks the file (#49 reversed #45 here)
+ *
+ * #45 shipped this the other way round — the file's embedded colour beat the
+ * picked profile — and #42 asked for the opposite. A slice preview exists to
+ * show **what this slice will produce**; if the stage renders the author's
+ * intended colour while the slicer is loaded with a different filament, the
+ * preview is lying about the output. Bambu Studio shows no such divergence only
+ * because opening a project *loads the project's filaments into the slots*, so
+ * embedded and picked agree by construction there. In Bambuddy they can differ,
+ * and when they do the user should see the disagreement rather than have the
+ * embedded colour hide it.
+ *
+ * ## Why this cannot be `presetColor || slot.color || UNSET_SLOT_COLOR`
+ *
+ * `slot.color` is the **effective** colour: it carries the user's hand-picked
+ * value *and* the plate's as-designed one, and only `colorSet` tells them apart
+ * (`seedSlots` leaves it false, `setSlotColorAt` sets it — and `slotColorPayload`
+ * reads the same flag to decide what travels to the backend). The two-operand
+ * swap would therefore demote a colour the user chose by hand below the
+ * profile's, which is the one thing precedence must never do. So `colorSet` is
+ * branched on first, and only the as-designed remainder falls behind the
+ * profile.
+ *
+ * The badge is the only place colour is surfaced (comment 153), so the chain
+ * has to bottom out in a real colour rather than render nothing.
  */
 export function badgeColor(
   slot: FilamentSlotState,
   presetColor: string | null | undefined,
 ): string {
-  return slot.color || presetColor || UNSET_SLOT_COLOR;
+  if (slot.colorSet && slot.color) return slot.color;
+  return presetColor || slot.color || UNSET_SLOT_COLOR;
 }
 
 /**

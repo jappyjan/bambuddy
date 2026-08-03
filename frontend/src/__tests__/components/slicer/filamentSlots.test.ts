@@ -179,16 +179,39 @@ describe('resolveSlotColors', () => {
     expect(resolveSlotColors(two, PRESETS, [null, null])).toEqual(['#FF0000', '#00FF00']);
   });
 
-  it('falls back to the picked profile only when the slot has no colour', () => {
+  it('lets the picked profile beat the plate\'s as-designed colour', () => {
+    // **#49 reversed #45 here.** This case used to expect `['#FF0000', …]` —
+    // the file's embedded red surviving a blue profile — because #45 resolved
+    // `slot.color || presetColor`. A slice preview exists to show what *this
+    // slice* will produce, so a profile the user has loaded into the slot now
+    // outranks the colour the file was authored with. Both slots below render
+    // the picked blue: slot 1 in spite of its embedded red, slot 2 for want of
+    // any colour of its own.
     const two = seedSlots([req(1, true, '#FF0000'), req(2, true, '')]);
-    // Slot 1 keeps the plate's colour; slot 2 has none, so its profile's shows.
     expect(resolveSlotColors(two, PRESETS, [ref('blue'), ref('blue')])).toEqual([
-      '#FF0000',
+      '#0000FF',
       '#0000FF',
     ]);
   });
 
+  it('still falls back to the plate colour when the picked profile carries none', () => {
+    // The profile only *outranks* the file — it does not erase it. A profile
+    // with no `filament_colour` (plenty of real ones have none) must leave the
+    // as-designed colour showing rather than drop the slot to the neutral.
+    const two = seedSlots([req(1, true, '#FF0000'), req(2, true, '#00FF00')]);
+    expect(resolveSlotColors(two, PRESETS, [ref('colourless'), null])).toEqual([
+      '#FF0000',
+      '#00FF00',
+    ]);
+  });
+
   it('prefers a colour the user chose over everything else', () => {
+    // **The trap in #49's "one-line swap".** `slot.color` is the *effective*
+    // colour — it holds both the user's hand-picked value and the plate's
+    // as-designed one, and only `colorSet` distinguishes them. Writing the new
+    // rule as `presetColor || slot.color || …` would therefore demote a colour
+    // the user set by hand below the profile's, and this case is what catches
+    // it: slot 1 must stay `#123456` even though its profile is blue.
     const two = setSlotColorAt(seedSlots([req(1, true, '#FF0000'), req(2, true, '')]), 0, '#123456');
     expect(resolveSlotColors(two, PRESETS, [ref('blue'), ref('blue')])).toEqual([
       '#123456',
