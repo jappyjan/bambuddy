@@ -706,7 +706,21 @@ class TestFetchBundledPresets:
             return_value={
                 "printer": [{"name": "Bambu X1C 0.4", "base_id": None}],
                 "process": [{"name": "0.20mm Standard", "base_id": "fdm_process_common"}],
-                "filament": [{"name": "Bambu PLA Basic", "base_id": "fdm_filament_pla"}],
+                "filament": [
+                    {
+                        "name": "Bambu PLA Basic",
+                        "base_id": "fdm_filament_pla",
+                        # The fork sidecar resolves this off the `inherits:`
+                        # chain; a concrete BBL filament preset states no
+                        # material of its own. Without it the SliceModal's
+                        # per-slot pre-pick has nothing to score and picks a
+                        # wrong material in silence (#47).
+                        "filament_type": "PLA",
+                        # Legitimately absent across the whole bundled tier on
+                        # both slicers — colour is a runtime spool attribute.
+                        "filament_colour": None,
+                    }
+                ],
             }
         )
         svc_mock.__aenter__ = AsyncMock(return_value=svc_mock)
@@ -721,6 +735,10 @@ class TestFetchBundledPresets:
         # Bundled presets are addressed by name (the slicer's inheritance
         # walker resolves them by name), so id == name.
         assert slots["printer"][0].id == "Bambu X1C 0.4"
+        assert slots["filament"][0].filament_type == "PLA"
+        assert slots["filament"][0].filament_colour is None
+        # The metadata is filament-only; the other two slots must not sprout it.
+        assert slots["printer"][0].filament_type is None
 
     @pytest.mark.asyncio
     async def test_cache_hit_skips_sidecar(self):
