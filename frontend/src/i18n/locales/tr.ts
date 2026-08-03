@@ -3665,6 +3665,8 @@ export default {
     noFilesDescription: 'Baskıyla ilgili dosyalarınızı organize etmeye başlamak için dosya yükleyin.',
     noMatchingFiles: 'Eşleşen dosya yok',
     noMatchingFilesDescription: 'Mevcut arama veya filtre kriterlerinizle eşleşen dosya yok.',
+    filesLoadFailed: 'Dosyalar yüklenemedi',
+    filesLoadFailedDescription: 'Dosya listesi yüklenemedi. Bağlantınızı kontrol edip yeniden deneyin.',
     clearFilters: 'Filtreleri temizle',
     printedCount: '{{count}}x yazdırıldı',
     slicedBadge: 'DİLİMLENDİ',

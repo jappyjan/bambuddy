@@ -3669,6 +3669,8 @@ export default {
     noFilesDescription: '印刷関連ファイルの整理を始めるにはファイルをアップロードしてください。',
     noMatchingFiles: '一致するファイルがありません',
     noMatchingFilesDescription: '現在の検索またはフィルター条件に一致するファイルがありません。',
+    filesLoadFailed: 'ファイルを読み込めませんでした',
+    filesLoadFailedDescription: 'ファイル一覧の読み込みに失敗しました。接続を確認して再試行してください。',
     clearFilters: 'フィルターをクリア',
     printedCount: '{{count}}回印刷済み',
     slicedBadge: 'スライス済み',

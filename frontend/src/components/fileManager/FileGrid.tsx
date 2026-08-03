@@ -14,14 +14,15 @@
  * to the grid. The grid only *reads* the selection, via `inspectedFile`, to
  * drop its column count while the panel is docked.
  *
- * Pure move out of `FileManagerPage.tsx` — the JSX below is byte-identical to
- * the region it came from. State ownership stays in the page: every value is
- * passed in, mutation objects and `navigate` included, so nothing here needed
- * rewriting.
+ * Pure move out of `FileManagerPage.tsx` — the JSX below came over unchanged,
+ * apart from the listing-error state added in #38. State ownership stays in
+ * the page: every value is passed in, mutation objects and `navigate`
+ * included, so nothing here needed rewriting.
  */
 
 import type { NavigateFunction } from 'react-router-dom';
 import {
+  AlertTriangle,
   Box,
   CalendarClock,
   CheckSquare,
@@ -104,6 +105,11 @@ interface FileGridProps {
   setShowBulkTagsModal: (show: boolean) => void;
   // Grid / list body
   isLoading: boolean;
+  // The listing query failed. Without this the empty-state chain falls through
+  // to "no matching files — clear filters", telling the user their filters are
+  // too narrow when the request actually errored (#38).
+  filesError: boolean;
+  onRetryFiles: () => void;
   topLevelView: 'internal' | 'external';
   setShowUploadModal: (show: boolean) => void;
   viewMode: 'grid' | 'list';
@@ -171,6 +177,8 @@ export function FileGrid({
   setShowMoveModal,
   setShowBulkTagsModal,
   isLoading,
+  filesError,
+  onRetryFiles,
   topLevelView,
   setShowUploadModal,
   viewMode,
@@ -519,6 +527,22 @@ export function FileGrid({
             <Loader2 className="w-8 h-8 animate-spin text-bambu-green" />
             <p className="text-sm text-bambu-gray">{t('fileManager.loadingFiles')}</p>
           </div>
+        </div>
+      ) : filesError ? (
+        /* Must sit ahead of the empty states: on error `files` is undefined,
+           which used to fall through to the "clear filters" hint (#38). */
+        <div className="flex-1 flex flex-col items-center justify-center" data-testid="file-list-error">
+          <div className="p-4 bg-bambu-dark rounded-2xl mb-4">
+            <AlertTriangle className="w-12 h-12 text-red-400/70" />
+          </div>
+          <h3 className="text-lg font-medium text-white mb-2">{t('fileManager.filesLoadFailed')}</h3>
+          <p className="text-bambu-gray text-center max-w-md mb-6">
+            {t('fileManager.filesLoadFailedDescription')}
+          </p>
+          <Button variant="secondary" onClick={onRetryFiles}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            {t('common.retry')}
+          </Button>
         </div>
       ) : files?.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center">
