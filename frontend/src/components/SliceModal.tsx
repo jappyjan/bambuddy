@@ -292,6 +292,7 @@ export function SliceModal({ source, onClose }: SliceModalProps) {
     processPreset,
     setProcessPreset,
     filamentPresets,
+    filamentTypeWarnings,
     setFilamentPresetAt,
     bedType,
     setBedType,
@@ -660,6 +661,11 @@ export function SliceModal({ source, onClose }: SliceModalProps) {
                       swatchColor={filamentSlots.length > 1 ? slot.color : undefined}
                       selectedPrinterName={selectedPrinterName}
                       compatIndex={compatIndex}
+                      // Only for slots this plate actually paints with (#47):
+                      // an unused slot's profile is auto-picked, read-only and
+                      // extrudes nothing, so a material warning on it is noise
+                      // the user cannot act on.
+                      typeWarning={isUsed ? (filamentTypeWarnings[idx] ?? null) : null}
                     />
                   );
                 })

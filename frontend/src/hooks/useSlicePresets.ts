@@ -19,11 +19,13 @@ import {
   type PrinterCompatibilityIndex,
 } from '../utils/slicerPrinterMatch';
 import {
+  filamentTypeWarningForSlot,
   findPreset,
   findPresetByName,
   pickDefault,
   pickFilamentForSlot,
   pickProcessDefault,
+  type FilamentTypeWarning,
 } from '../utils/slicePresetPicker';
 
 // The only part of a plate's filament requirement the pre-pick scores against.
@@ -203,6 +205,21 @@ export function useSlicePresets({
     });
   }, [presetsQuery.data, filamentSlots, selectedPrinterName, compatIndex]);
 
+  // The honesty guard (#47), one entry per slot in slot order.
+  //
+  // It lives here rather than in either surface's JSX for the same reason the
+  // pre-pick does: `SliceModal` and the `/slicer` rail must say the same thing
+  // about the same selection. A slot the plate does not paint with is the
+  // caller's to suppress — the hook does not know which slots are used, and a
+  // warning on a read-only slot that contributes no extrusion is noise.
+  const filamentTypeWarnings = useMemo<(FilamentTypeWarning | null)[]>(
+    () =>
+      filamentSlots.map((slot, i) =>
+        filamentTypeWarningForSlot(presetsQuery.data, slot.type, filamentPresets[i] ?? null),
+      ),
+    [presetsQuery.data, filamentSlots, filamentPresets],
+  );
+
   // Set one slot, growing/truncating the list to the current slot count first
   // so a pick made before the plate's requirements arrived lands in the right
   // index.
@@ -276,6 +293,7 @@ export function useSlicePresets({
     processPreset,
     setProcessPreset,
     filamentPresets,
+    filamentTypeWarnings,
     setFilamentPresetAt,
     insertFilamentPresetAt,
     removeFilamentPresetAt,

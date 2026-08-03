@@ -4090,6 +4090,8 @@ export default {
     previewToast: 'Analyzing {{name}} — {{elapsed}}',
     previewWithProgress: 'Analyzing {{name}} — {{stage}} ({{percent}}%) — {{elapsed}}',
     notUsedByPlate: '— not used by this plate',
+    filamentTypeMismatch: 'Material mismatch: this slot needs {{required}}, but {{selected}} is {{selectedType}}. Choose a {{required}} profile before slicing.',
+    filamentTypeUnavailable: 'No {{required}} profile found — this pick may be the wrong material. Check it before slicing.',
     noPresetsForSlot: 'No presets available',
     otherPrinters: 'Other printers',
     presetsLoadFailed: 'Failed to load presets. Open Settings → Profiles to import them first.',

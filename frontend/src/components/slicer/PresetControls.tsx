@@ -14,13 +14,14 @@
 
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { AlertTriangle } from 'lucide-react';
 import type { PresetRef, UnifiedPreset, UnifiedPresetsBySlot, UnifiedPresetsResponse } from '../../api/client';
 import {
   presetCompatibility,
   EMPTY_COMPATIBILITY_INDEX,
   type PrinterCompatibilityIndex,
 } from '../../utils/slicerPrinterMatch';
-import { type Slot } from '../../utils/slicePresetPicker';
+import { type FilamentTypeWarning, type Slot } from '../../utils/slicePresetPicker';
 
 function toRefValue(ref: PresetRef | null): string {
   // The HTML `<select>` value space is flat strings; encode source + id so
@@ -123,6 +124,19 @@ export interface PresetDropdownProps {
   compatIndex?: PrinterCompatibilityIndex;
   /** Extra classes on the `<select>` — the rail runs tighter than the modal. */
   selectClassName?: string;
+  /**
+   * The material honesty guard (#47) for a filament slot, from
+   * `useSlicePresets().filamentTypeWarnings`.
+   *
+   * Rendered here rather than by each caller so the modal, the rail and the
+   * mobile wizard cannot word it differently — and so the warning sits on the
+   * control it is about. The selection is deliberately *kept*: an empty
+   * dropdown blocks slicing outright (`SliceModal` refuses to enqueue while
+   * any slot is null), which would turn "we are not sure about this material"
+   * into "you cannot slice at all". A user who knows better must still be able
+   * to slice on purpose.
+   */
+  typeWarning?: FilamentTypeWarning | null;
 }
 
 export function PresetDropdown({
@@ -136,6 +150,7 @@ export function PresetDropdown({
   selectedPrinterName,
   compatIndex,
   selectClassName = 'px-3 py-2 text-sm',
+  typeWarning = null,
 }: PresetDropdownProps) {
   const { t } = useTranslation();
 
@@ -186,7 +201,17 @@ export function PresetDropdown({
   const totalEntries =
     sections.reduce((sum, s) => sum + s.entries.length, 0) + otherEntries.length;
 
-  return (
+  const warningText = typeWarning
+    ? typeWarning.kind === 'mismatch'
+      ? t('slice.filamentTypeMismatch', {
+          required: typeWarning.required,
+          selected: typeWarning.selectedName ?? '',
+          selectedType: typeWarning.selectedType ?? '',
+        })
+      : t('slice.filamentTypeUnavailable', { required: typeWarning.required })
+    : null;
+
+  const control = (
     <label className="block">
       <span className="flex items-center gap-2 text-xs text-bambu-gray mb-1">
         {swatchColor && (
@@ -202,7 +227,11 @@ export function PresetDropdown({
         value={toRefValue(value)}
         onChange={(e) => onChange(fromRefValue(e.target.value))}
         disabled={disabled || totalEntries === 0}
-        className={`w-full rounded-md bg-bambu-dark border border-bambu-dark-tertiary text-white focus:outline-none focus:border-bambu-gray disabled:opacity-50 ${selectClassName}`}
+        className={`w-full rounded-md bg-bambu-dark border text-white focus:outline-none disabled:opacity-50 ${
+          warningText
+            ? 'border-amber-500 focus:border-amber-400'
+            : 'border-bambu-dark-tertiary focus:border-bambu-gray'
+        } ${selectClassName}`}
       >
         <option value="">
           {totalEntries === 0
@@ -229,5 +258,23 @@ export function PresetDropdown({
         )}
       </select>
     </label>
+  );
+
+  if (!warningText) return control;
+  return (
+    <div className="block">
+      {control}
+      {/* Outside the <label> on purpose: inside, the warning text would be
+          folded into the select's accessible name and read out on every
+          option change. `role="alert"` announces it once, when it appears. */}
+      <p
+        role="alert"
+        data-testid="filament-type-warning"
+        className="mt-1 flex items-start gap-1 text-[11px] leading-snug text-amber-400"
+      >
+        <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" aria-hidden />
+        <span>{warningText}</span>
+      </p>
+    </div>
   );
 }

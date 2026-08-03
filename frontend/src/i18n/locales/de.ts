@@ -4056,6 +4056,8 @@ export default {
     previewToast: '{{name}} wird analysiert — {{elapsed}}',
     previewWithProgress: '{{name}} wird analysiert — {{stage}} ({{percent}}%) — {{elapsed}}',
     notUsedByPlate: '— wird von dieser Platte nicht verwendet',
+    filamentTypeMismatch: 'Materialkonflikt: Dieser Slot benötigt {{required}}, aber {{selected}} ist {{selectedType}}. Wähle vor dem Slicen ein {{required}}-Profil.',
+    filamentTypeUnavailable: 'Kein {{required}}-Profil gefunden — diese Auswahl könnte das falsche Material sein. Bitte vor dem Slicen prüfen.',
     noPresetsForSlot: 'Keine Profile verfügbar',
     otherPrinters: 'Andere Drucker',
     presetsLoadFailed: 'Profile konnten nicht geladen werden. Importiere sie zuerst unter Einstellungen → Profile.',
