@@ -2,27 +2,62 @@
  * Printer presets, split into the axes Bambu Studio's Printer panel offers
  * (#44): a **printer model** and a **nozzle diameter**.
  *
- * ## There is no third axis, and that is a finding rather than an omission
+ * ## There is no third axis, and that is a property of the data
  *
  * Bambu Studio's Nozzle group has two controls, Diameter and Flow. Only
- * Diameter exists in the data Bambuddy has:
+ * Diameter is an axis the presets can carry.
  *
- * - A printer preset arrives as `{ id, name, source }` (`UnifiedPreset` —
- *   `backend/app/schemas/slicer_presets.py`). There is no nozzle field of any
- *   kind on it, so **the name is the only carrier of nozzle information**, and
- *   every Bambu printer-preset name in the wild spells exactly one nozzle
- *   fact: `Bambu Lab <model> <size> nozzle`.
- * - Flow ("Standard" / "High Flow") is real elsewhere in this codebase — a
- *   3MF's `extruder_nozzle_stats` records it per extruder
- *   (`backend/app/utils/threemf_tools.py`), and the K-profile views classify
- *   physical nozzle IDs `HH*` as high-flow. Neither is preset data: neither
- *   reaches `GET /slicer/presets`, and `SliceRequest` has no field that would
- *   carry a flow choice to the slicer.
+ * A printer preset arrives as `{ id, name, source }` (`UnifiedPreset` —
+ * `backend/app/schemas/slicer_presets.py`). There is no nozzle field of any
+ * kind on it, so **the name is the only carrier of nozzle information**, and
+ * every Bambu printer-preset name in the wild spells exactly one nozzle fact:
+ * `Bambu Lab <model> <size> nozzle`.
  *
- * So a Flow control could not resolve to a preset and could not change a
- * slice. It is deliberately not modelled here. Adding it needs the preset
- * payload to carry the printer profile's `nozzle_volume_type` first — a
- * backend change, and a separate ticket.
+ * ### Flow is not preset data in either bundle (measured, #48)
+ *
+ * An earlier revision of this header claimed a Flow control merely needed the
+ * preset payload to carry `nozzle_volume_type` first — "a backend change, and
+ * a separate ticket". **That was wrong, and the pipeline it points at would
+ * not help.** Resolving `default_nozzle_volume_type` through the `inherits:`
+ * chain over every machine profile in both bundles gives:
+ *
+ * | bundle | machine profiles | resolved `default_nozzle_volume_type` |
+ * |---|---|---|
+ * | OrcaSlicer (`SoftFever/OrcaSlicer` @ main) | 73 | `["Standard"]` ×41, `["Standard","Standard"]` ×17, `null` ×15 |
+ * | BambuStudio (`bambulab/BambuStudio` @ master) | 162 | `["Standard"]` ×41, `["Standard","Standard"]` ×17, `null` ×104 |
+ *
+ * In *both* bundles exactly two profiles declare the key at all —
+ * `fdm_bbl_3dp_001_common` (`["Standard"]`) and `fdm_bbl_3dp_002_common`
+ * (`["Standard","Standard"]`). Everything else inherits it or has nothing.
+ * That includes H2D, the one printer with real High Flow nozzles, which
+ * resolves to `Standard` like the rest. No profile in either bundle carries
+ * `nozzle_volume_type` directly, and no preset name in either `BBL.json`
+ * index — machine, process or filament — contains a flow token.
+ *
+ * So surfacing it on `UnifiedPreset` would yield **one group for every
+ * printer**. It cannot become a third axis alongside model and diameter, and
+ * **a sidecar change would not fix that, because the sidecar reads these same
+ * files.** The missing thing is not a pipeline; the values are not there.
+ *
+ * The per-printer flow matrix does exist, but only as unlabelled positional
+ * arrays (`nozzle_volume` / `nozzle_type` — seven entries on a two-extruder
+ * H2D), indexed by a `NozzleVolumeType` enum that lives in the slicer binary
+ * rather than in the data. Nothing readable says which index means which flow,
+ * or which flows a given printer accepts.
+ *
+ * `nozzle_volume_type` *is* a settable key on both slicers (it appears in both
+ * `backend/tests/_fixtures/slicer_keys/*.json`), so a flow value could be
+ * applied to a slice. What cannot be derived from preset data is a preset's
+ * current flow or the set of flows a printer supports — which is what a rail
+ * control would have to state to be honest.
+ *
+ * The only genuine flow signals describe the **physically installed nozzle**,
+ * not the preset: a 3MF's `extruder_nozzle_stats`, which is BambuStudio-only
+ * and documented as under-reporting high-flow on H2D
+ * (`backend/app/utils/threemf_tools.py:373`, #1825), and the `HH*` K-profile
+ * nozzle IDs. Neither reaches `GET /slicer/presets`.
+ *
+ * See ticket #48 for the full numbers and the probes behind them.
  *
  * ## How a name is split
  *
