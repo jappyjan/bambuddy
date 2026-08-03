@@ -58,6 +58,7 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, Palette, Printer, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import type { PresetRef, UnifiedPresetsResponse } from '../../api/client';
 import type { PrinterCompatibilityIndex } from '../../utils/slicerPrinterMatch';
+import type { FilamentTypeWarning } from '../../utils/slicePresetPicker';
 import { Collapsible } from '../Collapsible';
 import { FilamentSlotGrid } from './FilamentSlotGrid';
 import type { FilamentSlotState } from './filamentSlots';
@@ -87,6 +88,9 @@ export interface SlicerRailProps {
   onProcessPresetChange: (ref: PresetRef | null) => void;
   /** One entry per plate slot, in plate order. */
   filamentPresets: (PresetRef | null)[];
+  /** The material honesty guard (#47), one entry per slot. Passed straight
+   *  through to `FilamentSlotGrid` from `useSlicePresets`. */
+  filamentTypeWarnings?: (FilamentTypeWarning | null)[];
   onFilamentPresetChange: (index: number, ref: PresetRef | null) => void;
   /**
    * The page's **owned** slot list (#45), seeded from the plate's requirements.
@@ -147,6 +151,7 @@ export function SlicerRail({
   processPreset,
   onProcessPresetChange,
   filamentPresets,
+  filamentTypeWarnings,
   onFilamentPresetChange,
   filamentSlots,
   filamentSlotsLoading,
@@ -318,6 +323,7 @@ export function SlicerRail({
       slots={filamentSlots}
       slotsLoading={filamentSlotsLoading}
       filamentPresets={filamentPresets}
+      filamentTypeWarnings={filamentTypeWarnings}
       onFilamentPresetChange={onFilamentPresetChange}
       onAddSlot={onAddFilamentSlot}
       onInsertSlotAfter={onInsertFilamentSlotAfter}

@@ -169,3 +169,101 @@ export function pickFilamentForSlot(
   // call mirrors the rest of the picker logic for shape consistency.
   return pickDefault(by, 'filament');
 }
+
+/**
+ * What the honesty guard (#47) has to say about one slot's material.
+ *
+ * - `mismatch` — the picked profile states a `filament_type` and it is **not**
+ *   the one the plate asks for. This is the reported defect exactly: a plate
+ *   declaring ABS with `Custom Generic TPU` in every dropdown.
+ * - `unavailable` — the picked profile states no type, and of the profiles
+ *   that *do* state one, none is the required material. We cannot confirm the
+ *   slot, and the metadata we have says a correct profile is not there.
+ */
+export interface FilamentTypeWarning {
+  kind: 'mismatch' | 'unavailable';
+  /** The material the plate asks for, as the plate spells it. */
+  required: string;
+  /** Name of the profile currently selected, or null when nothing is picked. */
+  selectedName: string | null;
+  /** The selected profile's own declared type, when it has one. */
+  selectedType: string | null;
+}
+
+/**
+ * Decide whether a filament slot's material can be trusted (#47).
+ *
+ * ## Why this exists
+ *
+ * `pickFilamentForSlot` awards its dominant `+10` only when the slot's required
+ * type and the candidate's `filament_type` are *both* present. The Standard
+ * (slicer-bundled) tier ships no `filament_type` at all, so on a library made
+ * of bundled profiles plus a handful of imports the type term never fires and
+ * the pick degrades to "tier bonus, then whatever is listed first". The result
+ * is a confident-looking selection of an unrelated material, and a slice that
+ * succeeds and prints badly.
+ *
+ * Fixing the metadata (the sidecar's `/profiles/bundled`) is the real repair.
+ * This function is the guard that has to hold either way: **a visible unknown
+ * beats a silent wrong material.**
+ *
+ * ## When it fires — and, more importantly, when it does not
+ *
+ * The one thing that would make this worse than the bug is firing on every slot
+ * for every user. So it distinguishes *"no ABS profile exists"* from *"we
+ * cannot tell"*:
+ *
+ * - **No slot requirement** (`type` empty — an STL, or a slot the user added
+ *   themselves) → silent. There is nothing to be wrong about.
+ * - **No filament profile anywhere carries a `filament_type`** → silent. That
+ *   is the un-enriched Standard tier on its own: we have no evidence about any
+ *   material, so we have no basis to claim the pick is wrong, and the user has
+ *   no better information to act on either. Nagging here would be noise on a
+ *   stock install.
+ * - **The picked profile declares a type** → the answer is simply whether it
+ *   equals the required one. A user who deliberately picked PLA for an ABS slot
+ *   gets told, which is the point.
+ * - **The picked profile declares nothing, but other profiles do** → we report
+ *   `unavailable` only when *none* of the typed profiles is the required
+ *   material. If a typed profile of the right material does exist, the pick was
+ *   either a deliberate override or a printer-compatibility fallback, and
+ *   second-guessing it would be a guess of our own.
+ */
+export function filamentTypeWarningForSlot(
+  by: UnifiedPresetsResponse | undefined,
+  requiredType: string,
+  selected: PresetRef | null,
+): FilamentTypeWarning | null {
+  const required = (requiredType ?? '').trim();
+  const reqType = required.toUpperCase();
+  if (!reqType || !by) return null;
+
+  let anyTyped = false;
+  let anyTypedMatch = false;
+  for (const tier of SLICE_MODAL_TIER_ORDER) {
+    for (const p of by[tier].filament) {
+      const presetType = (p.filament_type ?? '').trim().toUpperCase();
+      if (!presetType) continue;
+      anyTyped = true;
+      if (presetType === reqType) {
+        anyTypedMatch = true;
+        break;
+      }
+    }
+    if (anyTypedMatch) break;
+  }
+  // "We cannot tell" — no profile in the whole library states a material.
+  if (!anyTyped) return null;
+
+  const picked = findPreset(by, selected, 'filament');
+  const selectedType = (picked?.filament_type ?? '').trim();
+  const base = {
+    required,
+    selectedName: picked?.name ?? null,
+    selectedType: selectedType || null,
+  };
+  if (selectedType) {
+    return selectedType.toUpperCase() === reqType ? null : { kind: 'mismatch', ...base };
+  }
+  return anyTypedMatch ? null : { kind: 'unavailable', ...base };
+}

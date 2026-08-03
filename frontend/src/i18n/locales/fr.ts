@@ -4043,6 +4043,8 @@ export default {
     previewToast: 'Analyse de {{name}} – {{elapsed}}',
     previewWithProgress: 'Analyse de {{name}} – {{stage}} ({{percent}} %) – {{elapsed}}',
     notUsedByPlate: '— non utilisé par cette plaque',
+    filamentTypeMismatch: 'Matériau incorrect : cet emplacement nécessite {{required}}, mais {{selected}} est en {{selectedType}}. Choisissez un profil {{required}} avant de trancher.',
+    filamentTypeUnavailable: 'Aucun profil {{required}} trouvé — cette sélection est peut-être le mauvais matériau. Vérifiez-la avant de trancher.',
     noPresetsForSlot: 'Aucun préréglage disponible',
     otherPrinters: 'Autres imprimantes',
     presetsLoadFailed: 'Échec du chargement des préréglages. Ouvrez Paramètres → Profils pour les importer d\'abord.',

@@ -3839,6 +3839,8 @@ export default {
     previewToast: "Анализ {{name}} — {{elapsed}}",
     previewWithProgress: "Анализ {{name}} — {{stage}} ({{percent}}%) — {{elapsed}}",
     notUsedByPlate: "— не используется на этой пластине",
+    filamentTypeMismatch: "Несовпадение материала: для этого слота нужен {{required}}, но {{selected}} — это {{selectedType}}. Выберите профиль {{required}} перед нарезкой.",
+    filamentTypeUnavailable: "Профиль {{required}} не найден — возможно, выбран неверный материал. Проверьте перед нарезкой.",
     noPresetsForSlot: "Нет доступных профилей",
     otherPrinters: "Другие принтеры",
     presetsLoadFailed: "Не удалось загрузить профили. Сначала импортируйте их в разделе «Настройки → Профили».",

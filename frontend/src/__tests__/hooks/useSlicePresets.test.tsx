@@ -316,6 +316,56 @@ describe('useSlicePresets — filament pre-pick', () => {
   });
 });
 
+// The honesty guard (#47) lives on the hook so `SliceModal` and the `/slicer`
+// rail cannot say different things about the same selection. The rule itself
+// is exercised in `utils/slicePresetPickerStandardTier.test.ts`; these cases
+// pin that the hook produces one entry per slot, in slot order, against the
+// selection it actually made.
+describe('useSlicePresets — filament type warnings', () => {
+  it('flags only the slot whose material the library cannot supply', async () => {
+    const slots: SliceFilamentSlot[] = [
+      { type: 'PLA', color: '#FF0000' },
+      { type: 'PC', color: '#FFFFFF' },
+    ];
+    const { result } = renderPresets({ filamentSlots: slots });
+
+    await waitFor(() =>
+      expect(result.current.filamentTypeWarnings[1]).toMatchObject({
+        kind: 'mismatch',
+        required: 'PC',
+      }),
+    );
+    expect(result.current.filamentTypeWarnings).toHaveLength(2);
+    expect(result.current.filamentTypeWarnings[0]).toBeNull();
+  });
+
+  it('clears the warning once the user picks the right material', async () => {
+    const slots: SliceFilamentSlot[] = [{ type: 'ABS', color: '#FFFFFF' }];
+    const { result } = renderPresets({ filamentSlots: slots });
+
+    await waitFor(() => expect(result.current.filamentPresets).toEqual([refOf('f-abs-x1c-only')]));
+    expect(result.current.filamentTypeWarnings[0]).toBeNull();
+
+    act(() => result.current.setFilamentPresetAt(0, refOf('f-pla-black')));
+    await waitFor(() =>
+      expect(result.current.filamentTypeWarnings[0]).toMatchObject({
+        kind: 'mismatch',
+        required: 'ABS',
+        selectedType: 'PLA',
+      }),
+    );
+
+    act(() => result.current.setFilamentPresetAt(0, refOf('f-abs-x1c-only')));
+    await waitFor(() => expect(result.current.filamentTypeWarnings[0]).toBeNull());
+  });
+
+  it('says nothing for a slot that declares no material', async () => {
+    const { result } = renderPresets({});
+    await waitFor(() => expect(result.current.filamentPresets).toHaveLength(1));
+    expect(result.current.filamentTypeWarnings).toEqual([null]);
+  });
+});
+
 describe('useSlicePresets — embedded-settings gating', () => {
   it('offers "slice as designed" only when the picked printer is the design target', async () => {
     const { result } = renderPresets({ embeddedPrinter: X1C, embeddedProcess: '0.20mm Standard @X1C' });

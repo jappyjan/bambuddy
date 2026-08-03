@@ -41,6 +41,7 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, Minus, MoreHorizontal, Plus } from 'lucide-react';
 import type { PresetRef, UnifiedPresetsResponse } from '../../api/client';
 import type { PrinterCompatibilityIndex } from '../../utils/slicerPrinterMatch';
+import type { FilamentTypeWarning } from '../../utils/slicePresetPicker';
 import { PresetDropdown } from './PresetControls';
 import {
   canInsertAfter,
@@ -55,6 +56,12 @@ export interface FilamentSlotGridProps {
   slots: FilamentSlotState[];
   slotsLoading: boolean;
   filamentPresets: (PresetRef | null)[];
+  /**
+   * The material honesty guard (#47), one entry per slot, straight from
+   * `useSlicePresets`. The same array `SliceModal` renders, so the two entry
+   * points cannot disagree about whether a slot's material is trustworthy.
+   */
+  filamentTypeWarnings?: (FilamentTypeWarning | null)[];
   onFilamentPresetChange: (index: number, ref: PresetRef | null) => void;
   onAddSlot: () => void;
   onInsertSlotAfter: (index: number) => void;
@@ -80,6 +87,7 @@ export function FilamentSlotGrid({
   slots,
   slotsLoading,
   filamentPresets,
+  filamentTypeWarnings = [],
   onFilamentPresetChange,
   onAddSlot,
   onInsertSlotAfter,
@@ -198,6 +206,10 @@ export function FilamentSlotGrid({
                 selectedPrinterName={selectedPrinterName}
                 compatIndex={compatIndex}
                 selectClassName="px-2 py-1.5 text-xs"
+                // Same suppression as `SliceModal` (#47): a slot the plate does
+                // not paint with is auto-picked and read-only, so a material
+                // warning on it is noise the user cannot act on.
+                typeWarning={isUsed ? (filamentTypeWarnings[index] ?? null) : null}
               />
             </div>
 
