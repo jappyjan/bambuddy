@@ -412,9 +412,12 @@ describe('SlicerPage', () => {
       await user.click(sliceButton());
       await waitFor(() => expect(printNowButton().disabled).toBe(false));
 
-      // Multi-plate, so the plate travels on the request; switching tabs is a
-      // different slice.
-      await user.click(screen.getByRole('tab', { name: /Plate 2/i }));
+      // Multi-plate, so the plate travels on the request; making a different
+      // plate active is a different slice. Since #41 the plate is chosen by its
+      // label in the scene rather than by a tab — the wiring under it
+      // (`onActivePlateChange` -> `selection.plates` -> the fingerprint) is
+      // exactly what this test exists to hold still.
+      await user.click(screen.getByRole('button', { name: /Plate 2/i }));
       await waitFor(() => expect(printNowButton().disabled).toBe(true));
     });
 

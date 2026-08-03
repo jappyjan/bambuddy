@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -7,8 +7,17 @@ import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { Loader2, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { Button } from './Button';
 import { getAuthToken } from '../api/client';
-import type { ObjectTransform } from '../types/plateStage';
+import type { ObjectTransform, PlateScreenAnchor } from '../types/plateStage';
 import { linkGizmoToOrbit } from './slicer/gizmoOrbit';
+import { plateGridOrigins, type BedSize } from './slicer/plateGrid';
+import {
+  anchorsDiffer,
+  createPlateBed,
+  paintPlateBeds,
+  projectToViewport,
+  zoomedCameraPosition,
+  type PlateBed,
+} from './slicer/plateBeds';
 import {
   identityTransform,
   objectNodeToTransform,
@@ -39,6 +48,31 @@ interface ModelViewerProps {
   filamentColors?: string[];
   selectedPlateId?: number | null;
   className?: string;
+
+  // ---- Multi-plate stage (#41) ---------------------------------------------
+
+  /**
+   * Every plate to lay out in one scene, in plate order — Bambu Studio's view
+   * (#41). Two or more switches the viewport into multi-plate mode: geometry is
+   * left at the world positions the file bakes into its build items, and one
+   * bed is drawn per plate on the grid `slicer/plateGrid.ts` reconstructs.
+   *
+   * Absent, or one plate, keeps the original single-plate behaviour: only
+   * `selectedPlateId`'s geometry, centred on a single bed. That is what the
+   * phone still gets — see `PlateStage`.
+   *
+   * `selectedPlateId` does not stop meaning anything here: in multi-plate mode
+   * it is the *active* plate, drawn highlighted, and it no longer filters.
+   */
+  plates?: number[] | null;
+  /** Fired when a plate's bed — or an object standing on it — is clicked. */
+  onPlatePick?: (plateIndex: number) => void;
+  /**
+   * Where each plate's label and number badge currently are on screen, in
+   * viewport pixels. Emitted as the camera moves, and only when something
+   * actually moved, so an idle scene is silent. See {@link PlateScreenAnchor}.
+   */
+  onPlateAnchors?: (anchors: Record<number, PlateScreenAnchor>) => void;
 
   // ---- Interactive placement (#25, step-8.1) --------------------------------
   // All optional and all inert unless `interactive` is set, so the modal and
@@ -88,18 +122,20 @@ const GIZMO_SIZE_TOUCH = 1.75;
 /** A click that moves further than this is an orbit, not a selection. */
 const PICK_SLOP_PX = 5;
 
-
+/**
+ * Dispose everything under `group`. Written against `geometry` / `material`
+ * rather than `instanceof THREE.Mesh` because the plate beds are made of lines
+ * as well as meshes, and a `Line`'s geometry leaks just as happily as a mesh's.
+ */
 function disposeGroup(group: THREE.Group) {
   group.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
-      child.geometry.dispose();
-      if (Array.isArray(child.material)) {
-        for (const material of child.material) {
-          material.dispose();
-        }
-      } else {
-        child.material.dispose();
-      }
+    const drawable = child as Partial<THREE.Mesh>;
+    drawable.geometry?.dispose();
+    const material = drawable.material;
+    if (Array.isArray(material)) {
+      for (const entry of material) entry.dispose();
+    } else {
+      material?.dispose();
     }
   });
 }
@@ -111,6 +147,9 @@ export function ModelViewer({
   filamentColors,
   selectedPlateId = null,
   className = '',
+  plates,
+  onPlatePick,
+  onPlateAnchors,
   interactive = false,
   objectTransforms,
   selectedObjectId = null,
@@ -130,6 +169,15 @@ export function ModelViewer({
   const plateRef = useRef<THREE.Mesh | null>(null);
   const gridRef = useRef<THREE.GridHelper | null>(null);
   const [loading, setLoading] = useState(true);
+  // ---- Multi-plate stage (#41) ----------------------------------------------
+  const plateBedsRef = useRef<PlateBed[]>([]);
+  const plateBedGroupRef = useRef<THREE.Group | null>(null);
+  const lastAnchorsRef = useRef<Record<number, PlateScreenAnchor> | null>(null);
+  // Where the camera goes back to. In multi-plate mode "reset" cannot be the
+  // hard-coded corner the single-plate view uses: the scene is metres wide and
+  // that position is inside plate 1.
+  const homeViewRef = useRef<{ position: THREE.Vector3; target: THREE.Vector3 } | null>(null);
+  const [plateGeneration, setPlateGeneration] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [parsedData, setParsedData] = useState<Parsed3MFData | null>(null);
   const [stlGeometry, setStlGeometry] = useState<THREE.BufferGeometry | null>(null);
@@ -143,11 +191,40 @@ export function ModelViewer({
 
   // Callbacks live in refs: callers pass inline arrows, and putting them in a
   // dependency array would tear down the WebGL scene on every parent render.
-  const callbacksRef = useRef({ onObjectTransform, onObjectPick, onObjectMetrics });
-  callbacksRef.current = { onObjectTransform, onObjectPick, onObjectMetrics };
+  const callbacksRef = useRef({
+    onObjectTransform,
+    onObjectPick,
+    onObjectMetrics,
+    onPlatePick,
+    onPlateAnchors,
+  });
+  callbacksRef.current = {
+    onObjectTransform,
+    onObjectPick,
+    onObjectMetrics,
+    onPlatePick,
+    onPlateAnchors,
+  };
   // Read inside the pointer handler, which is bound once for the scene's life.
   const objectTransformsRef = useRef(objectTransforms);
   objectTransformsRef.current = objectTransforms;
+
+  // The plate list as a stable value. Callers rebuild the array every render
+  // and it feeds the effect that rebuilds the scene's geometry, so identity
+  // matters more than elegance here.
+  const plateKey = (plates ?? []).join(',');
+  const plateList = useMemo(
+    () => (plateKey === '' ? [] : plateKey.split(',').map(Number)),
+    [plateKey],
+  );
+  const multiPlate = plateList.length > 1;
+  // In multi-plate mode the selected plate is *highlighted*, not filtered — so
+  // changing it must not rebuild the geometry. Keeping the filter argument out
+  // of the effect's dependencies is what stops an 8-plate scene being re-parsed
+  // into buffers every time the user clicks a different bed.
+  const buildPlateId = multiPlate ? null : selectedPlateId;
+  const selectedPlateIdRef = useRef(selectedPlateId);
+  selectedPlateIdRef.current = selectedPlateId;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -206,19 +283,35 @@ export function ModelViewer({
       transformControls.addEventListener('objectChange', onObjectChange);
       teardown.push(() => transformControls.removeEventListener('objectChange', onObjectChange));
 
-      // Click-to-select. Distinguished from an orbit by distance, and skipped
-      // outright while the gizmo has the pointer, so grabbing a handle that
-      // happens to sit over another object cannot steal the selection.
+      teardown.push(() => {
+        transformControls.detach();
+        scene.remove(transformControls.getHelper());
+        transformControls.dispose();
+        transformControlsRef.current = null;
+      });
+    }
+
+    // Click-to-select, for objects and — since #41 — for the plate beds
+    // themselves. Distinguished from an orbit by distance, and skipped outright
+    // while the gizmo has the pointer, so grabbing a handle that happens to sit
+    // over another object cannot steal the selection.
+    //
+    // Bound whether or not the viewport is `interactive`: picking a plate is
+    // how the user chooses what to slice, and an archive — which is read-only
+    // precisely because its arrangement cannot be saved — still has to be able
+    // to choose one.
+    {
       const raycaster = new THREE.Raycaster();
       const pointerDownAt = { x: 0, y: 0, valid: false };
 
       const onPointerDown = (event: PointerEvent) => {
+        const gizmo = transformControlsRef.current;
         pointerDownAt.x = event.clientX;
         pointerDownAt.y = event.clientY;
-        pointerDownAt.valid = !transformControls.dragging && !transformControls.axis;
+        pointerDownAt.valid = !gizmo?.dragging && !gizmo?.axis;
       };
       const onPointerUp = (event: PointerEvent) => {
-        if (!pointerDownAt.valid || transformControls.dragging) return;
+        if (!pointerDownAt.valid || transformControlsRef.current?.dragging) return;
         if (
           Math.abs(event.clientX - pointerDownAt.x) > PICK_SLOP_PX ||
           Math.abs(event.clientY - pointerDownAt.y) > PICK_SLOP_PX
@@ -239,7 +332,20 @@ export function ModelViewer({
           true,
         );
         const picked = hits[0]?.object?.userData?.objectId as string | undefined;
-        if (picked) callbacksRef.current.onObjectPick?.(picked);
+        if (picked) {
+          callbacksRef.current.onObjectPick?.(picked);
+          return;
+        }
+        // Nothing hit: fall through to the beds, so clicking the empty part of
+        // a plate selects it. Objects win the tie — an object standing on a
+        // plate is always in front of it, and the caller resolves which plate
+        // that object belongs to.
+        const bedHits = raycaster.intersectObjects(
+          plateBedsRef.current.map((bed) => bed.surface),
+          false,
+        );
+        const plateIndex = bedHits[0]?.object?.userData?.plateIndex as number | undefined;
+        if (plateIndex != null) callbacksRef.current.onPlatePick?.(plateIndex);
       };
 
       renderer.domElement.addEventListener('pointerdown', onPointerDown);
@@ -247,13 +353,6 @@ export function ModelViewer({
       teardown.push(() => {
         renderer.domElement.removeEventListener('pointerdown', onPointerDown);
         renderer.domElement.removeEventListener('pointerup', onPointerUp);
-      });
-
-      teardown.push(() => {
-        transformControls.detach();
-        scene.remove(transformControls.getHelper());
-        transformControls.dispose();
-        transformControlsRef.current = null;
       });
     }
 
@@ -290,11 +389,53 @@ export function ModelViewer({
     scene.add(plate);
     plateRef.current = plate;
 
+    /**
+     * Tell the caller where each plate's label belongs on screen (#41).
+     *
+     * Runs per frame but reports only on movement: the plate labels are React
+     * elements, and re-rendering eight of them sixty times a second while the
+     * scene sits still is exactly the kind of cost a multi-plate view cannot
+     * afford. An idle camera emits nothing at all.
+     */
+    const emitPlateAnchors = () => {
+      const beds = plateBedsRef.current;
+      if (beds.length === 0) {
+        if (lastAnchorsRef.current !== null) {
+          lastAnchorsRef.current = null;
+          callbacksRef.current.onPlateAnchors?.({});
+        }
+        return;
+      }
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      if (width === 0 || height === 0) return;
+
+      const previous = lastAnchorsRef.current;
+      const next: Record<number, PlateScreenAnchor> = {};
+      let changed = previous == null || Object.keys(previous).length !== beds.length;
+      for (const bed of beds) {
+        const label = projectToViewport(bed.labelAnchor, camera, width, height);
+        const badge = projectToViewport(bed.badgeAnchor, camera, width, height);
+        const anchor: PlateScreenAnchor = {
+          label: { x: label.x, y: label.y },
+          badge: { x: badge.x, y: badge.y },
+          visible: label.visible,
+        };
+        next[bed.plateIndex] = anchor;
+        const before = previous?.[bed.plateIndex];
+        if (!before || anchorsDiffer(before, anchor)) changed = true;
+      }
+      if (!changed) return;
+      lastAnchorsRef.current = next;
+      callbacksRef.current.onPlateAnchors?.(next);
+    };
+
     // Animation loop - keep it simple for reliability
     let animationId: number;
     const animate = () => {
       animationId = requestAnimationFrame(animate);
       controls.update();
+      emitPlateAnchors();
       renderer.render(scene, camera);
     };
     animate();
@@ -380,6 +521,11 @@ export function ModelViewer({
       objectNodesRef.current = [];
       plateRef.current = null;
       gridRef.current = null;
+      if (plateBedGroupRef.current) disposeGroup(plateBedGroupRef.current);
+      plateBedGroupRef.current = null;
+      plateBedsRef.current = [];
+      lastAnchorsRef.current = null;
+      homeViewRef.current = null;
     };
   }, [url, buildVolume, fileType, t, interactive, touchTargets]);
 
@@ -410,11 +556,100 @@ export function ModelViewer({
           stlGroup.add(mesh);
           return { group: stlGroup, nodes: [] as ObjectNode[] };
         })()
-      : buildModelGroup(parsedData!, selectedPlateId ?? null, filamentColors);
+      : buildModelGroup(parsedData!, buildPlateId ?? null, filamentColors);
     const group = built.group;
     modelGroupRef.current = group;
     objectNodesRef.current = built.nodes;
     sceneRef.current.add(group);
+
+    // Whatever was on the floor before belongs to a previous file or plate list.
+    if (plateBedGroupRef.current) {
+      sceneRef.current.remove(plateBedGroupRef.current);
+      disposeGroup(plateBedGroupRef.current);
+      plateBedGroupRef.current = null;
+    }
+    plateBedsRef.current = [];
+    lastAnchorsRef.current = null;
+
+    /**
+     * The multi-plate stage (#41).
+     *
+     * Requires build items: without them `buildModelGroup` falls back to
+     * emitting every object at its own origin, so the plates would all coincide
+     * and a grid of beds under them would be a lie. An STL has no plates at all.
+     */
+    const multiPlateStage = !isStlModel && multiPlate && parsedData!.buildItems.length > 0;
+
+    if (multiPlateStage) {
+      // **No centring, no drop to the bed.** The file already places every
+      // object in one shared multi-plate space — that is exactly what #40
+      // verified — so the only correct thing to do with those coordinates is
+      // nothing. Re-centring here would slide all eight plates' contents on top
+      // of each other again, which is the bug this epic started with. An object
+      // the file puts below z=0 is drawn below its bed, as Studio draws it.
+      group.position.set(0, 0, 0);
+
+      // The bed the *authoring* slicer used, not the printer picked in the
+      // rail: the grid offsets are baked into the transforms above, and they
+      // were computed against this bed. Falling back to the build volume keeps
+      // a file that does not say at least self-consistent.
+      const bed: BedSize = parsedData!.bedSize ?? { x: buildVolume.x, y: buildVolume.y };
+      const cells = plateGridOrigins(plateList, bed);
+
+      const bedGroup = new THREE.Group();
+      const beds = cells.map((cell) => createPlateBed(cell, bed));
+      for (const entry of beds) bedGroup.add(entry.group);
+      // Read through a ref: the active plate must not be a dependency of the
+      // effect that rebuilds the geometry, or every plate click would re-parse
+      // the whole scene. The highlight effect below owns it from here.
+      paintPlateBeds(beds, selectedPlateIdRef.current);
+      sceneRef.current.add(bedGroup);
+      plateBedGroupRef.current = bedGroup;
+      plateBedsRef.current = beds;
+
+      // The single-plate furniture would sit under plate 1, at a different size.
+      if (plateRef.current) plateRef.current.visible = false;
+      if (gridRef.current) gridRef.current.visible = false;
+
+      // Frame the whole grid of beds rather than the geometry: a plate with
+      // nothing on it is still a plate the user has to be able to see and click.
+      const stageBox = new THREE.Box3();
+      for (const cell of cells) {
+        stageBox.expandByPoint(new THREE.Vector3(cell.x, 0, cell.y));
+        stageBox.expandByPoint(new THREE.Vector3(cell.x + bed.x, 0, cell.y + bed.y));
+      }
+      stageBox.union(new THREE.Box3().setFromObject(group));
+      const stageCenter = stageBox.getCenter(new THREE.Vector3());
+      const stageSize = stageBox.getSize(new THREE.Vector3());
+      const stageDistance = Math.max(stageSize.x, stageSize.y, stageSize.z) * 0.9;
+      const home = {
+        position: new THREE.Vector3(
+          stageCenter.x,
+          stageCenter.y + stageDistance * 0.85,
+          stageCenter.z + stageDistance * 0.85,
+        ),
+        target: stageCenter.clone(),
+      };
+      homeViewRef.current = home;
+      cameraRef.current.position.copy(home.position);
+      controlsRef.current.target.copy(home.target);
+      controlsRef.current.update();
+
+      const metrics: Record<string, ObjectMetrics> = {};
+      for (const entry of built.nodes) metrics[entry.objectId] = entry.metrics;
+      callbacksRef.current.onObjectMetrics?.(metrics);
+
+      setPlateGeneration((generation) => generation + 1);
+      setSceneGeneration((generation) => generation + 1);
+      setLoading(false);
+      return;
+    }
+
+    if (plateRef.current) plateRef.current.visible = true;
+    if (gridRef.current) gridRef.current.visible = true;
+    // Back to the single-plate view's own reset position; a home recorded for a
+    // grid of beds points at empty space once there is only one.
+    homeViewRef.current = null;
 
     // Get bounding box to position model
     const box = new THREE.Box3().setFromObject(group);
@@ -423,21 +658,21 @@ export function ModelViewer({
     // Always place models on the build plate (Y=0)
     group.position.y = -box.min.y;
 
-    const selectedPlateBounds = (!isStlModel && selectedPlateId != null && parsedData!.buildItems.length > 0)
-      ? parsedData!.plateBounds.get(selectedPlateId)
+    const selectedPlateBounds = (!isStlModel && buildPlateId != null && parsedData!.buildItems.length > 0)
+      ? parsedData!.plateBounds.get(buildPlateId)
       : undefined;
-    const selectedPlateOffset = (!isStlModel && selectedPlateId != null)
-      ? parsedData!.plateOffsets.get(selectedPlateId)
+    const selectedPlateOffset = (!isStlModel && buildPlateId != null)
+      ? parsedData!.plateOffsets.get(buildPlateId)
       : undefined;
     const shouldCenterOnPlate = isStlModel
       || parsedData!.buildItems.length === 0
-      || (selectedPlateId != null && !selectedPlateBounds && !selectedPlateOffset);
+      || (buildPlateId != null && !selectedPlateBounds && !selectedPlateOffset);
     const centerOffsetX = shouldCenterOnPlate ? -center.x : 0;
     const centerOffsetZ = shouldCenterOnPlate ? -center.z : 0;
 
     let plateOffsetX = 0;
     let plateOffsetZ = 0;
-    if (!isStlModel && selectedPlateId != null && parsedData!.buildItems.length > 0 && selectedPlateBounds) {
+    if (!isStlModel && buildPlateId != null && parsedData!.buildItems.length > 0 && selectedPlateBounds) {
       const plateBox = new THREE.Box3().setFromObject(group);
       plateOffsetX = plateBox.min.x - selectedPlateBounds.minX;
       plateOffsetZ = plateBox.min.z - selectedPlateBounds.minY;
@@ -446,10 +681,10 @@ export function ModelViewer({
     const plateCenterX = buildVolume.x / 2;
     const plateCenterZ = buildVolume.y / 2;
 
-    if (!isStlModel && selectedPlateId != null && parsedData!.buildItems.length > 0 && selectedPlateBounds) {
+    if (!isStlModel && buildPlateId != null && parsedData!.buildItems.length > 0 && selectedPlateBounds) {
       group.position.x = centerOffsetX - plateOffsetX;
       group.position.z = centerOffsetZ - plateOffsetZ;
-    } else if (!isStlModel && selectedPlateId != null && selectedPlateOffset) {
+    } else if (!isStlModel && buildPlateId != null && selectedPlateOffset) {
       group.position.x = centerOffsetX + (plateCenterX - selectedPlateOffset.offsetX);
       group.position.z = centerOffsetZ + (plateCenterZ - selectedPlateOffset.offsetY);
     } else if (shouldCenterOnPlate) {
@@ -492,7 +727,12 @@ export function ModelViewer({
 
     setSceneGeneration((generation) => generation + 1);
     setLoading(false);
-  }, [parsedData, stlGeometry, selectedPlateId, filamentColors, buildVolume]);
+  }, [parsedData, stlGeometry, buildPlateId, filamentColors, buildVolume, plateList, multiPlate]);
+
+  /** Keep the active plate's bed distinguished, without rebuilding anything. */
+  useEffect(() => {
+    paintPlateBeds(plateBedsRef.current, selectedPlateId);
+  }, [selectedPlateId, plateGeneration]);
 
   /**
    * Push the caller's placement deltas onto the scene graph.
@@ -534,17 +774,32 @@ export function ModelViewer({
   }, [selectedObjectId, gizmoMode, sceneGeneration]);
 
   const resetView = () => {
-    if (cameraRef.current && controlsRef.current) {
+    if (!cameraRef.current || !controlsRef.current) return;
+    // The multi-plate stage records where "the whole thing in frame" was; a
+    // grid of eight beds is metres across and the single-plate view's fixed
+    // corner is inside plate 1, which reads as the model having vanished.
+    const home = homeViewRef.current;
+    if (home) {
+      cameraRef.current.position.copy(home.position);
+      controlsRef.current.target.copy(home.target);
+    } else {
       cameraRef.current.position.set(150, 150, 150);
       controlsRef.current.target.set(0, 50, 0);
-      controlsRef.current.update();
     }
+    controlsRef.current.update();
   };
 
   const zoom = (factor: number) => {
-    if (cameraRef.current) {
-      cameraRef.current.position.multiplyScalar(factor);
-    }
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera) return;
+    // Towards what the camera is looking at, not towards the world origin: on
+    // the multi-plate stage the origin is plate 1's front-left corner, and
+    // scaling the position vector there flies the camera sideways across the
+    // grid while appearing to zoom.
+    const target = controls?.target ?? new THREE.Vector3();
+    camera.position.copy(zoomedCameraPosition(camera.position, target, factor));
+    controls?.update();
   };
 
   return (

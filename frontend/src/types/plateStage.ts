@@ -45,6 +45,25 @@ export interface StagePlate {
   objects: StageObject[];
 }
 
+/**
+ * Where one plate's on-screen furniture goes, in viewport pixels (#41).
+ *
+ * The multi-plate stage labels every plate *in the scene*, the way Bambu Studio
+ * does — which means a DOM label has to follow a 3D bed as the camera orbits.
+ * The viewport projects the two anchor points and reports them here; the stage
+ * renders real buttons at those coordinates rather than drawing text into the
+ * canvas, so the labels stay translatable, focusable and readable by a screen
+ * reader, and clicking one is the same event as clicking the plate.
+ */
+export interface PlateScreenAnchor {
+  /** Centre of the plate's back edge — where the name sits, above the bed. */
+  label: { x: number; y: number };
+  /** The plate's near-right corner — where Studio prints `01`, `02`, … */
+  badge: { x: number; y: number };
+  /** False while the plate is behind the camera, where a projection inverts. */
+  visible: boolean;
+}
+
 /** One entry of the persisted `plate_layout` (spec §4). */
 export interface PlateLayoutEntry {
   object_id: string;
