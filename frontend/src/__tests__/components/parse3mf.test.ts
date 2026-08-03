@@ -28,6 +28,10 @@
  * committed. Bounding boxes are preserved exactly, so the world-position
  * assertions below are the real placements Bambu Studio renders.
  *
+ * `Metadata/project_settings.config` is the original's, carried over whole
+ * (#41): its `printable_area` is the bed Studio strode the plate grid by, and
+ * the grid test below is meaningless without it.
+ *
  * Expected values were computed independently of this parser, straight from the
  * XML, so they pin behaviour rather than restating the implementation.
  */
@@ -38,6 +42,7 @@ import { resolve } from 'node:path';
 import JSZip from 'jszip';
 import * as THREE from 'three';
 import { parse3MF, buildModelGroup, type Parsed3MFData } from '../../components/slicer/parse3mf';
+import { plateGridOrigin } from '../../components/slicer/plateGrid';
 
 // Relative to the vitest root (`frontend/`). `import.meta.url` is an http URL
 // under the jsdom environment, so it cannot be resolved to a path here.
@@ -205,6 +210,36 @@ describe('parse3MF — Attractap V3, a real multi-plate split-model 3MF', () => 
     expect(parsed.objects.get('18')!.meshes.map((mesh) => mesh.extruder)).toEqual([3]);
   });
 
+  it('reads the bed the project was authored for', () => {
+    // `printable_area` in `Metadata/project_settings.config`, verbatim from the
+    // owner's file: a Bambu Lab H2S. #41 strides the plate grid by this, not by
+    // whatever printer happens to be selected in the rail — the offsets are
+    // already baked into the transforms above, and Studio computed them against
+    // *this* bed.
+    expect(parsed.bedSize).toEqual({ x: 340, y: 320 });
+  });
+
+  it("puts every plate's objects inside its own bed on Studio's grid (#41)", () => {
+    // **The assertion #41 stands on.** The file lays all eight plates out in
+    // one shared space; `plateGrid` reconstructs where each bed goes from
+    // nothing but the plate number and the bed size. If the two disagree the
+    // models float between the plates — visually indistinguishable from the #40
+    // defect this epic started with.
+    const bed = parsed.bedSize!;
+    for (const [plateId, objectIds] of Object.entries(EXPECTED_PLATES)) {
+      const cell = plateGridOrigin(Number(plateId), bed);
+      for (const objectId of objectIds) {
+        const { box } = EXPECTED[objectId];
+        // three.js x is the file's x; three.js z is the file's y.
+        const label = `plate ${plateId} object ${objectId}`;
+        expect(box.min[0] - cell.x, `${label} min x`).toBeGreaterThanOrEqual(0);
+        expect(box.max[0] - cell.x, `${label} max x`).toBeLessThanOrEqual(bed.x);
+        expect(box.min[2] - cell.y, `${label} min y`).toBeGreaterThanOrEqual(0);
+        expect(box.max[2] - cell.y, `${label} max y`).toBeLessThanOrEqual(bed.y);
+      }
+    }
+  });
+
   it('splits an object into one mesh per extruder so #42 can colour them', () => {
     const { group } = buildModelGroup(parsed, 1);
     const meshes: THREE.Mesh[] = [];
@@ -295,6 +330,14 @@ describe('parse3MF — nested and same-file component references', () => {
       { min: [78.0, 0.0, 98.0], max: [121.0, 7.0, 102.0] },
       'nested + same-file object 10',
     );
+  });
+
+  it('reports no bed size for a file that does not carry one', async () => {
+    // A hand-rolled or converted 3MF has no `project_settings.config`. The grid
+    // then falls back to the selected printer's build volume rather than
+    // guessing a bed — see `ModelViewer`.
+    const parsed = await parse3MF(await fixture());
+    expect(parsed.bedSize).toBeNull();
   });
 
   it('does not fall over on a component cycle', async () => {

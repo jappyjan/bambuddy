@@ -17,7 +17,7 @@ Most of what follows is obvious when it breaks. The parts marked **⚠ silent fa
 |---|---|
 | A **project 3MF** (BambuStudio/OrcaSlicer export, single object) | The baseline happy path |
 | A **multi-object 3MF** (2+ objects on one plate) | The only file that can catch a placement bug — the applier deliberately forgives a lone object, so a single-object file passes either way |
-| A **multi-plate 3MF** | Plate tabs, per-plate layout |
+| A **multi-plate 3MF** | The side-by-side plate grid, per-plate layout |
 | An **STL** | Non-project files take a different, slower route (§5.3) |
 | A **non-project 3MF** (Fusion/Blender export) if you have one | Same route as the STL |
 | A **file sliced before this branch** | No backfill was done, on purpose (§1.3) |
@@ -214,7 +214,11 @@ Validation is all-or-nothing and every problem comes back in one 422, joined by 
 On the stage.
 
 - [ ] **Gizmo toolbar**, vertical, overlaid top-left: **Move**, **Rotate**, **Scale**, **Lay flat**, **Auto-arrange**. The first three are modes; Move is the default. All five need a selection (Auto-arrange needs objects).
-- [ ] **Plate tabs** top-left — only when the file has more than one plate.
+- [ ] **All plates side by side** on one floor, 3 across and wrapping to further rows, each on its own bed — only when the file has more than one plate. Orbit and pan across them.
+- [ ] Each plate carries its **name as a label above its bed** and a **`01`-style number** at its near-right corner, both following the camera as you orbit.
+- [ ] **Clicking a plate's bed or its label makes it active**; the active plate's bed is tinted green while the rest stay grey. Slice targets the active plate.
+- [ ] Clicking an object standing on a *different* plate selects that object **and** makes its plate active.
+- [ ] **On a phone the stage still shows one plate at a time**, with the plate names as a strip along the top edge — deliberately not the grid.
 - [ ] **Object picker** top-right — only when the plate has more than one object.
 - [ ] **Transform readout** bottom-right: **Position** (mm), **Rotation** (°), **Scale** (%), three editable number inputs each, committing on blur/Enter. Scale is shown as a percentage.
 - [ ] Dragging a gizmo handle moves the model and updates the readout live. **The camera must not orbit while you drag a handle.**

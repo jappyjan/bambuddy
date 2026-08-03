@@ -412,8 +412,17 @@ export function MobileSliceWizard({
           </div>
           {/* Same stage the desktop mounts. `onTransformChange` is whatever the
               page gave us — absent for an archive, which is what keeps the
-              gizmos off a source whose arrangement can never be saved. */}
-          <PlateStage {...stage} className="min-h-0 flex-1" />
+              gizmos off a source whose arrangement can never be saved.
+
+              `multiPlate={false}` is the one deliberate difference (#41): the
+              desktop lays every plate out side by side, and on a handset that
+              is a grid of thumbnail-sized beds nobody can read or hit — on the
+              device least able to draw the extra geometry. The phone keeps one
+              plate at a time behind the name strip, which is also the only
+              layout the wizard's own step flow has room for. Passed
+              explicitly rather than left to the stage's "not a phone" default,
+              so the choice is visible where it is made. */}
+          <PlateStage {...stage} multiPlate={false} className="min-h-0 flex-1" />
         </div>
       )}
     </div>
