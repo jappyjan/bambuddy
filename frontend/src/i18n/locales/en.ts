@@ -4199,6 +4199,20 @@ export default {
     noSource: 'No file to slice. Open a file in the File Manager and choose Slice.',
     railLabel: 'Slice settings',
     presetsHeading: 'Profiles',
+    // The rail's printer group (#44) — Bambu Studio's own split: printer
+    // model + build plate as cards, nozzle diameter below them. There is no
+    // Flow control because no preset data carries flow; see
+    // `utils/printerPresetAxes.ts`.
+    printerModel: 'Printer',
+    printerModelSelect: 'Select a printer',
+    nozzleHeading: 'Nozzle',
+    nozzleDiameter: 'Diameter',
+    nozzleDiameterSelect: 'Select a diameter',
+    nozzleDiameterNone: 'Not specified by this profile',
+    nozzleDiameterNoPrinter: 'Choose a printer first',
+    nozzleDiameterUnavailable: '{{diameter}} mm — no profile',
+    printerNoMatch: 'No printer profile for {{model}} with a {{diameter}} mm nozzle. Pick a diameter this printer has.',
+    printerNoMatchNoDiameter: 'No printer profile for {{model}}.',
     saveLayout: 'Save layout',
     saveLayoutTitle: 'Save this arrangement — it is applied every time this file is sliced.',
     saveLayoutClean: 'The plate already matches the saved arrangement.',

@@ -241,9 +241,11 @@ describe('SlicerPage on a phone', () => {
     renderWizard();
     await waitForWizard();
 
-    // Step 1 — the printer step, and only the printer step.
+    // Step 1 — the printer step, and only the printer step. The printer is
+    // picked by model + nozzle diameter since #44, so the model select is what
+    // identifies that step now.
     expect(stepCounter()).toContain('Step 1 of 4');
-    expect(await screen.findByLabelText('Printer profile')).toBeDefined();
+    expect(await screen.findByLabelText('Printer')).toBeDefined();
     expect(screen.queryByTestId('process-settings-editor')).toBeNull();
 
     await walkToReview(user);
@@ -422,9 +424,9 @@ describe('SlicerPage on a phone', () => {
     // The *first* painted screen is Review — not step 1 that then jumps, which
     // is what seeding `initialStep` after mount would produce.
     expect(stepCounter()).toContain('Step 4 of 4');
-    // Nothing from the editing steps is on screen: the printer dropdown lives
+    // Nothing from the editing steps is on screen: the printer controls live
     // on step 1 and the settings editor on step 3.
-    expect(screen.queryByLabelText('Printer profile')).toBeNull();
+    expect(screen.queryByLabelText('Printer')).toBeNull();
     expect(screen.queryByTestId('process-settings-editor')).toBeNull();
 
     // The chips are a summary, so they say what the steps behind hold — the
@@ -459,7 +461,7 @@ describe('SlicerPage on a phone', () => {
 
     await user.click(screen.getByTestId('wizard-chip-printer'));
     await waitFor(() => expect(stepCounter()).toContain('Step 1 of 4'));
-    expect(await screen.findByLabelText('Printer profile')).toBeDefined();
+    expect(await screen.findByLabelText('Printer')).toBeDefined();
 
     // Back the way you came — one tap, not three Nexts.
     await user.click(screen.getByTestId('wizard-to-review'));
