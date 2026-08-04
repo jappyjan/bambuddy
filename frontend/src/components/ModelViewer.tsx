@@ -655,9 +655,6 @@ export function ModelViewer({
     const box = new THREE.Box3().setFromObject(group);
     const center = box.getCenter(new THREE.Vector3());
 
-    // Always place models on the build plate (Y=0)
-    group.position.y = -box.min.y;
-
     const selectedPlateBounds = (!isStlModel && buildPlateId != null && parsedData!.buildItems.length > 0)
       ? parsedData!.plateBounds.get(buildPlateId)
       : undefined;
@@ -667,6 +664,25 @@ export function ModelViewer({
     const shouldCenterOnPlate = isStlModel
       || parsedData!.buildItems.length === 0
       || (buildPlateId != null && !selectedPlateBounds && !selectedPlateOffset);
+
+    /**
+     * Drop to the bed only for a file that authors no placement of its own
+     * (#54) — the same condition the X/Z centring uses, and for the same
+     * reason.
+     *
+     * An STL has an arbitrary origin and no build items, so without this it
+     * hangs in the air or sinks; centring it and sitting it on Y=0 is the only
+     * sensible reading. A 3MF with build items and resolved plate bounds or
+     * offset has already said where its objects go, in all three axes, and
+     * re-seating it on the bed contradicts that — exactly as the multi-plate
+     * path above declines to (`An object the file puts below z=0 is drawn
+     * below its bed, as Studio draws it`). Dropping it here made the single
+     * plate view disagree with the multi-plate one on the same file.
+     */
+    if (shouldCenterOnPlate) {
+      group.position.y = -box.min.y;
+    }
+
     const centerOffsetX = shouldCenterOnPlate ? -center.x : 0;
     const centerOffsetZ = shouldCenterOnPlate ? -center.z : 0;
 

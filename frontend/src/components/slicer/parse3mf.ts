@@ -89,18 +89,30 @@ function parseTransform3MF(transformStr: string | null): THREE.Matrix4 {
     return matrix; // Identity matrix
   }
 
-  // 3MF transform is a 3x4 affine matrix in row-major order:
-  // "m00 m01 m02 m10 m11 m12 m20 m21 m22 m30 m31 m32"
-  // Where (m30, m31, m32) is the translation vector
+  // A 3MF `transform` is 12 numbers, "m00 m01 m02 m10 m11 m12 m20 m21 m22 m30
+  // m31 m32", written under the **row-vector** convention: the spec's matrix
+  // multiplies on the right (`v' = v · M`), so consecutive triples are the
+  // *rows* of that matrix and (m30, m31, m32) is the translation.
+  //
+  // THREE.js is **column-vector** (`v' = M · v`), so the 3x3 linear part has to
+  // be transposed on the way in: consecutive triples become the *columns* of
+  // the THREE linear block. Feeding them in as rows loads the transpose, which
+  // for a rotation is its inverse — the object comes out rotated the wrong way
+  // while the (correctly placed) translation still assumes the authored
+  // rotation, so it lands askew and often partly below z=0 (#54). An identity,
+  // pure-translation or pure-scale transform is symmetric and hides this,
+  // which is why only *some* parts looked wrong.
+  //
+  // The backend reads the same attribute the same way — see
+  // `plate_layout.py::_parse_transform`, `L[i][j] = v[3 * j + i]`.
   const values = transformStr.trim().split(/\s+/).map(parseFloat);
   if (values.length >= 12) {
-    // Three.js Matrix4.set takes row-major order arguments:
-    // set(n11, n12, n13, n14, n21, n22, n23, n24, n31, n32, n33, n34, n41, n42, n43, n44)
-    // 3MF row-major: m00, m01, m02, m10, m11, m12, m20, m21, m22, m30, m31, m32
+    // Three.js Matrix4.set takes its arguments in row-major order:
+    // set(n11, n12, n13, n14, n21, n22, n23, n24, n31, n32, n33, n34, ...)
     matrix.set(
-      values[0], values[1], values[2], values[9],   // m00, m01, m02, tx
-      values[3], values[4], values[5], values[10],  // m10, m11, m12, ty
-      values[6], values[7], values[8], values[11],  // m20, m21, m22, tz
+      values[0], values[3], values[6], values[9],   // m00, m10, m20, tx
+      values[1], values[4], values[7], values[10],  // m01, m11, m21, ty
+      values[2], values[5], values[8], values[11],  // m02, m12, m22, tz
       0, 0, 0, 1
     );
   }
