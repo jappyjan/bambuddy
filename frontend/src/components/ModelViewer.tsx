@@ -97,8 +97,13 @@ interface ModelViewerProps {
   touchTargets?: boolean;
   /** Fired throughout a gizmo drag with the object's new delta. */
   onObjectTransform?: (objectId: string, transform: ObjectTransform) => void;
-  /** Fired when an object is clicked in the viewport. */
-  onObjectPick?: (objectId: string) => void;
+  /**
+   * Fired when an object is clicked in the viewport — and with `null` when a
+   * click lands on anything that is *not* an object, which is how the user
+   * selects nothing (#55). A bed click reports both: `null` here and the plate
+   * on {@link ModelViewerProps.onPlatePick}.
+   */
+  onObjectPick?: (objectId: string | null) => void;
   /**
    * Fired once per parse with each object's as-designed anchor and size in bed
    * millimetres. The anchor is what a persisted `position` is measured from
@@ -336,8 +341,12 @@ export function ModelViewer({
           callbacksRef.current.onObjectPick?.(picked);
           return;
         }
-        // Nothing hit: fall through to the beds, so clicking the empty part of
-        // a plate selects it. Objects win the tie — an object standing on a
+        // No object hit: the click selects nothing (#55). Reported for every
+        // miss — a bed, or empty space past the beds entirely — so there is
+        // always a gesture that gets the user back to no selection.
+        callbacksRef.current.onObjectPick?.(null);
+        // Then fall through to the beds, so clicking the empty part of a plate
+        // also makes it active. Objects win the tie — an object standing on a
         // plate is always in front of it, and the caller resolves which plate
         // that object belongs to.
         const bedHits = raycaster.intersectObjects(

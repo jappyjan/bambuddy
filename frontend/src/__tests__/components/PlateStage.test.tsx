@@ -48,7 +48,7 @@ interface MockViewerProps {
   touchTargets?: boolean;
   objectTransforms?: Record<string, ObjectTransform>;
   onObjectTransform?: (objectId: string, transform: ObjectTransform) => void;
-  onObjectPick?: (objectId: string) => void;
+  onObjectPick?: (objectId: string | null) => void;
   onObjectMetrics?: (metrics: Record<string, ObjectMetrics>) => void;
   onPlatePick?: (plateIndex: number) => void;
   onPlateAnchors?: (anchors: Record<number, PlateScreenAnchor>) => void;
@@ -160,6 +160,19 @@ function ControlledStage({
 
 function renderControlled(props: Parameters<typeof ControlledStage>[0] = {}) {
   return render(<ControlledStage {...props} />);
+}
+
+/**
+ * Pick an object in the viewport.
+ *
+ * Explicit in almost every test since #55: the stage opens with **nothing**
+ * selected, so a test about the readout or the gizmos has to say what it is
+ * reading out.
+ */
+function selectObject(objectId: string) {
+  act(() => {
+    viewerProps.onObjectPick?.(objectId);
+  });
 }
 
 /** Simulate a gizmo drag: the viewport reporting a new placement. */
@@ -388,6 +401,7 @@ describe('PlateStage', () => {
   describe('transform readout', () => {
     it('reflects the selected object', () => {
       renderStage();
+      selectObject('2');
 
       // Plate 1's object sits at [10, 20, 0] with a 45° Z rotation.
       expect(screen.getByLabelText('Position X')).toHaveTextContent('10.0');
@@ -397,11 +411,18 @@ describe('PlateStage', () => {
       expect(screen.getByLabelText('Scale X')).toHaveTextContent('100%');
     });
 
-    it("follows the plate switch to that plate's object", async () => {
+    it("reads out an object picked on the plate the user switched to", async () => {
       const user = userEvent.setup();
       renderStage();
+      selectObject('2');
 
       await user.click(plateButton('Plate 2'));
+
+      // The picked object is not on this plate, and since #55 nothing takes
+      // its place — the readout is empty until the user picks something here.
+      expect(screen.getByText('No object selected')).toBeInTheDocument();
+
+      selectObject('7');
 
       expect(screen.getByLabelText('Position X')).toHaveTextContent('20.0');
       expect(screen.getByLabelText('Position Y')).toHaveTextContent('40.0');
@@ -433,11 +454,16 @@ describe('PlateStage', () => {
         onSelectedObjectChange,
       });
 
-      // Defaults to the first object.
-      expect(screen.getByLabelText('Position X')).toHaveTextContent('1.0');
-      expect(onSelectedObjectChange).toHaveBeenCalledWith('2');
+      // Nothing to begin with (#55) — not the first object.
+      expect(screen.getByText('No object selected')).toBeInTheDocument();
+      expect(onSelectedObjectChange).toHaveBeenCalledWith(null);
 
       const picker = screen.getByRole('listbox', { name: 'Objects' });
+      await user.click(within(picker).getByRole('option', { name: 'Base' }));
+
+      expect(screen.getByLabelText('Position X')).toHaveTextContent('1.0');
+      expect(onSelectedObjectChange).toHaveBeenLastCalledWith('2');
+
       await user.click(within(picker).getByRole('option', { name: 'Bracket' }));
 
       expect(screen.getByLabelText('Position X')).toHaveTextContent('40.0');
@@ -449,6 +475,7 @@ describe('PlateStage', () => {
 
     it('shows no picker for a single-object plate but still reads it out', () => {
       renderStage({ plates: [plate(1, ['2'])] });
+      selectObject('2');
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
       expect(screen.getByLabelText('Position X')).toHaveTextContent('10.0');
     });
@@ -473,6 +500,7 @@ describe('PlateStage', () => {
           },
         ],
       });
+      selectObject('2');
       expect(screen.getByLabelText('Position X')).toHaveTextContent('0.0');
       expect(screen.getByLabelText('Position X').textContent).not.toContain('-');
     });
@@ -485,6 +513,84 @@ describe('PlateStage', () => {
       expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
       expect(viewer()).toHaveAttribute('data-interactive', 'false');
       expect(viewer()).toHaveAttribute('data-gizmo-mode', '');
+    });
+  });
+
+  /**
+   * Selecting nothing (#55).
+   *
+   * The stage used to promote the plate's first object into the selection so
+   * the readout always had a subject, which left the user with no way to have
+   * nothing selected — and no way back out of a selection at all. The empty
+   * state the UI already drew was unreachable.
+   */
+  describe('empty selection (#55)', () => {
+    it('opens a populated plate with nothing selected', () => {
+      renderStage();
+
+      expect(screen.getByText('No object selected')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Position X')).not.toBeInTheDocument();
+      expect(viewer()).toHaveAttribute('data-selected-object', '');
+    });
+
+    it('reports the empty selection to the caller', () => {
+      const onSelectedObjectChange = vi.fn();
+      renderStage({ onSelectedObjectChange });
+      expect(onSelectedObjectChange).toHaveBeenCalledWith(null);
+    });
+
+    it('disables the transform tools but not auto-arrange', () => {
+      renderControlled({ initialPlates: [plate(1, ['2'])] });
+
+      for (const name of ['Move', 'Rotate', 'Scale', 'Lay flat']) {
+        expect(screen.getByRole('button', { name })).toBeDisabled();
+      }
+      // Arranging a plate is not an operation on a selection.
+      expect(screen.getByRole('button', { name: 'Auto-arrange' })).toBeEnabled();
+    });
+
+    it('leaves every picker chip unselected', () => {
+      renderStage({ plates: [plate(1, ['2', '3'])] });
+
+      const picker = screen.getByRole('listbox', { name: 'Objects' });
+      for (const option of within(picker).getAllByRole('option')) {
+        expect(option).toHaveAttribute('aria-selected', 'false');
+      }
+    });
+
+    it('clears the selection when a click hits no object', () => {
+      // What `ModelViewer` reports for a click landing on a bed or on empty
+      // space: `null`, alongside whatever plate the bed belonged to.
+      const onSelectedObjectChange = vi.fn();
+      renderStage({ onSelectedObjectChange });
+      selectObject('2');
+      expect(viewer()).toHaveAttribute('data-selected-object', '2');
+
+      act(() => viewerProps.onObjectPick?.(null));
+
+      expect(viewer()).toHaveAttribute('data-selected-object', '');
+      expect(screen.getByText('No object selected')).toBeInTheDocument();
+      expect(onSelectedObjectChange).toHaveBeenLastCalledWith(null);
+    });
+
+    it('clears the selection on Escape', async () => {
+      const user = userEvent.setup();
+      renderStage();
+      selectObject('2');
+      expect(viewer()).toHaveAttribute('data-selected-object', '2');
+      expect(screen.getByLabelText('Position X')).toBeInTheDocument();
+
+      await user.keyboard('{Escape}');
+
+      expect(viewer()).toHaveAttribute('data-selected-object', '');
+      expect(screen.getByText('No object selected')).toBeInTheDocument();
+    });
+
+    it('still selects an object clicked in the viewport', () => {
+      renderStage();
+      selectObject('2');
+      expect(viewer()).toHaveAttribute('data-selected-object', '2');
+      expect(screen.queryByText('No object selected')).not.toBeInTheDocument();
     });
   });
 
@@ -502,6 +608,7 @@ describe('PlateStage', () => {
     it('drives the viewport gizmo from the toolbar, one mode at a time', async () => {
       const user = userEvent.setup();
       renderControlled();
+      selectObject('2');
 
       expect(viewer()).toHaveAttribute('data-gizmo-mode', 'translate');
       expect(screen.getByRole('button', { name: 'Move' })).toHaveAttribute('aria-pressed', 'true');
@@ -527,6 +634,9 @@ describe('PlateStage', () => {
         ],
       });
 
+      // Nothing until something is picked (#55).
+      expect(viewer()).toHaveAttribute('data-selected-object', '');
+      await user.click(screen.getByRole('option', { name: 'Base' }));
       expect(viewer()).toHaveAttribute('data-selected-object', '2');
       await user.click(screen.getByRole('option', { name: 'Bracket' }));
       expect(viewer()).toHaveAttribute('data-selected-object', '3');
@@ -553,6 +663,7 @@ describe('PlateStage', () => {
 
     it('updates the readout when a model is dragged', () => {
       renderControlled({ initialPlates: [plate(1, ['2'])] });
+      selectObject('2');
 
       expect(screen.getByLabelText('Position X')).toHaveValue(10);
 
@@ -599,6 +710,7 @@ describe('PlateStage', () => {
     it('moves the model when a number is typed into the readout', async () => {
       const user = userEvent.setup();
       renderControlled({ initialPlates: [plate(1, ['2'])] });
+      selectObject('2');
 
       expect(renderedTransform('2').position).toEqual([10, 20, 0]);
 
@@ -615,6 +727,7 @@ describe('PlateStage', () => {
     it('commits a typed value on Enter as well as on blur', async () => {
       const user = userEvent.setup();
       renderControlled({ initialPlates: [plate(1, ['2'])] });
+      selectObject('2');
 
       const rotation = screen.getByLabelText('Rotation Z');
       await user.clear(rotation);
@@ -635,6 +748,7 @@ describe('PlateStage', () => {
           onTransformChange={onTransformChange}
         />,
       );
+      selectObject('2');
 
       const x = screen.getByLabelText('Position X');
       await user.clear(x);
@@ -652,6 +766,7 @@ describe('PlateStage', () => {
     it('types scale as a percentage and stores it as a multiplier', async () => {
       const user = userEvent.setup();
       renderControlled({ initialPlates: [plate(1, ['2'])] });
+      selectObject('2');
 
       expect(screen.getByLabelText('Scale X')).toHaveValue(100);
 
@@ -666,6 +781,7 @@ describe('PlateStage', () => {
     it('refuses a zero scale, which no gizmo could grow back', async () => {
       const user = userEvent.setup();
       renderControlled({ initialPlates: [plate(1, ['2'])] });
+      selectObject('2');
 
       const scale = screen.getByLabelText('Scale Y');
       await user.clear(scale);
@@ -687,6 +803,7 @@ describe('PlateStage', () => {
           },
         ],
       });
+      selectObject('2');
 
       await user.click(screen.getByRole('button', { name: 'Lay flat' }));
 
