@@ -4059,6 +4059,7 @@ export default {
     filamentTypeMismatch: '素材が一致しません: このスロットには {{required}} が必要ですが、{{selected}} は {{selectedType}} です。スライス前に {{required}} のプロファイルを選択してください。',
     filamentTypeUnavailable: '{{required}} のプロファイルが見つかりません — この選択は誤った素材の可能性があります。スライス前に確認してください。',
     noPresetsForSlot: 'プリセットなし',
+    noPresetsForPrinter: 'このプリンター用のプリセットがありません',
     otherPrinters: '他のプリンター',
     presetsLoadFailed: 'プリセットの読み込みに失敗。先に設定 → プロファイルからインポートしてください。',
     refreshPresets: '再読み込み',

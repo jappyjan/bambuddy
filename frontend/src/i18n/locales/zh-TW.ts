@@ -4047,6 +4047,7 @@ export default {
     filamentTypeMismatch: '材料不符：此槽位需要 {{required}}，但 {{selected}} 是 {{selectedType}}。切片前請選擇 {{required}} 設定檔。',
     filamentTypeUnavailable: '找不到 {{required}} 設定檔 — 此選擇可能是錯誤的材料。切片前請檢查。',
     noPresetsForSlot: '無可用預設',
+    noPresetsForPrinter: '沒有適用於此印表機的預設',
     otherPrinters: '其他印表機',
     presetsLoadFailed: '載入預設失敗。請先開啟設定 → 設定檔以匯入。',
     refreshPresets: '重新整理',

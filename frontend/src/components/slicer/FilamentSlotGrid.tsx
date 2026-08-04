@@ -205,6 +205,10 @@ export function FilamentSlotGrid({
                 disabled={disabled || !editable}
                 selectedPrinterName={selectedPrinterName}
                 compatIndex={compatIndex}
+                // #57: a filament profile scoped to a printer the user did not
+                // select is noise here, not a fallback — same call as the
+                // rail's process picker.
+                hideIncompatible
                 selectClassName="px-2 py-1.5 text-xs"
                 // Same suppression as `SliceModal` (#47): a slot the plate does
                 // not paint with is auto-picked and read-only, so a material

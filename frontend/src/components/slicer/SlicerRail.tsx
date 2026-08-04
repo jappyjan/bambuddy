@@ -308,6 +308,9 @@ export function SlicerRail({
         disabled={disabled || useEmbedded}
         selectedPrinterName={selectedPrinterName}
         compatIndex={compatIndex}
+        // #57: on the rail, other printers' processes are hidden rather than
+        // demoted to a trailing group.
+        hideIncompatible
         selectClassName="px-2 py-1.5 text-xs"
       />
     </div>

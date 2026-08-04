@@ -4047,6 +4047,7 @@ export default {
     filamentTypeMismatch: 'Materiale errato: questo slot richiede {{required}}, ma {{selected}} è {{selectedType}}. Scegli un profilo {{required}} prima di elaborare.',
     filamentTypeUnavailable: 'Nessun profilo {{required}} trovato — questa scelta potrebbe essere il materiale sbagliato. Controllala prima di elaborare.',
     noPresetsForSlot: 'Nessun preset disponibile',
+    noPresetsForPrinter: 'Nessun preset per questa stampante',
     otherPrinters: 'Altre stampanti',
     presetsLoadFailed: 'Caricamento preset fallito. Apri Impostazioni → Profili per importarli prima.',
     refreshPresets: 'Aggiorna',

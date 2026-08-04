@@ -3844,6 +3844,7 @@ export default {
     filamentTypeMismatch: "Несовпадение материала: для этого слота нужен {{required}}, но {{selected}} — это {{selectedType}}. Выберите профиль {{required}} перед нарезкой.",
     filamentTypeUnavailable: "Профиль {{required}} не найден — возможно, выбран неверный материал. Проверьте перед нарезкой.",
     noPresetsForSlot: "Нет доступных профилей",
+    noPresetsForPrinter: "Нет профилей для этого принтера",
     otherPrinters: "Другие принтеры",
     presetsLoadFailed: "Не удалось загрузить профили. Сначала импортируйте их в разделе «Настройки → Профили».",
     refreshPresets: "Обновить",
