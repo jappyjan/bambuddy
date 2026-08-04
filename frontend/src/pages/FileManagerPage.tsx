@@ -39,7 +39,7 @@ import { FolderSidebar } from '../components/fileManager/FolderSidebar';
 import { FileManagerToolbar } from '../components/fileManager/FileManagerToolbar';
 import { FileGrid } from '../components/fileManager/FileGrid';
 import { useToast } from '../contexts/ToastContext';
-import { useIsMobile } from '../hooks/useIsMobile';
+import { useIsMobile, useIsNarrow } from '../hooks/useIsMobile';
 import { usePageFileDrop } from '../hooks/usePageFileDrop';
 import { useAuth } from '../contexts/AuthContext';
 import { parseUTCDate } from '../utils/date';
@@ -197,8 +197,13 @@ export function FileManagerPage() {
     () => localStorage.getItem('library-show-modified') === 'true'
   );
 
-  // Mobile detection for touch-friendly UI
+  // Mobile detection for touch-friendly UI (always-visible card actions etc.)
   const isMobile = useIsMobile();
+  // Inspector presentation. The files row only becomes two columns at `lg:`
+  // (1024px), so between 768 and 1023px a rail has nowhere to sit and used to
+  // land as an ordinary block below the grid on a scrolling page. Anything
+  // narrower than `lg` gets the bottom sheet instead (#59).
+  const isNarrow = useIsNarrow();
 
   // Update selectedFolderId when URL parameter changes (e.g., navigating from Project or Archive page)
   useEffect(() => {
@@ -783,9 +788,9 @@ export function FileManagerPage() {
     [navigate],
   );
 
-  // One inspector, two presentations: a rail beside the grid on a desktop, a
-  // drag-to-resize bottom sheet on a phone (spec §7 step 3, mockup screen 1
-  // option A). The element is built once here and mounted in exactly one of the
+  // One inspector, two presentations: a rail beside the grid at `lg:` and up, a
+  // drag-to-resize bottom sheet on anything narrower (spec §7 step 3, mockup
+  // screen 1 option A). The element is built once here and mounted in one of the
   // two places below, so there is no second panel and no second selection state
   // to keep in sync — only `className` differs.
   const inspectorPanel = inspectedFile ? (
@@ -821,7 +826,7 @@ export function FileManagerPage() {
       canModify={canModify}
       t={t}
       className={
-        isMobile ? 'w-full h-full min-h-0' : 'w-full lg:w-80 lg:flex-shrink-0 lg:max-h-full'
+        isNarrow ? 'w-full h-full min-h-0' : 'w-full lg:w-80 lg:flex-shrink-0 lg:max-h-full'
       }
     />
   ) : null;
@@ -997,20 +1002,20 @@ export function FileManagerPage() {
               clicking another file re-renders this same instance with a new
               `file` prop; React never unmounts it and the panel updates in
               place. That is the whole reason for this layout (spec §3).
-              On a phone the same element goes into the bottom sheet below
-              instead, where it would only be squeezed into this row. */}
-          {!isMobile && inspectorPanel}
+              Below `lg:` this row is a single column, so the same element goes
+              into the bottom sheet below instead of stacking under the grid. */}
+          {!isNarrow && inspectorPanel}
           {/* README rail — collapsible right column on lg+, stacks on top
               on mobile. See the files-area wrapper comment above (#2520). */}
           {selectedFolderId !== null && <FolderReadmePanel folderId={selectedFolderId} />}
         </div>
       </div>
 
-      {/* Phone presentation of the inspector: the same element as the desktop
-          rail, in a sheet you drag up to full height and down to dismiss
-          (mockup screen 1 option A, phone column). Mounted out here rather than
+      {/* Narrow presentation of the inspector (phone and tablet, i.e. below
+          `lg:`): the same element as the desktop rail, in a sheet you drag up to
+          full height and down to dismiss. Mounted out here rather than
           in the files row because it is fixed to the viewport, not laid out. */}
-      {isMobile && inspectorPanel && (
+      {isNarrow && inspectorPanel && (
         <BottomSheet onDismiss={handleCloseInspector} closeLabel={t('common.close')}>
           {inspectorPanel}
         </BottomSheet>

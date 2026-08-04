@@ -404,6 +404,25 @@ function boxMesh(min: [number, number, number], max: [number, number, number]): 
 }
 
 const translate = (x: number, y: number, z: number) => `1 0 0 0 1 0 0 0 1 ${x} ${y} ${z}`;
+
+/**
+ * A rotation of `deg` about the file's X axis, plus a translation, written the
+ * way 3MF writes it (#54).
+ *
+ * 3MF uses the **row-vector** convention: `v' = v · M`, so consecutive triples
+ * of the attribute are the *rows* of M. THREE.js is column-vector (`v' = M · v`)
+ * and needs the transpose. A rotation's transpose is its inverse, so loading
+ * the triples as rows spins the part the wrong way — which is the whole defect.
+ *
+ * Note the linear part written here is Rᵀ of the column-vector rotation
+ * `[[1,0,0],[0,c,-s],[0,s,c]]`, exactly as Bambu Studio emits it.
+ */
+const rotateX = (deg: number, x: number, y: number, z: number) => {
+  const c = Math.cos((deg * Math.PI) / 180);
+  const s = Math.sin((deg * Math.PI) / 180);
+  return `1 0 0 0 ${c} ${s} 0 ${-s} ${c} ${x} ${y} ${z}`;
+};
+
 const MODEL_OPEN =
   `<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xmlns="${CORE_NS}" xmlns:p="${PROD_NS}">`;
 
@@ -479,5 +498,135 @@ describe('parse3MF — nested and same-file component references', () => {
     const parsed = await parse3MF((await zip.generateAsync({ type: 'uint8array' })) as unknown as ArrayBuffer);
     // The cycle yields no geometry and so no object; the valid one still parses.
     expect([...parsed.objects.keys()]).toEqual(['3']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #54 — the 3x3 linear part's convention
+// ---------------------------------------------------------------------------
+
+/**
+ * The owner's report: "some parts lay flat in Bambu Studio but are rotated and
+ * stuck in the floor in Bambuddy."
+ *
+ * `parseTransform3MF` loaded the 3MF transform's consecutive triples as the
+ * *rows* of the THREE.js linear block. 3MF writes them under the row-vector
+ * convention (`v' = v · M`) and THREE.js is column-vector (`v' = M · v`), so
+ * they are the *columns* — the load was transposed. For a rotation the
+ * transpose is the inverse, so a part Studio turned by R was drawn turned by
+ * R⁻¹, while the translation (which was read correctly) still assumed R. The
+ * backend reads the same attribute the right way round already:
+ * `plate_layout.py::_parse_transform`, `L[i][j] = v[3 * j + i]`.
+ *
+ * ## Why the fixture above cannot catch this
+ *
+ * Not because its transforms are identity — eleven of the Attractap build
+ * items carry a real rotation about X. It is because every part file's mesh is
+ * centred on its own origin (object 17's bounds are exactly
+ * ±[41.8, 78.28, 42.37]), and the axis-aligned bounds of an origin-symmetric
+ * box are identical under R and Rᵀ. So the geometry there is blind to the
+ * transpose, and the boxes in `EXPECTED` hold under either convention.
+ *
+ * The fixtures below are therefore deliberately **asymmetric about every
+ * axis**, and use −90° about X, where R and Rᵀ = R⁻¹ are +90° apart.
+ */
+describe('parse3MF — a rotated transform is not loaded transposed (#54)', () => {
+  /** Asymmetric about all three axes, with its minimum at the local origin. */
+  const LOCAL_MIN: [number, number, number] = [0, 0, 0];
+  const LOCAL_MAX: [number, number, number] = [2, 4, 6];
+
+  /**
+   * Where that box must land, in three.js space (y is the file's z, z is the
+   * file's y), after −90° about X and a translation of (100, 50, 10).
+   *
+   * Worked out from the 3MF spec rather than from this parser: −90° about X
+   * maps (x, y, z) -> (x, z, −y), so local [0,0,0]..[2,4,6] becomes
+   * [0,0,−4]..[2,6,0] in file space, then +(100, 50, 10) gives
+   * [100,50,6]..[102,56,10]. Swapping y/z for three.js gives the below.
+   *
+   * The transposed (old) load applies +90° instead — (x, y, z) -> (x, −z, y) —
+   * and puts the same box at min [100, 10, 44], max [102, 14, 50]: unchanged on
+   * X, which the rotation does not touch, and out by 4 mm and 6 mm on the two
+   * axes it does. `MM` is 0.1, so either axis alone fails it.
+   */
+  const EXPECTED_BOX: WorldBox = { min: [100, 6, 50], max: [102, 10, 56] };
+
+  async function zipOf(root: string): Promise<ArrayBuffer> {
+    const zip = new JSZip();
+    zip.file('3D/3dmodel.model', root);
+    return (await zip.generateAsync({ type: 'uint8array' })) as unknown as ArrayBuffer;
+  }
+
+  it('rotates a build item the way the file says, not the inverse way', async () => {
+    const root =
+      MODEL_OPEN +
+      '<resources>' +
+      `<object id="1" type="model">${boxMesh(LOCAL_MIN, LOCAL_MAX)}</object>` +
+      '</resources>' +
+      `<build><item objectid="1" transform="${rotateX(-90, 100, 50, 10)}"/></build></model>`;
+
+    const parsed = await parse3MF(await zipOf(root));
+    const { group } = buildModelGroup(parsed, null);
+    expectBox(nodeFor(group, '1'), EXPECTED_BOX, 'rotated build item');
+  });
+
+  it('rotates a component transform the same way', async () => {
+    // The other call site into `parseTransform3MF`: the rotation is on the
+    // `<component>` and only a translation on the `<item>`, which has to
+    // compose to the identical placement.
+    const root =
+      MODEL_OPEN +
+      '<resources>' +
+      `<object id="2" type="model">${boxMesh(LOCAL_MIN, LOCAL_MAX)}</object>` +
+      '<object id="1" type="model"><components>' +
+      `<component objectid="2" transform="${rotateX(-90, 0, 0, 0)}"/>` +
+      '</components></object>' +
+      '</resources>' +
+      `<build><item objectid="1" transform="${translate(100, 50, 10)}"/></build></model>`;
+
+    const parsed = await parse3MF(await zipOf(root));
+    const { group } = buildModelGroup(parsed, null);
+    expectBox(nodeFor(group, '1'), EXPECTED_BOX, 'rotated component');
+  });
+
+  it('keeps a part the file lays flat on the bed flat on the bed', async () => {
+    // The owner's actual symptom, stated as geometry. The file rotates a slab
+    // spanning [0,−20,0]..[60,4,20] by −90° about X and lifts it by 4 so it
+    // rests exactly on z=0. Read transposed it tips the other way and 16 mm of
+    // it ends up below the bed — "stuck in the floor".
+    const root =
+      MODEL_OPEN +
+      '<resources>' +
+      `<object id="1" type="model">${boxMesh([0, -20, 0], [60, 4, 20])}</object>` +
+      '</resources>' +
+      `<build><item objectid="1" transform="${rotateX(-90, 10, 10, 4)}"/></build></model>`;
+
+    const parsed = await parse3MF(await zipOf(root));
+    const { group } = buildModelGroup(parsed, null);
+    // Correct: (x,y,z) -> (x,z,−y) gives file z in [−4,20], +4 -> [0,24].
+    // Transposed: (x,y,z) -> (x,−z,y) gives file z in [−20,4], +4 -> [−16,8].
+    // three.js y is the file's z.
+    const box = new THREE.Box3().setFromObject(nodeFor(group, '1'));
+    expect(box.min.y, 'lowest point sits on z=0, not below it').toBeCloseTo(0, 3);
+    expect(box.max.y).toBeCloseTo(24, 3);
+  });
+
+  it('leaves a pure translation alone', async () => {
+    // The translation triple was always read correctly and must stay that way:
+    // transposing only the 3x3 must not have been "fixed" by moving values[9..11].
+    const root =
+      MODEL_OPEN +
+      '<resources>' +
+      `<object id="1" type="model">${boxMesh(LOCAL_MIN, LOCAL_MAX)}</object>` +
+      '</resources>' +
+      `<build><item objectid="1" transform="${translate(100, 50, 10)}"/></build></model>`;
+
+    const parsed = await parse3MF(await zipOf(root));
+    const { group } = buildModelGroup(parsed, null);
+    expectBox(
+      nodeFor(group, '1'),
+      { min: [100, 10, 50], max: [102, 16, 54] },
+      'translated build item',
+    );
   });
 });

@@ -30,6 +30,93 @@ logger = logging.getLogger(__name__)
 _USER_AGENT = "Bambuddy/1.0 (+https://github.com/maziggy/bambuddy)"
 
 
+# How many sibling services we are willing to name in a "no such service"
+# message. `notify` is small (a handful of companion-app targets), but other
+# domains are not, and an unbounded dump helps nobody.
+_HA_MAX_LISTED_SERVICES = 20
+
+
+def _resolve_ha_service_endpoint(service: str) -> tuple[str | None, str | None]:
+    """Turn a user-supplied HA service string into an API endpoint path.
+
+    Accepts the three historical forms:
+      - ``notify.mobile_app_<device>``
+      - ``notify/mobile_app_<device>``
+      - ``api/services/notify/mobile_app_<device>``
+
+    Returns ``(endpoint, None)`` on success or ``(None, error_message)`` when
+    the string is malformed. This only validates the *shape* — whether the
+    service actually exists in Home Assistant is a separate question, answered
+    by :func:`_ha_missing_service_error`.
+    """
+    service_str = (service or "").strip().lstrip("/")
+    if service_str.startswith("api/services/"):
+        endpoint = service_str
+    elif "/" in service_str:
+        endpoint = f"api/services/{service_str}"
+    elif "." in service_str:
+        domain, svc = service_str.split(".", 1)
+        endpoint = f"api/services/{domain}/{svc}"
+    else:
+        return None, (
+            "Invalid Home Assistant service name. Use e.g. 'notify.mobile_app_yourdevice' or 'notify/your_service'."
+        )
+
+    if not re.match(r"^api/services/[a-zA-Z0-9_]+/[a-zA-Z0-9_]+$", endpoint):
+        return None, (
+            "Invalid Home Assistant service name. Domain and service must only contain letters, numbers, and underscores."
+        )
+
+    return endpoint, None
+
+
+async def _ha_missing_service_error(ha_url: str, ha_token: str, endpoint: str) -> str | None:
+    """Return an actionable message iff HA is reachable *and* lacks the service.
+
+    Returns ``None`` when the service exists, or when we could not ask Home
+    Assistant at all. Never guesses: an unreachable HA must not be reported as
+    "no such service", and we never rewrite the user's value for them.
+    """
+    _, _, domain, svc = endpoint.split("/", 3)
+
+    from backend.app.services.homeassistant import homeassistant_service
+
+    services = await homeassistant_service.list_services(ha_url, ha_token)
+    if services is None:
+        # Could not ask HA — caller falls back to its generic error.
+        return None
+
+    if svc in services.get(domain, []):
+        return None
+
+    available = [f"{domain}.{name}" for name in services.get(domain, [])]
+    if not available:
+        return f"Home Assistant has no service '{domain}.{svc}'. Home Assistant exposes no '{domain}' services at all."
+
+    listed = ", ".join(available[:_HA_MAX_LISTED_SERVICES])
+    if len(available) > _HA_MAX_LISTED_SERVICES:
+        listed += f", … ({len(available) - _HA_MAX_LISTED_SERVICES} more)"
+    return f"Home Assistant has no service '{domain}.{svc}'. Available: {listed}"
+
+
+async def _get_ha_credentials(db: AsyncSession | None) -> tuple[str, str]:
+    """Read the globally configured HA URL/token (DB first, env fallback)."""
+    if db:
+        from backend.app.api.routes.settings import get_homeassistant_settings
+
+        try:
+            ha_settings = await get_homeassistant_settings(db)
+            return ha_settings.get("ha_url", ""), ha_settings.get("ha_token", "")
+        except Exception as e:
+            logger.warning("Failed to read HA settings from database: %s", e)
+            return "", ""
+
+    # Fallback: read directly from environment if no DB session
+    import os
+
+    return os.environ.get("HA_URL", ""), os.environ.get("HA_TOKEN", "")
+
+
 def _looks_like_cloudflare_challenge(response: httpx.Response) -> bool:
     """Return True if ``response`` looks like a Cloudflare mitigation
     interstitial (JS challenge / managed challenge / block page) rather
@@ -670,6 +757,35 @@ class NotificationService:
         except Exception as e:
             return False, f"Webhook error: {str(e)}"
 
+    async def validate_homeassistant_config(self, config: dict | None, db: AsyncSession | None = None) -> str | None:
+        """Check a Home Assistant provider config before it is stored.
+
+        Returns an error message when the configured service is malformed, or
+        when Home Assistant is reachable and demonstrably has no such service.
+        Returns ``None`` (allow the save) when the config has no explicit
+        service, when it checks out, or when Home Assistant cannot be reached —
+        a temporarily-down HA must not block editing your notification setup.
+        """
+        service = ((config or {}).get("service") or "").strip()
+        if not service:
+            return None
+
+        endpoint, shape_error = _resolve_ha_service_endpoint(service)
+        if shape_error:
+            return shape_error
+
+        ha_url, ha_token = await _get_ha_credentials(db)
+        if not ha_url or not ha_token:
+            logger.warning(
+                "Home Assistant is not configured; skipping service-name validation for '%s'",
+                service,
+            )
+            return None
+
+        # None here means either "service exists" or "HA did not answer"
+        # (list_services logs the latter) — both allow the save.
+        return await _ha_missing_service_error(ha_url, ha_token, endpoint)
+
     async def _send_homeassistant(
         self, config: dict, title: str, message: str, db: AsyncSession | None = None
     ) -> tuple[bool, str]:
@@ -680,24 +796,7 @@ class NotificationService:
         custom services via config["service"] (e.g. notify.mobile_app_myphone).
         """
         # Get HA connection settings from global config
-        ha_url = ""
-        ha_token = ""
-
-        if db:
-            from backend.app.api.routes.settings import get_homeassistant_settings
-
-            try:
-                ha_settings = await get_homeassistant_settings(db)
-                ha_url = ha_settings.get("ha_url", "")
-                ha_token = ha_settings.get("ha_token", "")
-            except Exception as e:
-                logger.warning("Failed to read HA settings from database: %s", e)
-        else:
-            # Fallback: read directly from environment if no DB session
-            import os
-
-            ha_url = os.environ.get("HA_URL", "")
-            ha_token = os.environ.get("HA_TOKEN", "")
+        ha_url, ha_token = await _get_ha_credentials(db)
 
         if not ha_url or not ha_token:
             return False, (
@@ -707,27 +806,9 @@ class NotificationService:
         # Determine which HA service to call - Default: persistent_notification.create
         service = (config.get("service") or "").strip()
         if service:
-            # Allow in different forms:
-            # - notify.mobile_app_<device>
-            # - notify/mobile_app_<device>
-            # - api/services/notify/mobile_app_<device>
-            service_str = service.lstrip("/")
-            if service_str.startswith("api/services/"):
-                endpoint = service_str
-            elif "/" in service_str:
-                endpoint = f"api/services/{service_str}"
-            elif "." in service_str:
-                domain, svc = service_str.split(".", 1)
-                endpoint = f"api/services/{domain}/{svc}"
-            else:
-                return False, (
-                    "Invalid Home Assistant service name. Use e.g. 'notify.mobile_app_yourdevice' or 'notify/your_service'."
-                )
-
-            if not re.match(r"^api/services/[a-zA-Z0-9_]+/[a-zA-Z0-9_]+$", endpoint):
-                return False, (
-                    "Invalid Home Assistant service name. Domain and service must only contain letters, numbers, and underscores."
-                )
+            endpoint, shape_error = _resolve_ha_service_endpoint(service)
+            if shape_error:
+                return False, shape_error
         else:
             endpoint = "api/services/persistent_notification/create"
 
@@ -748,6 +829,16 @@ class NotificationService:
             return True, "Notification sent via Home Assistant"
         elif response.status_code == 401:
             return False, "Home Assistant authentication failed - check your token"
+        elif response.status_code == 400:
+            # HA answers a POST to a service that does not exist with a bare
+            # "400: Bad Request", which tells the user nothing. Ask HA what it
+            # actually has — but only here, never on the success path. If the
+            # service does exist the 400 is a genuine payload rejection, and
+            # the generic message below is the honest answer.
+            missing = await _ha_missing_service_error(ha_url, ha_token, endpoint)
+            if missing:
+                return False, missing
+            return False, f"HTTP {response.status_code}: {response.text[:200]}"
         else:
             return False, f"HTTP {response.status_code}: {response.text[:200]}"
 

@@ -47,13 +47,26 @@ export interface PlateMetadata {
   bed_type?: string | null;
 }
 
-// Printer / process preset names the source 3MF was prepared with, read from
-// its project_settings.config. Used by the SliceModal to default its printer
-// and process dropdowns (#1325). Null / absent when the file carries no
-// embedded slicer config (STL, plain model 3MF, parse failure).
+// Printer / process / filament preset names the source 3MF was prepared with,
+// read from its project_settings.config. Used by the SliceModal and the
+// `/slicer` page to default their dropdowns (#1325). Null / absent when the
+// file carries no embedded slicer config (STL, plain model 3MF, parse failure).
 interface EmbeddedPresets {
   embedded_printer?: string | null;
   embedded_process?: string | null;
+  /**
+   * One preset name per filament slot, in slot order, from
+   * `filament_settings_id` (#56). Unlike the printer / process keys this one
+   * is an array — the file names a profile per extruder, and honouring it is
+   * what stops the slot → profile mapping from being re-guessed out of
+   * (type, colour).
+   *
+   * **Positional and untrusted length**: entries may be `null` (the project
+   * left that slot unassigned) and the array may be shorter or longer than the
+   * picked plate's slot count. Consumers index defensively and fall back
+   * per slot.
+   */
+  embedded_filaments?: (string | null)[] | null;
 }
 
 export interface ArchivePlatesResponse extends EmbeddedPresets {

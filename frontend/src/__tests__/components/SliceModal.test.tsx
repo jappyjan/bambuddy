@@ -309,6 +309,82 @@ describe('SliceModal', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
+  it('pre-selects the filament profile the 3MF names, and sends it (#56)', async () => {
+    // Parity with the `/slicer` page: both surfaces pre-pick through
+    // `useSlicePresets`, so honouring `filament_settings_id` has to reach the
+    // modal's dispatch too. Without it the auto-pick is the local tier's
+    // "Imported PLA Basic" (see the source-aware-refs test above); the file
+    // names the cloud profile, so that is what must travel.
+    const onClose = vi.fn();
+    mockApi.sliceLibraryFile.mockResolvedValue({
+      job_id: 42,
+      status: 'pending',
+      status_url: '/api/v1/slice-jobs/42',
+    });
+    mockApi.getLibraryFilePlates.mockResolvedValue({
+      file_id: 100,
+      filename: 'Designed.3mf',
+      plates: [],
+      is_multi_plate: false,
+      embedded_filaments: ['My PLA Black'],
+    });
+
+    renderWithTracker({
+      source: { kind: 'libraryFile', id: 100, filename: 'Designed.3mf' },
+      onClose,
+    });
+
+    await waitFor(() => expect(screen.getByText('My Custom X1C')).toBeDefined());
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /^Slice$/ }));
+
+    await waitFor(() => {
+      expect(mockApi.sliceLibraryFile).toHaveBeenCalledWith(
+        100,
+        expect.objectContaining({
+          filament_preset: { source: 'cloud', id: 'PFUcloud-filament' },
+          filament_presets: [{ source: 'cloud', id: 'PFUcloud-filament' }],
+        }),
+      );
+    });
+  });
+
+  it('falls back to the scored pick when the named filament is not installed (#56)', async () => {
+    const onClose = vi.fn();
+    mockApi.sliceLibraryFile.mockResolvedValue({
+      job_id: 42,
+      status: 'pending',
+      status_url: '/api/v1/slice-jobs/42',
+    });
+    mockApi.getLibraryFilePlates.mockResolvedValue({
+      file_id: 100,
+      filename: 'Designed.3mf',
+      plates: [],
+      is_multi_plate: false,
+      embedded_filaments: ['Bambu PLA Galaxy @BBL X1C'],
+    });
+
+    renderWithTracker({
+      source: { kind: 'libraryFile', id: 100, filename: 'Designed.3mf' },
+      onClose,
+    });
+
+    await waitFor(() => expect(screen.getByText('My Custom X1C')).toBeDefined());
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /^Slice$/ }));
+
+    await waitFor(() => {
+      expect(mockApi.sliceLibraryFile).toHaveBeenCalledWith(
+        100,
+        expect.objectContaining({
+          filament_presets: [{ source: 'local', id: '3' }],
+        }),
+      );
+    });
+  });
+
   it('hides the embedded-settings toggle when the picked printer differs from the design (#2611)', async () => {
     // Embedded target is a model with no matching preset in the listing, so
     // the printer pre-pick falls back to the local default (Imported X1C),

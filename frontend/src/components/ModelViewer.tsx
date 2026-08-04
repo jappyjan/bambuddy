@@ -97,8 +97,13 @@ interface ModelViewerProps {
   touchTargets?: boolean;
   /** Fired throughout a gizmo drag with the object's new delta. */
   onObjectTransform?: (objectId: string, transform: ObjectTransform) => void;
-  /** Fired when an object is clicked in the viewport. */
-  onObjectPick?: (objectId: string) => void;
+  /**
+   * Fired when an object is clicked in the viewport — and with `null` when a
+   * click lands on anything that is *not* an object, which is how the user
+   * selects nothing (#55). A bed click reports both: `null` here and the plate
+   * on {@link ModelViewerProps.onPlatePick}.
+   */
+  onObjectPick?: (objectId: string | null) => void;
   /**
    * Fired once per parse with each object's as-designed anchor and size in bed
    * millimetres. The anchor is what a persisted `position` is measured from
@@ -336,8 +341,12 @@ export function ModelViewer({
           callbacksRef.current.onObjectPick?.(picked);
           return;
         }
-        // Nothing hit: fall through to the beds, so clicking the empty part of
-        // a plate selects it. Objects win the tie — an object standing on a
+        // No object hit: the click selects nothing (#55). Reported for every
+        // miss — a bed, or empty space past the beds entirely — so there is
+        // always a gesture that gets the user back to no selection.
+        callbacksRef.current.onObjectPick?.(null);
+        // Then fall through to the beds, so clicking the empty part of a plate
+        // also makes it active. Objects win the tie — an object standing on a
         // plate is always in front of it, and the caller resolves which plate
         // that object belongs to.
         const bedHits = raycaster.intersectObjects(
@@ -655,9 +664,6 @@ export function ModelViewer({
     const box = new THREE.Box3().setFromObject(group);
     const center = box.getCenter(new THREE.Vector3());
 
-    // Always place models on the build plate (Y=0)
-    group.position.y = -box.min.y;
-
     const selectedPlateBounds = (!isStlModel && buildPlateId != null && parsedData!.buildItems.length > 0)
       ? parsedData!.plateBounds.get(buildPlateId)
       : undefined;
@@ -667,6 +673,25 @@ export function ModelViewer({
     const shouldCenterOnPlate = isStlModel
       || parsedData!.buildItems.length === 0
       || (buildPlateId != null && !selectedPlateBounds && !selectedPlateOffset);
+
+    /**
+     * Drop to the bed only for a file that authors no placement of its own
+     * (#54) — the same condition the X/Z centring uses, and for the same
+     * reason.
+     *
+     * An STL has an arbitrary origin and no build items, so without this it
+     * hangs in the air or sinks; centring it and sitting it on Y=0 is the only
+     * sensible reading. A 3MF with build items and resolved plate bounds or
+     * offset has already said where its objects go, in all three axes, and
+     * re-seating it on the bed contradicts that — exactly as the multi-plate
+     * path above declines to (`An object the file puts below z=0 is drawn
+     * below its bed, as Studio draws it`). Dropping it here made the single
+     * plate view disagree with the multi-plate one on the same file.
+     */
+    if (shouldCenterOnPlate) {
+      group.position.y = -box.min.y;
+    }
+
     const centerOffsetX = shouldCenterOnPlate ? -center.x : 0;
     const centerOffsetZ = shouldCenterOnPlate ? -center.z : 0;
 

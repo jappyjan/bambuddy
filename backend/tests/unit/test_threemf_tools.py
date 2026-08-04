@@ -653,7 +653,8 @@ class TestExtractPlateExtruderSetFrom3mf:
 
 class TestExtractEmbeddedPresetsFrom3mf:
     """Printer / process preset names read from project_settings.config so the
-    SliceModal can default its dropdowns to the file's own config (#1325)."""
+    SliceModal can default its dropdowns to the file's own config (#1325), plus
+    the per-slot filament preset names (#56)."""
 
     def test_extracts_printer_and_process(self):
         config = json.dumps(
@@ -667,6 +668,7 @@ class TestExtractEmbeddedPresetsFrom3mf:
             assert extract_embedded_presets_from_3mf(zf) == {
                 "printer": "Bambu Lab X1 Carbon 0.4 nozzle",
                 "process": "0.20mm Standard @BBL X1C",
+                "filaments": ["Bambu PLA Basic @BBL X1C"],
             }
 
     def test_settings_id_as_list_takes_first(self):
@@ -687,6 +689,7 @@ class TestExtractEmbeddedPresetsFrom3mf:
             assert extract_embedded_presets_from_3mf(zf) == {
                 "printer": None,
                 "process": None,
+                "filaments": [],
             }
 
     def test_malformed_json_returns_none_values(self):
@@ -694,6 +697,7 @@ class TestExtractEmbeddedPresetsFrom3mf:
             assert extract_embedded_presets_from_3mf(zf) == {
                 "printer": None,
                 "process": None,
+                "filaments": [],
             }
 
     def test_blank_and_absent_keys_yield_none(self):
@@ -702,7 +706,78 @@ class TestExtractEmbeddedPresetsFrom3mf:
             assert extract_embedded_presets_from_3mf(zf) == {
                 "printer": None,
                 "process": None,
+                "filaments": [],
             }
+
+    # --- filament_settings_id (#56) --------------------------------------
+    # Unlike the printer/process keys this one is genuinely per-slot: the
+    # whole array is the slot -> profile mapping, and collapsing it to the
+    # first entry is what left every other slot to a (type, colour) guess.
+
+    def test_keeps_every_filament_entry_in_slot_order(self):
+        config = json.dumps(
+            {
+                "printer_settings_id": "Bambu Lab X1 Carbon 0.4 nozzle",
+                "filament_settings_id": [
+                    "Bambu PLA Basic @BBL X1C",
+                    "Bambu PETG HF @BBL X1C",
+                    "Bambu ABS @BBL X1C",
+                ],
+            }
+        )
+        with _make_3mf_with({"Metadata/project_settings.config": config}) as zf:
+            assert extract_embedded_presets_from_3mf(zf)["filaments"] == [
+                "Bambu PLA Basic @BBL X1C",
+                "Bambu PETG HF @BBL X1C",
+                "Bambu ABS @BBL X1C",
+            ]
+
+    def test_empty_and_blank_entries_become_none_without_shifting_slots(self):
+        # A slot the project left unassigned must not slide the later slots
+        # up — index is the whole meaning of this array.
+        config = json.dumps(
+            {
+                "filament_settings_id": ["Bambu PLA Basic @BBL X1C", "", "  ", "Bambu ABS @BBL X1C"],
+            }
+        )
+        with _make_3mf_with({"Metadata/project_settings.config": config}) as zf:
+            assert extract_embedded_presets_from_3mf(zf)["filaments"] == [
+                "Bambu PLA Basic @BBL X1C",
+                None,
+                None,
+                "Bambu ABS @BBL X1C",
+            ]
+
+    def test_non_string_entries_become_none(self):
+        config = json.dumps({"filament_settings_id": ["Bambu PLA Basic @BBL X1C", None, 7]})
+        with _make_3mf_with({"Metadata/project_settings.config": config}) as zf:
+            assert extract_embedded_presets_from_3mf(zf)["filaments"] == [
+                "Bambu PLA Basic @BBL X1C",
+                None,
+                None,
+            ]
+
+    def test_bare_string_is_one_slot(self):
+        config = json.dumps({"filament_settings_id": "Bambu PLA Basic @BBL X1C"})
+        with _make_3mf_with({"Metadata/project_settings.config": config}) as zf:
+            assert extract_embedded_presets_from_3mf(zf)["filaments"] == ["Bambu PLA Basic @BBL X1C"]
+
+    def test_blank_bare_string_yields_empty_list(self):
+        config = json.dumps({"filament_settings_id": "   "})
+        with _make_3mf_with({"Metadata/project_settings.config": config}) as zf:
+            assert extract_embedded_presets_from_3mf(zf)["filaments"] == []
+
+    def test_unexpected_shape_yields_empty_list(self):
+        config = json.dumps({"filament_settings_id": {"0": "Bambu PLA Basic"}})
+        with _make_3mf_with({"Metadata/project_settings.config": config}) as zf:
+            assert extract_embedded_presets_from_3mf(zf)["filaments"] == []
+
+    def test_absent_key_yields_empty_list(self):
+        config = json.dumps({"printer_settings_id": "Bambu Lab A1 0.4 nozzle"})
+        with _make_3mf_with({"Metadata/project_settings.config": config}) as zf:
+            result = extract_embedded_presets_from_3mf(zf)
+            assert result["printer"] == "Bambu Lab A1 0.4 nozzle"
+            assert result["filaments"] == []
 
 
 class TestExtractBedTypeFrom3mf:
