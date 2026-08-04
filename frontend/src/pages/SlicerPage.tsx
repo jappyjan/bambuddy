@@ -446,6 +446,7 @@ export function SlicerPage() {
     filamentSlots: presetSlots,
     embeddedPrinter: platesQuery.data?.embedded_printer ?? null,
     embeddedProcess: platesQuery.data?.embedded_process ?? null,
+    embeddedFilaments: platesQuery.data?.embedded_filaments ?? null,
     enabled: source != null && !platesQuery.isLoading,
   });
 

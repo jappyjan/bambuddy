@@ -131,6 +131,7 @@ function renderPresets(opts: {
   filamentSlots?: SliceFilamentSlot[];
   embeddedPrinter?: string | null;
   embeddedProcess?: string | null;
+  embeddedFilaments?: (string | null)[] | null;
   enabled?: boolean;
 }) {
   const slots = opts.filamentSlots ?? ONE_SLOT;
@@ -140,6 +141,7 @@ function renderPresets(opts: {
         filamentSlots: slots,
         embeddedPrinter: opts.embeddedPrinter ?? null,
         embeddedProcess: opts.embeddedProcess ?? null,
+        embeddedFilaments: opts.embeddedFilaments ?? null,
         enabled: opts.enabled,
       }),
     { wrapper },
@@ -313,6 +315,182 @@ describe('useSlicePresets — filament pre-pick', () => {
     // though the arriving metadata would now score PLA Red higher; only the
     // new slot is picked. That is the pre-extraction behaviour.
     expect(result.current.filamentPresets).toEqual([refOf('f-pla-black'), refOf('f-petg-green')]);
+  });
+});
+
+/**
+ * #56 — the 3MF names its own filament profiles (`filament_settings_id`), and
+ * those beat anything the (type, colour) scorer can re-derive.
+ *
+ * The defect these pin: the scorer cannot tell two profiles of the same type
+ * and colour apart, so a project that specified a particular vendor profile
+ * came back with whichever one tier order happened to reach first — "shows
+ * random filaments". Reading the file's own assignment removes the guess.
+ */
+describe('useSlicePresets — embedded filament profiles (#56)', () => {
+  // Two profiles the scorer scores *identically* (same type, same colour).
+  // Only the embedded name can separate them, which is the whole ticket.
+  const twins: UnifiedPreset[] = [
+    {
+      id: 'f-twin-a',
+      name: 'Vendor A PLA Black',
+      source: 'local',
+      filament_type: 'PLA',
+      filament_colour: '#000000',
+      compatible_printers: [X1C, A1],
+    },
+    {
+      id: 'f-twin-b',
+      name: 'Vendor B PLA Black',
+      source: 'local',
+      filament_type: 'PLA',
+      filament_colour: '#000000',
+      compatible_printers: [X1C, A1],
+    },
+  ];
+
+  it('pre-selects the profile the file names, over an equally-scoring twin', async () => {
+    mockApi.getSlicerPresets.mockResolvedValue(local(printers, processes, twins));
+    const slots: SliceFilamentSlot[] = [{ type: 'PLA', color: '#000000' }];
+
+    const { result } = renderPresets({
+      filamentSlots: slots,
+      embeddedFilaments: ['Vendor B PLA Black'],
+    });
+
+    await waitFor(() => expect(result.current.filamentPresets).toHaveLength(1));
+    // Scoring alone would have returned the first-listed twin.
+    expect(result.current.filamentPresets).toEqual([refOf('f-twin-b')]);
+  });
+
+  it('honours the named profile even when the scorer would pick a different one', async () => {
+    // The slot asks for PLA/black and the named profile is PETG/green — the
+    // file's own assignment still wins. This is what makes the mapping match
+    // Bambu Studio for the same file rather than our re-derivation of it.
+    const slots: SliceFilamentSlot[] = [{ type: 'PLA', color: '#000000' }];
+    const { result } = renderPresets({ filamentSlots: slots, embeddedFilaments: ['PETG Green'] });
+
+    await waitFor(() => expect(result.current.filamentPresets).toEqual([refOf('f-petg-green')]));
+  });
+
+  it('maps every slot from its own entry, in slot order', async () => {
+    const slots: SliceFilamentSlot[] = [
+      { type: 'PLA', color: '#000000' },
+      { type: 'PLA', color: '#000000' },
+      { type: 'PLA', color: '#000000' },
+    ];
+    const { result } = renderPresets({
+      filamentSlots: slots,
+      embeddedFilaments: ['PETG Green', 'PLA Basic Red', 'PLA Basic Black'],
+    });
+
+    await waitFor(() => expect(result.current.filamentPresets).toHaveLength(3));
+    expect(result.current.filamentPresets).toEqual([
+      refOf('f-petg-green'),
+      refOf('f-pla-red'),
+      refOf('f-pla-black'),
+    ]);
+  });
+
+  it('falls back to the scored pick for a profile the user does not have installed', async () => {
+    // A file may name a profile from a library we never imported. That must
+    // degrade to today's guess, not to an empty slot.
+    const slots: SliceFilamentSlot[] = [{ type: 'PETG', color: '#00FF00' }];
+    const { result } = renderPresets({
+      filamentSlots: slots,
+      embeddedFilaments: ['Some Vendor PETG We Never Imported'],
+    });
+
+    await waitFor(() => expect(result.current.filamentPresets).toEqual([refOf('f-petg-green')]));
+  });
+
+  it('falls back when the named profile is incompatible with the selected printer', async () => {
+    // The user switched to A1 since the file was made; the named X1C-only
+    // profile would be rejected by the slicer CLI outright.
+    const slots: SliceFilamentSlot[] = [{ type: 'PLA', color: '#FF0000' }];
+    const { result } = renderPresets({
+      filamentSlots: slots,
+      embeddedPrinter: A1,
+      embeddedFilaments: ['ABS X1C only'],
+    });
+
+    await waitFor(() => expect(result.current.selectedPrinterName).toBe(A1));
+    await waitFor(() => expect(result.current.filamentPresets).toEqual([refOf('f-pla-red')]));
+  });
+
+  it('tolerates a list shorter than the slot count', async () => {
+    const slots: SliceFilamentSlot[] = [
+      { type: 'PLA', color: '#000000' },
+      { type: 'PETG', color: '#00FF00' },
+    ];
+    const { result } = renderPresets({ filamentSlots: slots, embeddedFilaments: ['PLA Basic Red'] });
+
+    await waitFor(() => expect(result.current.filamentPresets).toHaveLength(2));
+    expect(result.current.filamentPresets).toEqual([refOf('f-pla-red'), refOf('f-petg-green')]);
+  });
+
+  it('tolerates a list longer than the slot count and null / empty entries', async () => {
+    const slots: SliceFilamentSlot[] = [
+      { type: 'PLA', color: '#000000' },
+      { type: 'PLA', color: '#FF0000' },
+    ];
+    const { result } = renderPresets({
+      filamentSlots: slots,
+      // Slot 0 unassigned in the project, slot 1 named, then two slots the
+      // plate does not have.
+      embeddedFilaments: [null, 'PETG Green', '', 'PLA Basic Black'],
+    });
+
+    await waitFor(() => expect(result.current.filamentPresets).toHaveLength(2));
+    // Slot 0 has no usable name, so it keeps the scored pick.
+    expect(result.current.filamentPresets).toEqual([refOf('f-pla-black'), refOf('f-petg-green')]);
+  });
+
+  it('does not override a manual pick the user already made', async () => {
+    const slots: SliceFilamentSlot[] = [{ type: 'PLA', color: '#000000' }];
+    const { result, rerender } = renderPresets({
+      filamentSlots: slots,
+      embeddedFilaments: ['PLA Basic Red'],
+    });
+    await waitFor(() => expect(result.current.filamentPresets).toEqual([refOf('f-pla-red')]));
+
+    act(() => result.current.setFilamentPresetAt(0, refOf('f-petg-green')));
+    rerender();
+
+    expect(result.current.filamentPresets).toEqual([refOf('f-petg-green')]);
+  });
+
+  it('behaves exactly as before when the source names no filaments', async () => {
+    const slots: SliceFilamentSlot[] = [{ type: 'PLA', color: '#FF0000' }];
+    const withList = renderPresets({ filamentSlots: slots, embeddedFilaments: [] });
+    await waitFor(() => expect(withList.result.current.filamentPresets).toEqual([refOf('f-pla-red')]));
+
+    const withNull = renderPresets({ filamentSlots: slots });
+    await waitFor(() => expect(withNull.result.current.filamentPresets).toEqual([refOf('f-pla-red')]));
+  });
+
+  it('does not re-render forever when the caller rebuilds the list every render', async () => {
+    // The list arrives from a query response, but a caller writing
+    // `embedded_filaments ?? []` hands the hook a fresh array each render.
+    // The pre-pick effect sets state, so an identity-keyed dependency would
+    // loop. Value-keyed, it settles.
+    let renders = 0;
+    const slots: SliceFilamentSlot[] = [{ type: 'PLA', color: '#000000' }];
+    const { result } = renderHook(
+      () => {
+        renders++;
+        return useSlicePresets({
+          filamentSlots: slots,
+          embeddedFilaments: ['PLA Basic Red'],
+        });
+      },
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.filamentPresets).toEqual([refOf('f-pla-red')]));
+    const settled = renders;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(renders).toBe(settled);
   });
 });
 

@@ -71,6 +71,7 @@ from backend.app.services.plate_thumbnail import inject_plate_thumbnails_if_miss
 from backend.app.services.stl_thumbnail import MIN_USABLE_STL_BYTES, generate_stl_thumbnail
 from backend.app.utils.filename import InvalidFilenameError, validate_print_filename
 from backend.app.utils.threemf_tools import (
+    EmbeddedPresets,
     extract_embedded_presets_from_3mf,
     extract_nozzle_mapping_from_3mf,
     extract_project_filaments_from_3mf,
@@ -2783,10 +2784,11 @@ async def get_library_file_plates(
         return {"file_id": file_id, "filename": lib_file.filename, "plates": [], "is_multi_plate": False}
 
     plates = []
-    # Printer / process preset names the 3MF was prepared with — used by the
-    # SliceModal to default its dropdowns (#1325). Initialised here so the
-    # final return never raises NameError when the file isn't a valid zip.
-    embedded_presets: dict[str, str | None] = {"printer": None, "process": None}
+    # Printer / process / per-slot filament preset names the 3MF was prepared
+    # with — used by the SliceModal and the /slicer page to default their
+    # dropdowns (#1325, #56). Initialised here so the final return never raises
+    # NameError when the file isn't a valid zip.
+    embedded_presets: EmbeddedPresets = {"printer": None, "process": None, "filaments": []}
 
     try:
         with zipfile.ZipFile(file_path, "r") as zf:
@@ -3053,6 +3055,7 @@ async def get_library_file_plates(
         "is_multi_plate": len(plates) > 1,
         "embedded_printer": embedded_presets["printer"],
         "embedded_process": embedded_presets["process"],
+        "embedded_filaments": embedded_presets["filaments"],
     }
 
 
