@@ -4051,6 +4051,8 @@ export default {
     noPresetsForSlot: 'Kullanılabilir ön ayar yok',
     noPresetsForPrinter: 'Bu yazıcı için ön ayar yok',
     otherPrinters: 'Diğer yazıcılar',
+    presetGroup: '{{vendor}} – {{type}}',
+    presetGroupOther: 'Diğer',
     presetsLoadFailed: 'Ön ayarlar yüklenemedi. Önce içe aktarmak için Ayarlar → Profiller\'i açın.',
     refreshPresets: 'Yenile',
     refreshPresetsTitle: "Ön ayarları yenile — en güncel bulut ve paketli listeleri getir (Bambu Studio veya Bambu Handy'de bir ön ayar sildikten sonra kullanın)",

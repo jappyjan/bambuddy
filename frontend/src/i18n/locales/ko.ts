@@ -3885,6 +3885,8 @@ export default {
     actionAllTitle: '모든 플레이트를 단일 다중 플레이트 출력으로 슬라이싱합니다 (단일 아카이브). 필라멘트 선택은 프로젝트가 정의하는 모든 슬롯을 포함합니다.',
     allPlatesToggle: '{{count}}개 플레이트 모두 슬라이싱',
     otherPrinters: '다른 프린터',
+    presetGroup: '{{vendor}} – {{type}}',
+    presetGroupOther: '기타',
     runningWithProgressMultiPlate: '플레이트 {{plateIndex}}/{{plateCount}} • {{name}} — {{stage}} ({{percent}}%) — {{elapsed}}',
     failedTitle: '슬라이싱 실패',
     bedType: {

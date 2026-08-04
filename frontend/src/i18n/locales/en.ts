@@ -4095,6 +4095,8 @@ export default {
     noPresetsForSlot: 'No presets available',
     noPresetsForPrinter: 'No presets for this printer',
     otherPrinters: 'Other printers',
+    presetGroup: '{{vendor}} – {{type}}',
+    presetGroupOther: 'Other',
     presetsLoadFailed: 'Failed to load presets. Open Settings → Profiles to import them first.',
     refreshPresets: 'Refresh',
     refreshPresetsTitle: 'Refresh presets — fetch the latest cloud and bundled listings (use after deleting a preset in Bambu Studio or Bambu Handy)',

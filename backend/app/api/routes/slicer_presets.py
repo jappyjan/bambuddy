@@ -49,6 +49,12 @@ from backend.app.services.orca_cloud import (
     OrcaCloudError,
 )
 
+# Vendor-from-name parser, shared with the OrcaSlicer import path rather than
+# re-written here: the vendor a preset is *filed under* at import time and the
+# vendor its dropdown group is *labelled with* must be the same string, or the
+# same physical spool appears under two headings (#58).
+from backend.app.services.orca_profiles import _parse_vendor_from_name
+
 # Curated process-field metadata — the only source for a field's label, unit,
 # type, range and category (the slicer CLI emits none of these). Loaded from
 # the service that validates overrides against it (#29) so the fields this
@@ -256,6 +262,7 @@ async def _fetch_orca_cloud_presets(
                 continue
             filament_type: str | None = None
             filament_colour: str | None = None
+            filament_vendor: str | None = None
             if slot == "filament":
                 # Bambu/Orca filament profiles store these as single-element
                 # arrays (the historical multi-extruder shape). Extract the
@@ -270,12 +277,15 @@ async def _fetch_orca_cloud_presets(
                     filament_colour = fc[0]
                 elif isinstance(fc, str):
                     filament_colour = fc
+                # Same single-element-array shape as the other two (#58).
+                filament_vendor = _first_scalar(content.get("filament_vendor"))
             preset = UnifiedPreset(
                 id=str(preset_id),
                 name=str(name),
                 source="orca_cloud",
                 filament_type=filament_type,
                 filament_colour=filament_colour,
+                filament_vendor=filament_vendor,
             )
             if slot in ("process", "filament"):
                 # The profile's own compatible-printer list, straight out of
@@ -306,6 +316,18 @@ async def _fetch_local_presets(db: AsyncSession) -> dict[str, list[UnifiedPreset
         preset = UnifiedPreset(id=str(p.id), name=p.name, source="local")
         if slot == "filament":
             preset.filament_type, preset.filament_colour = _parse_filament_metadata(p.setting)
+            # The MODEL COLUMN, not the stored profile blob (#58). This
+            # function has always derived its filament metadata by re-parsing
+            # `p.setting`; `filament_vendor` is the first field read straight
+            # off the row. Precedence is deliberate and this way round: the
+            # column was written by the importer, which had the *resolved*
+            # profile (post-`inherits:` walk) plus its own name fallback, so
+            # it is strictly better-informed than anything this listing could
+            # re-derive. The column is nullable and only populated by
+            # importers that set it, so rows written before those paths
+            # existed still need the name parse — that fallback is applied
+            # once for every tier in `_enrich_cloud_metadata`.
+            preset.filament_vendor = p.filament_vendor or None
         if slot in ("process", "filament"):
             # Precise compatibility link — the slicer's own compatible_printers
             # list, captured at import time. Lets the SliceModal filter the
@@ -415,6 +437,14 @@ async def _fetch_bundled_presets(db: AsyncSession, *, refresh: bool = False) -> 
             if slot == "filament":
                 extra["filament_type"] = entry.get("filament_type")
                 extra["filament_colour"] = entry.get("filament_colour")
+                # The sidecar does not emit this today — its bundled listing
+                # is `{name, base_id, filament_type, filament_colour}` — so
+                # this reads `None` on every current sidecar and the
+                # name-parse fallback in `_enrich_cloud_metadata` carries the
+                # whole tier. Read it anyway so an upgraded sidecar that does
+                # emit it wins over the name guess without a second change
+                # here (#58).
+                extra["filament_vendor"] = entry.get("filament_vendor")
             slots[slot].append(
                 UnifiedPreset(id=name, name=name, source="standard", **extra),
             )
@@ -490,27 +520,52 @@ def _enrich_cloud_metadata(
     profile, that copy states the truth; borrowing it turns the auto-pick
     into a correctly-rejected mismatch. Only ever fills a gap: an entry that
     carries its own list keeps it.
+
+    Vendor merge (#58): ``filament_vendor`` rides the same name bridge, for
+    the same reason — Bambu Cloud's list response carries no vendor either,
+    and the dropdown now GROUPS by vendor, so an unbridged cloud entry would
+    not merely score badly, it would sit in a different heading from the
+    identically-named local copy of the same spool.
+
+    Finally, every filament entry left without a vendor after the bridge gets
+    one parsed out of its NAME. This runs across all four tiers, not just the
+    standard one: the local tier's vendor column is nullable and rows imported
+    before the importer set it are null, so a name fallback scoped to standard
+    would leave those rows in the "Other" bucket forever. Parsing is a last
+    resort by construction — it only ever fills a gap.
     """
     # Build a name → metadata lookup from the tiers that carry it (local,
     # orca_cloud, standard). Bambu cloud is intentionally skipped — it
-    # doesn't populate filament_type/colour in the list response. Take
+    # doesn't populate filament_type/colour/vendor in the list response. Take
     # whichever non-empty entry shows up first.
-    metadata_by_name: dict[str, tuple[str | None, str | None]] = {}
+    metadata_by_name: dict[str, tuple[str | None, str | None, str | None]] = {}
     for tier in (local, orca_cloud, standard):
         for p in tier["filament"]:
             if p.name in metadata_by_name:
                 continue
-            if p.filament_type or p.filament_colour:
-                metadata_by_name[p.name] = (p.filament_type, p.filament_colour)
+            if p.filament_type or p.filament_colour or p.filament_vendor:
+                metadata_by_name[p.name] = (p.filament_type, p.filament_colour, p.filament_vendor)
 
     # Backfill Bambu Cloud entries that don't have their own metadata.
     for p in cloud["filament"]:
-        if (p.filament_type is None or p.filament_colour is None) and p.name in metadata_by_name:
-            t, c = metadata_by_name[p.name]
+        if (
+            p.filament_type is None or p.filament_colour is None or p.filament_vendor is None
+        ) and p.name in metadata_by_name:
+            t, c, v = metadata_by_name[p.name]
             if p.filament_type is None and t is not None:
                 p.filament_type = t
             if p.filament_colour is None and c is not None:
                 p.filament_colour = c
+            if p.filament_vendor is None and v is not None:
+                p.filament_vendor = v
+
+    # Name-derived vendor, last resort, every tier. Deliberately after the
+    # bridge: a real vendor borrowed from a same-named entry beats a guess
+    # made from punctuation.
+    for tier in (local, orca_cloud, cloud, standard):
+        for p in tier["filament"]:
+            if not p.filament_vendor:
+                p.filament_vendor = _parse_vendor_from_name(p.name)
 
     # Compatibility bridge (#2628). Runs over both slots that carry the
     # list, and in both directions between the cloud tiers — whichever copy

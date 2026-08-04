@@ -4061,6 +4061,8 @@ export default {
     noPresetsForSlot: 'Keine Profile verfügbar',
     noPresetsForPrinter: 'Keine Profile für diesen Drucker',
     otherPrinters: 'Andere Drucker',
+    presetGroup: '{{vendor}} – {{type}}',
+    presetGroupOther: 'Sonstige',
     presetsLoadFailed: 'Profile konnten nicht geladen werden. Importiere sie zuerst unter Einstellungen → Profile.',
     refreshPresets: 'Aktualisieren',
     refreshPresetsTitle: 'Profile neu laden — die aktuellen Cloud- und Bundle-Listen abrufen (nach dem Löschen eines Profils in Bambu Studio oder Bambu Handy verwenden)',

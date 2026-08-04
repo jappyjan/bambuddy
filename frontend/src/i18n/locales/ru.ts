@@ -3846,6 +3846,8 @@ export default {
     noPresetsForSlot: "Нет доступных профилей",
     noPresetsForPrinter: "Нет профилей для этого принтера",
     otherPrinters: "Другие принтеры",
+    presetGroup: "{{vendor}} – {{type}}",
+    presetGroupOther: "Прочие",
     presetsLoadFailed: "Не удалось загрузить профили. Сначала импортируйте их в разделе «Настройки → Профили».",
     refreshPresets: "Обновить",
     refreshPresetsTitle: "Обновить профили — получить свежие облачные и встроенные списки. Используйте после удаления профиля в Bambu Studio или Bambu Handy.",

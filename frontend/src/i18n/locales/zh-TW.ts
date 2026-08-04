@@ -4049,6 +4049,8 @@ export default {
     noPresetsForSlot: '無可用預設',
     noPresetsForPrinter: '沒有適用於此印表機的預設',
     otherPrinters: '其他印表機',
+    presetGroup: '{{vendor}} – {{type}}',
+    presetGroupOther: '其他',
     presetsLoadFailed: '載入預設失敗。請先開啟設定 → 設定檔以匯入。',
     refreshPresets: '重新整理',
     refreshPresetsTitle: '重新整理預設 — 擷取最新的雲端與打包設定清單（在 Bambu Studio 或 Bambu Handy 中刪除預設後使用）',
