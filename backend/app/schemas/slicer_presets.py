@@ -32,6 +32,25 @@ class UnifiedPreset(BaseModel):
     and color. Populated when the underlying preset JSON exposes them; left
     as ``None`` on bundled profiles where colour is a runtime spool attribute.
 
+    ``filament_vendor`` is the manufacturer the filament preset belongs to
+    ("Bambu Lab", "Overture", "eSUN"). It is what the `/slicer` rail's
+    filament dropdowns group by (#58) — Bambu Studio groups by manufacturer
+    and then by material, and the source tier a preset came from is an
+    implementation detail with no business being a group heading. Resolution
+    per tier, best source first:
+
+      - local  → ``LocalPreset.filament_vendor`` (the column importers fill)
+      - orca_cloud → the profile content's own ``filament_vendor``
+      - standard → the sidecar's ``filament_vendor``, if it emits one
+      - cloud  → borrowed from a same-named entry in another tier
+
+    …and, for any entry still without one, parsed out of the preset NAME
+    ("Overture PLA Matte @BBL X1C" → "Overture"). The column is nullable and
+    only populated by importers that set it, so rows imported before those
+    paths existed fall through to the name parse as well. ``None`` means no
+    vendor could be resolved at all; the frontend buckets those into a
+    trailing "Other" group rather than scattering them.
+
     ``compatible_printers`` is the slicer's own list of printer-preset names a
     process / filament preset declares itself valid for. Populated for the
     local tier (stored at import time); left ``None`` for cloud (no per-preset
@@ -47,6 +66,7 @@ class UnifiedPreset(BaseModel):
     source: Literal["orca_cloud", "cloud", "local", "standard"]
     filament_type: str | None = None
     filament_colour: str | None = None
+    filament_vendor: str | None = None
     compatible_printers: list[str] | None = None
 
 

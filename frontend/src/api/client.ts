@@ -1610,6 +1610,14 @@ export interface UnifiedPreset {
   // responses pre-date these fields entirely.
   filament_type?: string | null;
   filament_colour?: string | null;
+  // Manufacturer the filament preset belongs to ("Bambu Lab", "Overture").
+  // The `/slicer` rail's filament dropdowns group by this and subgroup by
+  // `filament_type`, the way Bambu Studio does (#58). Resolved backend-side
+  // from the best source each tier has — the local import's own column, the
+  // Orca profile content, the sidecar — falling back to a parse of the preset
+  // NAME. Null means no vendor could be resolved at all, which buckets the
+  // preset into a trailing "Other" group.
+  filament_vendor?: string | null;
   // Printer-preset names a process / filament preset declares itself
   // compatible with. Populated for the local tier (the slicer's own
   // `compatible_printers`); null for cloud / standard. The SliceModal filters

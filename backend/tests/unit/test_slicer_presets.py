@@ -922,3 +922,216 @@ class TestListPrinterModels:
 
         result = sp.list_printer_models()
         assert result is not PRINTER_MODEL_MAP
+
+
+def _filament_tier(items: list[tuple[str, str, str]], **kw) -> dict[str, list[UnifiedPreset]]:
+    """Build a tier dict whose filament slot holds (id, name, source) tuples.
+    Extra keyword args are applied to every preset built — used to seed a
+    vendor / type on a whole tier at once."""
+    return {
+        "printer": [],
+        "process": [],
+        "filament": [UnifiedPreset(id=i, name=n, source=s, **kw) for i, n, s in items],
+    }
+
+
+def _empty_tier() -> dict[str, list[UnifiedPreset]]:
+    return {"printer": [], "process": [], "filament": []}
+
+
+class TestFilamentVendor:
+    """``filament_vendor`` per tier (#58).
+
+    The dropdown now GROUPS by manufacturer, so where this field comes from
+    stops being a nice-to-have for scoring and becomes the thing that decides
+    which heading a preset appears under. Each tier resolves it from a
+    different place, and every one of them can come back empty:
+
+      - local → the ``LocalPreset.filament_vendor`` COLUMN. This is a new read:
+        ``_fetch_local_presets`` has always derived its filament metadata by
+        re-parsing the stored ``setting`` blob and never touched the model's
+        own columns. The column is nullable and only importers that set it
+        populate it, so rows written before those paths existed are null.
+      - orca_cloud → the inline profile content Orca's sync already returns.
+      - standard → whatever the sidecar emits; today it emits nothing, so the
+        whole tier rides the name fallback.
+      - cloud → nothing of its own ever; it borrows across the name bridge.
+
+    …and under all four, the name parse, which is what makes the grouping work
+    on an un-upgraded sidecar instead of shipping one giant "Other" bucket.
+    """
+
+    def _local_row(self, row_id: int, name: str, vendor: str | None) -> MagicMock:
+        row = MagicMock()
+        row.id = row_id
+        row.name = name
+        row.preset_type = "filament"
+        row.filament_vendor = vendor
+        row.setting = "{}"
+        row.compatible_printers = None
+        return row
+
+    async def _local_slots(self, rows: list[MagicMock]) -> dict[str, list[UnifiedPreset]]:
+        db = MagicMock()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = rows
+        db.execute = AsyncMock(return_value=result)
+        return await sp._fetch_local_presets(db)
+
+    async def test_local_tier_reads_the_vendor_column(self):
+        slots = await self._local_slots([self._local_row(1, "Warehouse Spool 7", "eSUN")])
+        assert slots["filament"][0].filament_vendor == "eSUN"
+
+    async def test_local_column_beats_the_name(self):
+        """Precedence, stated: the COLUMN wins. It was written by the importer
+        against the *resolved* profile (post-`inherits:` walk) with its own
+        name fallback already applied, so it is strictly better informed than
+        anything this listing can re-derive from the name."""
+        rows = [self._local_row(1, "Overture PLA Matte @BBL X1C", "Polymaker")]
+        local = await self._local_slots(rows)
+        _, _, local, _ = sp._enrich_cloud_metadata(_empty_tier(), _empty_tier(), local, _empty_tier())
+        assert local["filament"][0].filament_vendor == "Polymaker"
+
+    async def test_local_null_column_falls_back_to_the_name(self):
+        """The row every install has: imported before the importer set the
+        column. Without this fallback those presets would sit in "Other"
+        forever while a freshly re-imported copy of the same profile got a
+        proper heading."""
+        rows = [self._local_row(1, "Overture PLA Matte @BBL X1C", None)]
+        local = await self._local_slots(rows)
+        assert local["filament"][0].filament_vendor is None  # nothing to read
+        _, _, local, _ = sp._enrich_cloud_metadata(_empty_tier(), _empty_tier(), local, _empty_tier())
+        assert local["filament"][0].filament_vendor == "Overture"
+
+    async def test_local_non_filament_slots_get_no_vendor(self):
+        row = self._local_row(1, "Overture X1C Printer", None)
+        row.preset_type = "printer"
+        slots = await self._local_slots([row])
+        assert slots["printer"][0].filament_vendor is None
+
+    async def test_orca_cloud_reads_vendor_from_content(self):
+        sp._orca_cloud_cache.clear()
+        svc_mock = MagicMock()
+        svc_mock.list_profiles = AsyncMock(
+            return_value=[
+                {
+                    "id": "f1",
+                    "name": "Whatever @BBL X1C",
+                    "content": {
+                        "type": "filament",
+                        "filament_type": ["PLA"],
+                        # Single-element array, the historical multi-extruder
+                        # shape the other two fields already handle.
+                        "filament_vendor": ["Polymaker"],
+                    },
+                },
+            ]
+        )
+        svc_mock.close = AsyncMock()
+        user = MagicMock(id=1)
+        user.has_permission = MagicMock(return_value=True)
+        creds = MagicMock()
+        creds.token = "tok"
+        with (
+            patch.object(sp, "_load_orca_credentials", AsyncMock(return_value=creds)),
+            patch.object(sp, "_build_orca_service", AsyncMock(return_value=svc_mock)),
+        ):
+            slots, status = await sp._fetch_orca_cloud_presets(MagicMock(), user)
+        assert status == "ok"
+        assert slots["filament"][0].filament_vendor == "Polymaker"
+
+    async def test_standard_tier_takes_the_sidecar_field_when_it_ships_one(self):
+        """No sidecar emits ``filament_vendor`` today — the bundled listing is
+        ``{name, base_id, filament_type, filament_colour}``. Read it anyway so
+        an upgraded sidecar wins over the name guess with no second change."""
+        sp._bundled_cache = None
+        svc_mock = MagicMock()
+        svc_mock.list_bundled_profiles = AsyncMock(
+            return_value={
+                "printer": [],
+                "process": [],
+                "filament": [
+                    {
+                        "name": "Overture PLA Matte @BBL X1C",
+                        "filament_type": "PLA",
+                        "filament_colour": None,
+                        "filament_vendor": "Overture Actual",
+                    }
+                ],
+            }
+        )
+        svc_mock.__aenter__ = AsyncMock(return_value=svc_mock)
+        svc_mock.__aexit__ = AsyncMock(return_value=False)
+        with (
+            patch.object(sp, "_resolve_slicer_api_url", AsyncMock(return_value="http://ok")),
+            patch.object(sp, "SlicerApiService", return_value=svc_mock),
+        ):
+            slots = await sp._fetch_bundled_presets(MagicMock())
+        assert slots["filament"][0].filament_vendor == "Overture Actual"
+        _, _, _, standard = sp._enrich_cloud_metadata(
+            _empty_tier(), _empty_tier(), _empty_tier(), slots
+        )
+        assert standard["filament"][0].filament_vendor == "Overture Actual"
+
+    async def test_standard_tier_falls_back_to_the_name_on_todays_sidecar(self):
+        sp._bundled_cache = None
+        svc_mock = MagicMock()
+        svc_mock.list_bundled_profiles = AsyncMock(
+            return_value={
+                "printer": [],
+                "process": [],
+                # Exactly what the sidecar returns today: no vendor key at all.
+                "filament": [{"name": "Overture PLA Matte @BBL X1C", "base_id": "fdm_filament_pla"}],
+            }
+        )
+        svc_mock.__aenter__ = AsyncMock(return_value=svc_mock)
+        svc_mock.__aexit__ = AsyncMock(return_value=False)
+        with (
+            patch.object(sp, "_resolve_slicer_api_url", AsyncMock(return_value="http://ok")),
+            patch.object(sp, "SlicerApiService", return_value=svc_mock),
+        ):
+            slots = await sp._fetch_bundled_presets(MagicMock())
+        assert slots["filament"][0].filament_vendor is None
+        _, _, _, standard = sp._enrich_cloud_metadata(
+            _empty_tier(), _empty_tier(), _empty_tier(), slots
+        )
+        assert standard["filament"][0].filament_vendor == "Overture"
+
+    def test_bambu_cloud_borrows_vendor_across_the_name_bridge(self):
+        """Bambu Cloud's list response carries no vendor, and with the
+        dropdown grouping by vendor an unbridged cloud entry does not merely
+        score badly — it sits under a different heading from the identically
+        named local copy of the same spool."""
+        local = _filament_tier([("1", "House Blend Spool", "local")], filament_vendor="eSUN")
+        cloud = _filament_tier([("c1", "House Blend Spool", "cloud")])
+        _, cloud, _, _ = sp._enrich_cloud_metadata(_empty_tier(), cloud, local, _empty_tier())
+        assert cloud["filament"][0].filament_vendor == "eSUN"
+
+    def test_borrowed_vendor_beats_the_name_parse(self):
+        """Ordering inside the enrich pass: bridge first, guess second. A real
+        vendor from a same-named entry must not be overwritten by — or lose
+        to — a string sliced out of punctuation."""
+        local = _filament_tier([("1", "Overture PLA Matte @BBL X1C", "local")], filament_vendor="Polymaker")
+        cloud = _filament_tier([("c1", "Overture PLA Matte @BBL X1C", "cloud")])
+        _, cloud, _, _ = sp._enrich_cloud_metadata(_empty_tier(), cloud, local, _empty_tier())
+        assert cloud["filament"][0].filament_vendor == "Polymaker"
+
+    def test_unparseable_name_leaves_vendor_none(self):
+        """No vendor is a legitimate answer. The frontend buckets these into a
+        trailing "Other" group; inventing a vendor here would scatter them
+        under headings that mean nothing."""
+        local = _filament_tier([("1", "Spool #4", "local")])
+        _, _, local, _ = sp._enrich_cloud_metadata(_empty_tier(), _empty_tier(), local, _empty_tier())
+        assert local["filament"][0].filament_vendor is None
+
+    def test_vendor_bridge_does_not_touch_process_or_printer_slots(self):
+        """Vendor is a filament concept. A process preset named "Overture
+        something" must not sprout one."""
+        local = {
+            "printer": [UnifiedPreset(id="p", name="Overture PLA Printer", source="local")],
+            "process": [UnifiedPreset(id="q", name="Overture PLA Draft", source="local")],
+            "filament": [],
+        }
+        _, _, local, _ = sp._enrich_cloud_metadata(_empty_tier(), _empty_tier(), local, _empty_tier())
+        assert local["printer"][0].filament_vendor is None
+        assert local["process"][0].filament_vendor is None

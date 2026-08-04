@@ -209,6 +209,12 @@ export function FilamentSlotGrid({
                 // select is noise here, not a fallback — same call as the
                 // rail's process picker.
                 hideIncompatible
+                // #58: manufacturer, then material — the owner asked for
+                // Bambu Studio's grouping, and the source tier a preset came
+                // from is an implementation detail, not a heading. Falls back
+                // to the tier grouping on its own when the presets carry
+                // neither vendor nor material.
+                groupByVendor
                 selectClassName="px-2 py-1.5 text-xs"
                 // Same suppression as `SliceModal` (#47): a slot the plate does
                 // not paint with is auto-picked and read-only, so a material

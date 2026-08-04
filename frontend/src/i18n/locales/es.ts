@@ -4064,6 +4064,8 @@ export default {
     noPresetsForSlot: 'No hay preajustes disponibles',
     noPresetsForPrinter: 'No hay preajustes para esta impresora',
     otherPrinters: 'Otras impresoras',
+    presetGroup: '{{vendor}} – {{type}}',
+    presetGroupOther: 'Otros',
     presetsLoadFailed: 'Error al cargar los preajustes. Abra Ajustes → Perfiles para importarlos primero.',
     refreshPresets: 'Actualizar',
     refreshPresetsTitle: 'Actualizar preajustes — recuperar los listados más recientes de la nube y los paquetes (úselo tras eliminar un preajuste en Bambu Studio o Bambu Handy)',

@@ -4049,6 +4049,8 @@ export default {
     noPresetsForSlot: 'Nenhuma predefinição disponível',
     noPresetsForPrinter: 'Nenhuma predefinição para esta impressora',
     otherPrinters: 'Outras impressoras',
+    presetGroup: '{{vendor}} – {{type}}',
+    presetGroupOther: 'Outros',
     presetsLoadFailed: 'Falha ao carregar predefinições. Abra Configurações → Perfis para importá-las primeiro.',
     refreshPresets: 'Atualizar',
     refreshPresetsTitle: 'Atualizar predefinições — buscar as listagens mais recentes da nuvem e dos pacotes (use após excluir uma predefinição no Bambu Studio ou Bambu Handy)',

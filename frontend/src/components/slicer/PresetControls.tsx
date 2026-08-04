@@ -40,6 +40,31 @@ function fromRefValue(raw: string): PresetRef | null {
 }
 
 /**
+ * Material tokens used to recover a filament preset's TYPE from its name when
+ * the field is null — which is every bundled ("standard") preset on today's
+ * sidecar, because the sidecar only learned to resolve `filament_type` through
+ * the `inherits:` chain in the fork images (#51 is the sidecar-side fix).
+ *
+ * Display only. This never writes back onto the preset and is never consulted
+ * by `pickFilamentForSlot` or by the material-honesty guard (#47) — those must
+ * keep seeing the real metadata, because a *guessed* type that silences a
+ * "we are not sure about this material" warning is exactly the failure #47
+ * exists to prevent. It decides an `<optgroup>` heading and nothing else.
+ *
+ * Same token list as `LocalProfilesView`, which has parsed names this way
+ * since long before this file did.
+ */
+const MATERIAL_TYPES = ['PLA', 'PETG', 'PCTG', 'ABS', 'ASA', 'TPU', 'PC', 'PA', 'PVA', 'HIPS', 'PP', 'PET', 'NYLON'];
+
+function materialFromName(name: string): string | null {
+  const upper = name.toUpperCase();
+  for (const mat of MATERIAL_TYPES) {
+    if (new RegExp(`\\b${mat}\\b`).test(upper)) return mat;
+  }
+  return null;
+}
+
+/**
  * Build-plate options. Values are the canonical strings the slicer's
  * StaticPrintConfig validator accepts as `curr_bed_type` — BambuStudio is the
  * default sidecar, so this matches its enum; OrcaSlicer accepts the same set
@@ -106,6 +131,91 @@ export function BedTypeDropdown({
   );
 }
 
+/**
+ * One synthesised `<optgroup>`: a manufacturer, a material, and the presets
+ * that are both. `vendor: null` is the single trailing catch-all — everything
+ * with no resolvable manufacturer lands there together rather than being
+ * scattered under one-preset headings.
+ */
+interface VendorGroup {
+  vendor: string | null;
+  type: string | null;
+  entries: UnifiedPreset[];
+}
+
+/**
+ * Regroup filament presets the way Bambu Studio does: manufacturer first,
+ * material second.
+ *
+ * Returns `null` when the data cannot support it — not one entry resolves a
+ * vendor OR a material — which is the caller's signal to keep the tier
+ * grouping. That is the un-upgraded-sidecar case, and it matters: without the
+ * gate, an install whose presets carry neither field would render every single
+ * preset under one "Other" heading, which is a downgrade from headings that at
+ * least say where a preset came from.
+ *
+ * Order: vendors alphabetically, materials alphabetically inside each vendor,
+ * presets by name inside each group. Every unknown sorts last at its own
+ * level — an "Other" bucket is where you look when the specific headings did
+ * not have your preset, so it belongs at the bottom.
+ */
+function groupByVendorAndType(entries: UnifiedPreset[]): VendorGroup[] | null {
+  let anyKey = false;
+  // Vendors are keyed case-insensitively (an import spelling "eSUN" and a
+  // name-parsed "ESUN" are one manufacturer), but labelled with the first
+  // spelling seen so the heading reads the way the preset author wrote it.
+  const byVendor = new Map<string, { label: string; byType: Map<string, UnifiedPreset[]> }>();
+  const vendorless: UnifiedPreset[] = [];
+
+  for (const p of entries) {
+    const vendor = p.filament_vendor?.trim() || null;
+    // Real metadata first; the name is only consulted where the field is null.
+    const type = p.filament_type?.trim() || materialFromName(p.name);
+    if (vendor || type) anyKey = true;
+    if (!vendor) {
+      vendorless.push(p);
+      continue;
+    }
+    const vendorKey = vendor.toLowerCase();
+    let bucket = byVendor.get(vendorKey);
+    if (!bucket) {
+      bucket = { label: vendor, byType: new Map() };
+      byVendor.set(vendorKey, bucket);
+    }
+    const typeKey = type ?? '';
+    const list = bucket.byType.get(typeKey);
+    if (list) list.push(p);
+    else bucket.byType.set(typeKey, [p]);
+  }
+
+  if (!anyKey) return null;
+
+  const byName = (a: UnifiedPreset, b: UnifiedPreset) =>
+    a.name.localeCompare(b.name) || a.source.localeCompare(b.source);
+
+  const groups: VendorGroup[] = [];
+  for (const key of [...byVendor.keys()].sort((a, b) => a.localeCompare(b))) {
+    const bucket = byVendor.get(key)!;
+    const typeKeys = [...bucket.byType.keys()].sort((a, b) => {
+      // '' is "material unknown" — last within its vendor.
+      if (a === '') return 1;
+      if (b === '') return -1;
+      return a.localeCompare(b);
+    });
+    for (const typeKey of typeKeys) {
+      groups.push({
+        vendor: bucket.label,
+        type: typeKey || null,
+        entries: [...bucket.byType.get(typeKey)!].sort(byName),
+      });
+    }
+  }
+  if (vendorless.length > 0) {
+    groups.push({ vendor: null, type: null, entries: [...vendorless].sort(byName) });
+  }
+  return groups;
+}
+
 export interface PresetDropdownProps {
   label: string;
   slot: Slot;
@@ -138,6 +248,28 @@ export interface PresetDropdownProps {
    *     control and a slice request carrying a preset they cannot see.
    */
   hideIncompatible?: boolean;
+  /**
+   * Group filament presets by manufacturer, then material, instead of by
+   * source tier (#58) — "Bambu Lab – PLA" rather than "Imported" / "Standard".
+   *
+   * The tier a preset came from is an implementation detail; Bambu Studio
+   * groups by vendor and then by type, and that is what the owner asked for.
+   * A native `<select>` is flat two-level, so the two keys are synthesised
+   * into one `<optgroup>` label rather than nested — a real tree would mean a
+   * custom listbox and re-implementing mobile, keyboard and screen-reader
+   * behaviour that the native control gives for free.
+   *
+   * Opt-in rather than "always, for the filament slot", because `SliceModal`
+   * is the legacy slice path and renders the same component: #57 deliberately
+   * left its grouping alone and nothing in #58 asks for that to change.
+   * Ignored for the process / printer slots, which have no vendor.
+   *
+   * **Degrades on its own.** If not one visible preset resolves a vendor OR a
+   * material, this falls back to the tier grouping. That is the un-upgraded
+   * sidecar case, and one giant "Other" bucket is strictly worse than the
+   * headings we have today.
+   */
+  groupByVendor?: boolean;
   /** Extra classes on the `<select>` — the rail runs tighter than the modal. */
   selectClassName?: string;
   /**
@@ -166,6 +298,7 @@ export function PresetDropdown({
   selectedPrinterName,
   compatIndex,
   hideIncompatible = false,
+  groupByVendor = false,
   selectClassName = 'px-3 py-2 text-sm',
   typeWarning = null,
 }: PresetDropdownProps) {
@@ -219,8 +352,35 @@ export function PresetDropdown({
         compatSections.push({ tierLabel: t(lk, fallback), entries: compatible });
       }
     }
+
+    // Vendor → material regrouping (#58). Built from exactly the entries the
+    // tier pass decided are visible, which is what keeps it honest alongside
+    // #57: a preset hidden as another printer's never reaches this, so it
+    // cannot leave an empty vendor group behind — the groups are derived from
+    // the survivors rather than filtered after the fact.
+    if (groupByVendor && slot === 'filament') {
+      const groups = groupByVendorAndType(compatSections.flatMap((s) => s.entries));
+      // Gate: no vendor and no material anywhere means an un-upgraded
+      // sidecar, and one giant "Other" heading is worse than the tiers.
+      if (groups) {
+        return {
+          sections: groups.map((g) => ({
+            tierLabel:
+              g.vendor === null
+                ? t('slice.presetGroupOther')
+                : t('slice.presetGroup', {
+                    vendor: g.vendor,
+                    type: g.type ?? t('slice.presetGroupOther'),
+                  }),
+            entries: g.entries,
+          })),
+          otherEntries: other,
+        };
+      }
+    }
+
     return { sections: compatSections, otherEntries: other };
-  }, [data, slot, t, selectedPrinterName, compatIndex, hideIncompatible, selectedValue]);
+  }, [data, slot, t, selectedPrinterName, compatIndex, hideIncompatible, groupByVendor, selectedValue]);
 
   const totalEntries =
     sections.reduce((sum, s) => sum + s.entries.length, 0) + otherEntries.length;
@@ -269,8 +429,10 @@ export function PresetDropdown({
         <option value="">
           {totalEntries === 0 ? emptyLabel : t('slice.selectPreset')}
         </option>
-        {sections.map((section) => (
-          <optgroup key={section.tierLabel} label={section.tierLabel}>
+        {sections.map((section, index) => (
+          // Index-keyed: tier labels are unique, but a synthesised vendor
+          // label is only as unique as the vendor strings behind it.
+          <optgroup key={`${index}:${section.tierLabel}`} label={section.tierLabel}>
             {section.entries.map((p) => (
               <option key={`${p.source}:${p.id}`} value={`${p.source}:${p.id}`}>
                 {p.name}

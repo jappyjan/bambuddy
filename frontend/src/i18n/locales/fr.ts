@@ -4050,6 +4050,8 @@ export default {
     noPresetsForSlot: 'Aucun préréglage disponible',
     noPresetsForPrinter: 'Aucun préréglage pour cette imprimante',
     otherPrinters: 'Autres imprimantes',
+    presetGroup: '{{vendor}} – {{type}}',
+    presetGroupOther: 'Autres',
     presetsLoadFailed: 'Échec du chargement des préréglages. Ouvrez Paramètres → Profils pour les importer d\'abord.',
     refreshPresets: 'Actualiser',
     refreshPresetsTitle: 'Actualiser les préréglages — récupérer les dernières listes Cloud et bundle (à utiliser après avoir supprimé un préréglage dans Bambu Studio ou Bambu Handy)',
