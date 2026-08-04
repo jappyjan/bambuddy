@@ -321,11 +321,15 @@ export function useWebSocket() {
       case 'plate_not_empty':
         // Plate detection found objects - print was paused
         // Dispatch event for toast notification
+        // `message` / `reason` explain WHY the print was paused (the AI
+        // provider's verdict text, or the OpenCV difference summary). Both are
+        // optional — the alert falls back to generic copy (#63).
         window.dispatchEvent(new CustomEvent('plate-not-empty', {
           detail: {
             printer_id: message.printer_id,
             printer_name: (message as unknown as { printer_name?: string }).printer_name,
             message: (message as unknown as { message?: string }).message,
+            reason: (message as unknown as { reason?: string }).reason,
           }
         }));
         break;

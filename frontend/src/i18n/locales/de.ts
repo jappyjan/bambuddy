@@ -644,6 +644,12 @@ export default {
       deleteReference: 'Referenz löschen',
       labelPlaceholder: 'Bezeichnung...',
       clickToEdit: '{{label}} - Zum Bearbeiten klicken',
+      detectorOpencv: 'Bildvergleich',
+      detectorAi: 'KI-Bildmodell',
+      detectorBadgeAi: 'KI',
+      reason: 'Grund',
+      aiActiveTitle: 'KI-Bilderkennung ist aktiv',
+      aiCalibrationNotApplicable: 'Referenzbilder und der Erkennungsbereich werden nur vom Bildvergleich genutzt. Solange das KI-Bildmodell ausgewählt ist, haben sie keine Wirkung.',
       clickToAddLabel: 'Zum Hinzufügen einer Bezeichnung klicken',
     },
     // Speed
@@ -3051,6 +3057,7 @@ export default {
   plateAlert: {
     title: 'Druck pausiert!',
     message: 'Objekte auf dem Druckbett erkannt. Der Druck wurde automatisch pausiert. Bitte räumen Sie das Druckbett und setzen Sie den Druck fort.',
+    reasonLabel: 'Grund',
     understand: 'Verstanden',
   },
 
@@ -6624,6 +6631,25 @@ export default {
     viewIssue: 'Issue ansehen',
     unexpectedError: 'Ein unerwarteter Fehler ist aufgetreten',
   },
+  // Build plate detection provider settings (#63)
+  plateDetection: {
+    title: 'Druckplatten-Erkennung',
+    description: 'Prüft die Druckplatte kurz nach dem Druckstart und pausiert den Druck, wenn noch etwas darauf liegt. Pro Drucker auf der Druckerseite aktivierbar.',
+    provider: 'Erkennungsmethode',
+    providerOpencv: 'Bildvergleich (OpenCV)',
+    providerAi: 'KI-Bildmodell',
+    providerHint: 'Der Bildvergleich benötigt ein kalibriertes Foto der leeren Platte und liegt falsch, sobald die Platte verschoben wurde. Das KI-Bildmodell sendet stattdessen ein Kamerabild an einen OpenAI-kompatiblen Endpunkt.',
+    endpoint: 'Basis-URL des Endpunkts',
+    endpointHint: 'Basis-URL eines OpenAI-kompatiblen Servers, zum Beispiel https://api.openai.com/v1. Bambuddy hängt /chat/completions an.',
+    model: 'Modell',
+    modelHint: 'Name eines Modells, das Bilder lesen kann, zum Beispiel gpt-4o-mini.',
+    apiKey: 'API-Schlüssel',
+    apiKeyHint: 'Wird als Bearer-Token gesendet. Für lokale Server ohne Schlüssel leer lassen.',
+    timeout: 'Zeitlimit (Sekunden)',
+    timeoutHint: 'Die Prüfung läuft, während der Drucker bereits druckt — halte sie kurz. Kommt keine Antwort rechtzeitig an, läuft der Druck weiter.',
+    envReadOnly: 'Wert wird über die Umgebungsvariable {{var}} gesetzt (schreibgeschützt)',
+  },
+
   failureDetection: {
     title: 'KI-Fehlererkennung',
     description: 'Überwacht Drucke über eine selbst gehostete Obico-ML-API und reagiert automatisch auf erkannte Fehldrucke.',

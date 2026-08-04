@@ -689,7 +689,19 @@ async def check_plate_empty(
     Returns:
         PlateDetectionResult with analysis results
     """
-    if not OPENCV_AVAILABLE:
+    # Provider selection (#63). The AI branch is an *added* path: when the
+    # provider is "opencv" (the default) nothing below behaves differently.
+    from backend.app.services.ai_plate_detection import (
+        PROVIDER_AI,
+        analyze_frame_with_ai,
+        load_ai_config,
+    )
+
+    provider, ai_config = await load_ai_config()
+    use_ai = provider == PROVIDER_AI
+
+    # The AI provider needs no OpenCV at all — it only needs a JPEG.
+    if not OPENCV_AVAILABLE and not use_ai:
         return PlateDetectionResult(
             is_empty=True,
             confidence=0.0,
@@ -714,6 +726,33 @@ async def check_plate_empty(
             confidence=0.0,
             difference_percent=0.0,
             message="Failed to capture camera frame from any source",
+        )
+
+    if use_ai:
+        verdict = await analyze_frame_with_ai(image_data, ai_config)
+        if verdict is not None:
+            return PlateDetectionResult(
+                is_empty=verdict.is_empty,
+                confidence=verdict.confidence,
+                # Meaningless for this path - the UI would render any number
+                # we invented here as a measured fact.
+                difference_percent=0.0,
+                message=f"[{camera_source}] {verdict.message}",
+                # MUST stay False: main.py short-circuits the pause on
+                # needs_calibration, and the AI path has no reference images,
+                # so a True here would silently disable the feature.
+                needs_calibration=False,
+            )
+        # Every AI failure mode lands here. Do NOT fall back to the OpenCV
+        # comparison: an AI user has no calibration references, and the
+        # reference-diffing path is exactly the false-positive source they
+        # switched away from. Fail open, like every other error path here.
+        return PlateDetectionResult(
+            is_empty=True,
+            confidence=0.0,
+            difference_percent=0.0,
+            message=f"[{camera_source}] AI plate detection unavailable - skipping check (print not paused)",
+            needs_calibration=False,
         )
 
     # Analyze the captured frame

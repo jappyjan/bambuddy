@@ -644,6 +644,12 @@ export default {
       deleteReference: 'Elimina riferimento',
       labelPlaceholder: 'Etichetta...',
       clickToEdit: '{{label}} - Clicca per modificare',
+      detectorOpencv: 'Confronto di immagini',
+      detectorAi: 'Modello di visione IA',
+      detectorBadgeAi: 'IA',
+      reason: 'Motivo',
+      aiActiveTitle: 'Il rilevamento con visione IA è attivo',
+      aiCalibrationNotApplicable: 'Le immagini di riferimento e l’area di rilevamento sono usate solo dal confronto di immagini. Non hanno effetto finché è selezionato il modello di visione IA.',
       clickToAddLabel: 'Clicca per aggiungere etichetta',
     },
     // Speed
@@ -3039,6 +3045,7 @@ export default {
   plateAlert: {
     title: 'Stampa in pausa!',
     message: 'Oggetti rilevati sul piatto. La stampa è stata messa automaticamente in pausa. Svuota il piatto e riprendi la stampa.',
+    reasonLabel: 'Motivo',
     understand: 'Ho capito',
   },
 
@@ -6613,6 +6620,25 @@ export default {
     viewIssue: 'Vedi issue',
     unexpectedError: 'Si è verificato un errore imprevisto',
   },
+  // Build plate detection provider settings (#63)
+  plateDetection: {
+    title: 'Rilevamento del piano di stampa',
+    description: 'Controlla il piano poco dopo l’avvio di una stampa e mette la stampa in pausa se c’è ancora qualcosa sopra. Si attiva per singola stampante nella pagina Stampanti.',
+    provider: 'Metodo di rilevamento',
+    providerOpencv: 'Confronto di immagini (OpenCV)',
+    providerAi: 'Modello di visione IA',
+    providerHint: 'Il confronto di immagini richiede una foto calibrata del piano vuoto e sbaglia appena il piano viene spostato. Il modello di visione IA invia invece uno scatto della telecamera a un endpoint compatibile con OpenAI.',
+    endpoint: 'URL base dell’endpoint',
+    endpointHint: 'URL base di un server compatibile con OpenAI, ad esempio https://api.openai.com/v1. Bambuddy aggiunge /chat/completions.',
+    model: 'Modello',
+    modelHint: 'Nome di un modello in grado di leggere immagini, ad esempio gpt-4o-mini.',
+    apiKey: 'Chiave API',
+    apiKeyHint: 'Inviata come token bearer. Lascia vuoto per i server locali che non richiedono una chiave.',
+    timeout: 'Timeout (secondi)',
+    timeoutHint: 'Il controllo avviene mentre la stampante sta già stampando, quindi tienilo breve. Se non arriva risposta in tempo, la stampa prosegue.',
+    envReadOnly: 'Valore impostato dalla variabile d’ambiente {{var}} (sola lettura)',
+  },
+
   failureDetection: {
     title: 'Rilevamento guasti con IA',
     description: 'Monitora le stampe tramite un\'API ML Obico auto-ospitata e agisce automaticamente sui guasti rilevati.',

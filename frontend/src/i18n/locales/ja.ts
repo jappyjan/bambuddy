@@ -643,6 +643,12 @@ export default {
       deleteReference: 'リファレンスを削除',
       labelPlaceholder: 'ラベル...',
       clickToEdit: '{{label}} - クリックして編集',
+      detectorOpencv: '画像比較',
+      detectorAi: 'AI ビジョンモデル',
+      detectorBadgeAi: 'AI',
+      reason: '理由',
+      aiActiveTitle: 'AI ビジョン検出が有効です',
+      aiCalibrationNotApplicable: '参照画像と検出エリアは画像比較でのみ使用されます。AI ビジョンモデルを選択している間は効果がありません。',
       clickToAddLabel: 'クリックしてラベルを追加',
     },
     // Speed
@@ -3051,6 +3057,7 @@ export default {
   plateAlert: {
     title: '印刷が一時停止されました！',
     message: 'ビルドプレート上にオブジェクトが検出されました。印刷が自動的に一時停止されました。プレートをクリアして印刷を再開してください。',
+    reasonLabel: '理由',
     understand: '了解',
   },
 
@@ -6625,6 +6632,25 @@ export default {
     viewIssue: 'Issueを表示',
     unexpectedError: '予期しないエラーが発生しました',
   },
+  // Build plate detection provider settings (#63)
+  plateDetection: {
+    title: 'ビルドプレート検出',
+    description: '印刷開始の直後にビルドプレートを確認し、まだ物が残っている場合は印刷を一時停止します。プリンターページでプリンターごとに有効化できます。',
+    provider: '検出方式',
+    providerOpencv: '画像比較 (OpenCV)',
+    providerAi: 'AI ビジョンモデル',
+    providerHint: '画像比較には空のプレートの校正写真が必要で、プレートが少しずれるだけで誤判定します。AI ビジョンモデルは代わりにカメラ画像を OpenAI 互換エンドポイントへ送信します。',
+    endpoint: 'エンドポイントのベース URL',
+    endpointHint: 'OpenAI 互換サーバーのベース URL (例: https://api.openai.com/v1)。Bambuddy が /chat/completions を付加します。',
+    model: 'モデル',
+    modelHint: '画像を読み取れるモデルの名前 (例: gpt-4o-mini)。',
+    apiKey: 'API キー',
+    apiKeyHint: 'ベアラートークンとして送信されます。キーが不要なローカルサーバーでは空のままにしてください。',
+    timeout: 'タイムアウト (秒)',
+    timeoutHint: 'この確認はプリンターがすでに印刷している間に実行されるため、短く設定してください。時間内に応答がない場合、印刷はそのまま続行します。',
+    envReadOnly: '環境変数 {{var}} で設定された値です (読み取り専用)',
+  },
+
   failureDetection: {
     title: 'AI 失敗検出',
     description: 'セルフホストされた Obico ML API で印刷を監視し、検出された失敗に自動的に対応します。',

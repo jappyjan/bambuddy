@@ -2540,13 +2540,27 @@ async def on_print_start(printer_id: int, data: dict):
                         client.pause_print()
                         logger.info("[PLATE CHECK] Print paused for printer %s", printer_id)
 
-                    # Send notification about plate not empty
+                    # Send notification about plate not empty. The AI provider
+                    # (#63) has no difference_percent, so surface its reason
+                    # string instead of a fabricated "0.0%".
+                    if plate_result.difference_percent > 0:
+                        plate_alert = (
+                            f"Objects detected on build plate! Print paused. "
+                            f"(Diff: {plate_result.difference_percent:.1f}%)"
+                        )
+                    else:
+                        plate_alert = f"Objects detected on build plate! Print paused. {plate_result.message}".strip()
                     await ws_manager.broadcast(
                         {
                             "type": "plate_not_empty",
                             "printer_id": printer_id,
                             "printer_name": printer.name,
-                            "message": f"Objects detected on build plate! Print paused. (Diff: {plate_result.difference_percent:.1f}%)",
+                            "message": plate_alert,
+                            # The detector's own explanation, WITHOUT the generic
+                            # headline. The UI renders this in its own "Reason"
+                            # block, so repeating the headline here would show
+                            # the same sentence twice (#63).
+                            "reason": plate_result.message,
                         }
                     )
 

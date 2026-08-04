@@ -644,6 +644,12 @@ export default {
       deleteReference: '删除参考',
       labelPlaceholder: '标签...',
       clickToEdit: '{{label}} - 点击编辑',
+      detectorOpencv: '图像对比',
+      detectorAi: 'AI 视觉模型',
+      detectorBadgeAi: 'AI',
+      reason: '原因',
+      aiActiveTitle: 'AI 视觉检测已启用',
+      aiCalibrationNotApplicable: '参考图像和检测区域仅供图像对比使用。选择 AI 视觉模型时它们不起作用。',
       clickToAddLabel: '点击添加标签',
     },
     // Speed
@@ -3039,6 +3045,7 @@ export default {
   plateAlert: {
     title: '打印已暂停！',
     message: '在构建板上检测到物体。打印已自动暂停。请清理打印板并继续打印。',
+    reasonLabel: '原因',
     understand: '我知道了',
   },
 
@@ -6612,6 +6619,25 @@ export default {
     viewIssue: '查看Issue',
     unexpectedError: '发生了意外错误',
   },
+  // Build plate detection provider settings (#63)
+  plateDetection: {
+    title: '热床检测',
+    description: '在打印开始后不久检查热床，如果上面还有物体则暂停打印。可在打印机页面为每台打印机单独启用。',
+    provider: '检测方式',
+    providerOpencv: '图像对比 (OpenCV)',
+    providerAi: 'AI 视觉模型',
+    providerHint: '图像对比需要一张空热床的校准照片，热床稍有移动就会判断错误。AI 视觉模型改为将摄像头快照发送到兼容 OpenAI 的接口。',
+    endpoint: '接口基础 URL',
+    endpointHint: '兼容 OpenAI 的服务器基础 URL，例如 https://api.openai.com/v1。Bambuddy 会自动附加 /chat/completions。',
+    model: '模型',
+    modelHint: '能够读取图像的模型名称，例如 gpt-4o-mini。',
+    apiKey: 'API 密钥',
+    apiKeyHint: '以 Bearer 令牌方式发送。无需密钥的本地服务器可留空。',
+    timeout: '超时时间（秒）',
+    timeoutHint: '该检查在打印机已经开始打印时运行，因此请设置较短的时间。若未及时收到回复，打印将继续进行。',
+    envReadOnly: '该值由环境变量 {{var}} 设置（只读）',
+  },
+
   failureDetection: {
     title: 'AI 故障检测',
     description: '通过自托管的 Obico ML API 监控打印,并对检测到的故障自动采取行动。',

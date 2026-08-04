@@ -101,10 +101,13 @@ export function Layout() {
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | null>(() =>
     sessionStorage.getItem('dismissedUpdateVersion')
   );
+  // `message` carries the detector's own explanation for the pause — for the AI
+  // provider that is the model's `reason` string, for OpenCV the difference
+  // summary. It may be absent, in which case only the generic copy shows (#63).
   const [plateDetectionAlert, setPlateDetectionAlert] = useState<{
     printer_id: number;
     printer_name: string;
-    message: string;
+    message?: string;
   } | null>(null);
 
   // Check for updates
@@ -419,7 +422,9 @@ export function Layout() {
       setPlateDetectionAlert({
         printer_id: detail.printer_id,
         printer_name: detail.printer_name,
-        message: detail.message,
+        // `reason` is preferred when the backend sends it separately; otherwise
+        // the broadcast message is the reason.
+        message: detail.reason || detail.message,
       });
     };
     window.addEventListener('plate-not-empty', handlePlateNotEmpty);
@@ -950,9 +955,17 @@ export function Layout() {
               <p className="text-lg text-white mb-2">
                 {plateDetectionAlert.printer_name}
               </p>
-              <p className="text-bambu-gray mb-6">
+              <p className={`text-bambu-gray ${plateDetectionAlert.message ? 'mb-3' : 'mb-6'}`}>
                 {t('plateAlert.message')}
               </p>
+              {plateDetectionAlert.message && (
+                <div className="mb-6 rounded-lg border border-bambu-dark-tertiary bg-bambu-dark p-3 text-left">
+                  <p className="text-xs uppercase tracking-wide text-bambu-gray mb-1">
+                    {t('plateAlert.reasonLabel')}
+                  </p>
+                  <p className="text-sm text-white break-words">{plateDetectionAlert.message}</p>
+                </div>
+              )}
               <button
                 onClick={() => setPlateDetectionAlert(null)}
                 className="w-full py-3 px-6 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold rounded-lg transition-colors"

@@ -1175,6 +1175,38 @@ describe('PrintersPage', () => {
     });
   });
 
+  // #63 — the printer card must make clear WHICH plate detector is in play,
+  // because the OpenCV calibration UI is meaningless in AI mode.
+  describe('plate detection provider indicator', () => {
+    const printerWithPlateCheck = [{ ...mockPrinters[0], plate_detection_enabled: true }];
+
+    it('marks the plate check control as AI-driven when the global provider is "ai"', async () => {
+      server.use(
+        http.get('/api/v1/printers/', () => HttpResponse.json(printerWithPlateCheck)),
+        http.get('/api/v1/settings/', () =>
+          HttpResponse.json({ plate_detection_provider: 'ai' }),
+        ),
+      );
+      render(<PrintersPage />);
+
+      const toggle = await screen.findByTitle(/Plate check enabled.*AI vision model/i);
+      expect(toggle).toBeInTheDocument();
+      expect(within(toggle.parentElement as HTMLElement).getByText('AI')).toBeInTheDocument();
+    });
+
+    it('keeps the OpenCV wording and shows no AI badge with the default provider', async () => {
+      server.use(
+        http.get('/api/v1/printers/', () => HttpResponse.json(printerWithPlateCheck)),
+        http.get('/api/v1/settings/', () =>
+          HttpResponse.json({ plate_detection_provider: 'opencv' }),
+        ),
+      );
+      render(<PrintersPage />);
+
+      const toggle = await screen.findByTitle(/Plate check enabled.*Image comparison/i);
+      expect(within(toggle.parentElement as HTMLElement).queryByText('AI')).not.toBeInTheDocument();
+    });
+  });
 });
 
 /**

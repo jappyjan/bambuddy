@@ -644,6 +644,12 @@ export default {
       deleteReference: '刪除參考',
       labelPlaceholder: '標籤...',
       clickToEdit: '{{label}} - 點選編輯',
+      detectorOpencv: '影像比對',
+      detectorAi: 'AI 視覺模型',
+      detectorBadgeAi: 'AI',
+      reason: '原因',
+      aiActiveTitle: 'AI 視覺偵測已啟用',
+      aiCalibrationNotApplicable: '參考影像與偵測區域僅供影像比對使用。選擇 AI 視覺模型時不會生效。',
       clickToAddLabel: '點選新增標籤',
     },
     // Speed
@@ -3039,6 +3045,7 @@ export default {
   plateAlert: {
     title: '列印已暫停！',
     message: '在列印板上偵測到物體。列印已自動暫停。請清理列印板並繼續列印。',
+    reasonLabel: '原因',
     understand: '我知道了',
   },
 
@@ -6612,6 +6619,25 @@ export default {
     viewIssue: '檢視 Issue',
     unexpectedError: '發生了意外錯誤',
   },
+  // Build plate detection provider settings (#63)
+  plateDetection: {
+    title: '列印平台偵測',
+    description: '在列印開始後不久檢查平台，若上面仍有物件則暫停列印。可在印表機頁面為每台印表機分別啟用。',
+    provider: '偵測方式',
+    providerOpencv: '影像比對 (OpenCV)',
+    providerAi: 'AI 視覺模型',
+    providerHint: '影像比對需要一張空平台的校正照片，平台只要稍微移動就會判斷錯誤。AI 視覺模型改為將攝影機畫面傳送到相容 OpenAI 的端點。',
+    endpoint: '端點基礎 URL',
+    endpointHint: '相容 OpenAI 的伺服器基礎 URL，例如 https://api.openai.com/v1。Bambuddy 會自動附加 /chat/completions。',
+    model: '模型',
+    modelHint: '能夠讀取影像的模型名稱，例如 gpt-4o-mini。',
+    apiKey: 'API 金鑰',
+    apiKeyHint: '以 Bearer 權杖方式傳送。不需要金鑰的本機伺服器可留空。',
+    timeout: '逾時（秒）',
+    timeoutHint: '這項檢查會在印表機已經開始列印時執行，因此請設定較短的時間。若未及時收到回覆，列印將繼續進行。',
+    envReadOnly: '此值由環境變數 {{var}} 設定（唯讀）',
+  },
+
   failureDetection: {
     title: 'AI 故障檢測',
     description: '透過自託管的 Obico ML API 監控列印,並對偵測到的故障自動採取行動。',
