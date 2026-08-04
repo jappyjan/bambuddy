@@ -644,6 +644,12 @@ export default {
       deleteReference: 'Eliminar referencia',
       labelPlaceholder: 'Etiqueta...',
       clickToEdit: '{{label}} - Haga clic para editar',
+      detectorOpencv: 'Comparación de imágenes',
+      detectorAi: 'Modelo de visión con IA',
+      detectorBadgeAi: 'IA',
+      reason: 'Motivo',
+      aiActiveTitle: 'La detección por visión con IA está activa',
+      aiCalibrationNotApplicable: 'Las imágenes de referencia y el área de detección solo los usa la comparación de imágenes. No tienen efecto mientras esté seleccionado el modelo de visión con IA.',
       clickToAddLabel: 'Haga clic para añadir una etiqueta',
     },
     // Speed
@@ -3054,6 +3060,7 @@ export default {
   plateAlert: {
     title: '¡Impresión en pausa!',
     message: 'Se han detectado objetos en la cama de impresión. La impresión se ha pausado automáticamente. Despeje la cama y reanude la impresión.',
+    reasonLabel: 'Motivo',
     understand: 'Entendido',
   },
 
@@ -6632,6 +6639,25 @@ export default {
     viewIssue: 'Ver incidencia',
     unexpectedError: 'Se produjo un error inesperado',
   },
+  // Build plate detection provider settings (#63)
+  plateDetection: {
+    title: 'Detección de la placa de impresión',
+    description: 'Comprueba la placa poco después de que empiece una impresión y la pausa si todavía hay algo encima. Se activa por impresora en la página de impresoras.',
+    provider: 'Método de detección',
+    providerOpencv: 'Comparación de imágenes (OpenCV)',
+    providerAi: 'Modelo de visión con IA',
+    providerHint: 'La comparación de imágenes necesita una foto calibrada de la placa vacía y se equivoca en cuanto la placa se mueve. El modelo de visión con IA envía en su lugar una captura de la cámara a un endpoint compatible con OpenAI.',
+    endpoint: 'URL base del endpoint',
+    endpointHint: 'URL base de un servidor compatible con OpenAI, por ejemplo https://api.openai.com/v1. Bambuddy añade /chat/completions.',
+    model: 'Modelo',
+    modelHint: 'Nombre de un modelo capaz de leer imágenes, por ejemplo gpt-4o-mini.',
+    apiKey: 'Clave de API',
+    apiKeyHint: 'Se envía como token bearer. Déjalo vacío para servidores locales que no necesitan clave.',
+    timeout: 'Tiempo de espera (segundos)',
+    timeoutHint: 'La comprobación se ejecuta mientras la impresora ya está imprimiendo, así que mantenlo corto. Si no llega respuesta a tiempo, la impresión continúa.',
+    envReadOnly: 'Valor definido por la variable de entorno {{var}} (solo lectura)',
+  },
+
   failureDetection: {
     title: 'Detección de fallos por IA',
     description: 'Supervise las impresiones con una API de ML de Obico autoalojada y actúe automáticamente ante los fallos detectados.',

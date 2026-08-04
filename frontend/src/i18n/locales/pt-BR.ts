@@ -644,6 +644,12 @@ export default {
       deleteReference: 'Excluir referência',
       labelPlaceholder: 'Etiqueta...',
       clickToEdit: '{{label}} - Clique para editar',
+      detectorOpencv: 'Comparação de imagens',
+      detectorAi: 'Modelo de visão com IA',
+      detectorBadgeAi: 'IA',
+      reason: 'Motivo',
+      aiActiveTitle: 'A detecção por visão com IA está ativa',
+      aiCalibrationNotApplicable: 'As imagens de referência e a área de detecção são usadas apenas pela comparação de imagens. Elas não têm efeito enquanto o modelo de visão com IA estiver selecionado.',
       clickToAddLabel: 'Clique para adicionar etiqueta',
     },
     // Speed
@@ -3039,6 +3045,7 @@ export default {
   plateAlert: {
     title: 'Impressão Pausada!',
     message: 'Objetos detectados na mesa de impressão. A impressão foi automaticamente pausada. Por favor, limpe a mesa e retome a impressão.',
+    reasonLabel: 'Motivo',
     understand: 'Entendi',
   },
 
@@ -6612,6 +6619,25 @@ export default {
     viewIssue: 'Ver issue',
     unexpectedError: 'Ocorreu um erro inesperado',
   },
+  // Build plate detection provider settings (#63)
+  plateDetection: {
+    title: 'Detecção da mesa de impressão',
+    description: 'Verifica a mesa logo após o início de uma impressão e pausa a impressão se ainda houver algo sobre ela. Ative por impressora na página de impressoras.',
+    provider: 'Método de detecção',
+    providerOpencv: 'Comparação de imagens (OpenCV)',
+    providerAi: 'Modelo de visão com IA',
+    providerHint: 'A comparação de imagens precisa de uma foto calibrada da mesa vazia e erra assim que a mesa é deslocada. O modelo de visão com IA envia uma captura da câmera para um endpoint compatível com OpenAI.',
+    endpoint: 'URL base do endpoint',
+    endpointHint: 'URL base de um servidor compatível com OpenAI, por exemplo https://api.openai.com/v1. O Bambuddy acrescenta /chat/completions.',
+    model: 'Modelo',
+    modelHint: 'Nome de um modelo capaz de ler imagens, por exemplo gpt-4o-mini.',
+    apiKey: 'Chave de API',
+    apiKeyHint: 'Enviada como token bearer. Deixe vazio para servidores locais que não exigem chave.',
+    timeout: 'Tempo limite (segundos)',
+    timeoutHint: 'A verificação ocorre enquanto a impressora já está imprimindo, então mantenha um valor curto. Se não houver resposta a tempo, a impressão continua.',
+    envReadOnly: 'Valor definido pela variável de ambiente {{var}} (somente leitura)',
+  },
+
   failureDetection: {
     title: 'Detecção de Falhas por IA',
     description: 'Monitora impressões via API ML do Obico auto-hospedada e age automaticamente em falhas detectadas.',

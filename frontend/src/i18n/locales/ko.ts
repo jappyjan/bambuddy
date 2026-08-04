@@ -603,6 +603,12 @@ export default {
       deleteReference: '참조 삭제',
       labelPlaceholder: '라벨...',
       clickToEdit: '{{label}} - 클릭하여 편집',
+      detectorOpencv: '이미지 비교',
+      detectorAi: 'AI 비전 모델',
+      detectorBadgeAi: 'AI',
+      reason: '이유',
+      aiActiveTitle: 'AI 비전 감지가 활성화되어 있습니다',
+      aiCalibrationNotApplicable: '참조 이미지와 감지 영역은 이미지 비교에서만 사용됩니다. AI 비전 모델을 선택한 동안에는 적용되지 않습니다.',
       clickToAddLabel: '클릭하여 라벨 추가'
     },
     speed: {
@@ -2886,6 +2892,7 @@ export default {
   plateAlert: {
     title: '인쇄 일시정지됨!',
     message: '빌드 플레이트에 객체가 감지되었습니다. 인쇄가 자동으로 일시정지되었습니다. 플레이트를 비우고 인쇄를 재개하세요.',
+    reasonLabel: '이유',
     understand: '확인했습니다'
   },
   camera: {
@@ -6093,6 +6100,25 @@ export default {
     logHealthSummary: '로그에서 알려진 문제가 발견되었습니다',
     logHealthIntro: '최근 로그가 알려진 문제와 일치합니다. 아래 수정 방법을 확인하세요 — 해결하면 버그 보고서 없이 문제가 해결될 수 있습니다. 아래에서 보고서를 제출할 수도 있습니다.'
   },
+  // Build plate detection provider settings (#63)
+  plateDetection: {
+    title: '빌드 플레이트 감지',
+    description: '출력이 시작된 직후 빌드 플레이트를 확인하고, 아직 물체가 남아 있으면 출력을 일시정지합니다. 프린터 페이지에서 프린터별로 켤 수 있습니다.',
+    provider: '감지 방식',
+    providerOpencv: '이미지 비교 (OpenCV)',
+    providerAi: 'AI 비전 모델',
+    providerHint: '이미지 비교는 빈 플레이트의 보정 사진이 필요하며 플레이트가 조금만 움직여도 잘못 판단합니다. AI 비전 모델은 대신 카메라 스냅샷을 OpenAI 호환 엔드포인트로 보냅니다.',
+    endpoint: '엔드포인트 기본 URL',
+    endpointHint: 'OpenAI 호환 서버의 기본 URL입니다. 예: https://api.openai.com/v1. Bambuddy가 /chat/completions를 덧붙입니다.',
+    model: '모델',
+    modelHint: '이미지를 읽을 수 있는 모델의 이름입니다. 예: gpt-4o-mini.',
+    apiKey: 'API 키',
+    apiKeyHint: 'Bearer 토큰으로 전송됩니다. 키가 필요 없는 로컬 서버에서는 비워 두세요.',
+    timeout: '제한 시간 (초)',
+    timeoutHint: '이 확인은 프린터가 이미 출력 중일 때 실행되므로 짧게 유지하세요. 제한 시간 안에 응답이 없으면 출력이 계속됩니다.',
+    envReadOnly: '{{var}} 환경 변수로 설정된 값입니다 (읽기 전용)',
+  },
+
   failureDetection: {
     title: 'AI 실패 감지',
     description: '자체 호스팅 Obico ML API로 인쇄를 모니터링하고 감지된 실패에 자동으로 조치합니다.',

@@ -245,6 +245,65 @@ describe('Layout', () => {
       });
     });
 
+    // #63: "why did it pause" is the whole point of the alert — the detector's
+    // explanation must be shown, and its absence must not break the modal.
+    it('surfaces the detector reason when the event carries one', async () => {
+      render(<Layout />);
+
+      window.dispatchEvent(
+        new CustomEvent('plate-not-empty', {
+          detail: {
+            printer_id: 1,
+            printer_name: 'Test Printer',
+            message: 'A finished benchy is still sitting in the middle of the plate',
+          },
+        })
+      );
+
+      await waitFor(() => {
+        expect(document.body.textContent).toContain('Print Paused!');
+      });
+      expect(document.body.textContent).toContain(
+        'A finished benchy is still sitting in the middle of the plate'
+      );
+      expect(document.body.textContent).toContain('Reason');
+    });
+
+    it('prefers an explicit reason field over the generic message', async () => {
+      render(<Layout />);
+
+      window.dispatchEvent(
+        new CustomEvent('plate-not-empty', {
+          detail: {
+            printer_id: 1,
+            printer_name: 'Test Printer',
+            message: 'Diff 4.2% over threshold',
+            reason: 'Two purge blobs near the front edge',
+          },
+        })
+      );
+
+      await waitFor(() => {
+        expect(document.body.textContent).toContain('Two purge blobs near the front edge');
+      });
+      expect(document.body.textContent).not.toContain('Diff 4.2% over threshold');
+    });
+
+    it('renders without a reason block when the event carries no message', async () => {
+      render(<Layout />);
+
+      window.dispatchEvent(
+        new CustomEvent('plate-not-empty', {
+          detail: { printer_id: 1, printer_name: 'Test Printer' },
+        })
+      );
+
+      await waitFor(() => {
+        expect(document.body.textContent).toContain('Print Paused!');
+      });
+      expect(document.body.textContent).not.toContain('Reason');
+    });
+
     it('closes modal when I Understand button is clicked', async () => {
       render(<Layout />);
 

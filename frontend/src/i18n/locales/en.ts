@@ -648,6 +648,12 @@ export default {
       deleteReference: 'Delete reference',
       labelPlaceholder: 'Label...',
       clickToEdit: '{{label}} - Click to edit',
+      detectorOpencv: 'Image comparison',
+      detectorAi: 'AI vision model',
+      detectorBadgeAi: 'AI',
+      reason: 'Reason',
+      aiActiveTitle: 'AI vision detection is active',
+      aiCalibrationNotApplicable: 'Reference images and the detection area are only used by image comparison. They have no effect while the AI vision model is selected.',
       clickToAddLabel: 'Click to add label',
     },
     // Speed
@@ -3080,6 +3086,7 @@ export default {
   plateAlert: {
     title: 'Print Paused!',
     message: 'Objects detected on build plate. The print has been automatically paused. Please clear the plate and resume the print.',
+    reasonLabel: 'Reason',
     understand: 'I Understand',
   },
 
@@ -6681,6 +6688,25 @@ export default {
     viewIssue: 'View Issue',
     unexpectedError: 'An unexpected error occurred',
   },
+  // Build plate detection provider settings (#63)
+  plateDetection: {
+    title: 'Build Plate Detection',
+    description: 'Checks the build plate shortly after a print starts and pauses the print if something is still on it. Enable it per printer on the Printers page.',
+    provider: 'Detection method',
+    providerOpencv: 'Image comparison (OpenCV)',
+    providerAi: 'AI vision model',
+    providerHint: 'Image comparison needs a calibrated photo of the empty plate and gets it wrong as soon as the plate is moved. The AI vision model sends a camera snapshot to an OpenAI-compatible endpoint instead.',
+    endpoint: 'Endpoint base URL',
+    endpointHint: 'Base URL of an OpenAI-compatible server, for example https://api.openai.com/v1. Bambuddy appends /chat/completions.',
+    model: 'Model',
+    modelHint: 'Name of a model that can read images, for example gpt-4o-mini.',
+    apiKey: 'API key',
+    apiKeyHint: 'Sent as a bearer token. Leave empty for local servers that need no key.',
+    timeout: 'Timeout (seconds)',
+    timeoutHint: 'The check runs while the printer is already printing, so keep it short. If no answer arrives in time the print continues.',
+    envReadOnly: 'Value set by the {{var}} environment variable (read-only)',
+  },
+
   failureDetection: {
     title: 'AI Failure Detection',
     description: 'Monitor prints with a self-hosted Obico ML API and act on detected failures automatically.',

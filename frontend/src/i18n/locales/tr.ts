@@ -644,6 +644,12 @@ export default {
       deleteReference: 'Referansı sil',
       labelPlaceholder: 'Etiket...',
       clickToEdit: '{{label}} - Düzenlemek için tıklayın',
+      detectorOpencv: 'Görüntü karşılaştırma',
+      detectorAi: 'Yapay zekâ görüş modeli',
+      detectorBadgeAi: 'YZ',
+      reason: 'Neden',
+      aiActiveTitle: 'Yapay zekâ görüş algılaması etkin',
+      aiCalibrationNotApplicable: 'Referans görüntüler ve algılama alanı yalnızca görüntü karşılaştırma tarafından kullanılır. Yapay zekâ görüş modeli seçiliyken hiçbir etkileri yoktur.',
       clickToAddLabel: 'Etiket eklemek için tıklayın',
     },
     // Hız
@@ -3055,6 +3061,7 @@ export default {
   plateAlert: {
     title: 'Baskı Duraklatıldı!',
     message: 'Baskı plakasında nesneler algılandı. Baskı otomatik olarak duraklatıldı. Lütfen plakayı temizleyin ve baskıya devam edin.',
+    reasonLabel: 'Neden',
     understand: 'Anladım',
   },
 
@@ -6563,6 +6570,25 @@ export default {
     viewIssue: 'Sorunu Görüntüle',
     unexpectedError: 'Beklenmedik bir hata oluştu',
   },
+  // Build plate detection provider settings (#63)
+  plateDetection: {
+    title: 'Baskı tablası algılama',
+    description: 'Baskı başladıktan kısa süre sonra tablayı kontrol eder ve üzerinde hâlâ bir şey varsa baskıyı duraklatır. Yazıcılar sayfasından her yazıcı için ayrı açılır.',
+    provider: 'Algılama yöntemi',
+    providerOpencv: 'Görüntü karşılaştırma (OpenCV)',
+    providerAi: 'Yapay zekâ görüş modeli',
+    providerHint: 'Görüntü karşılaştırma boş tablanın kalibre edilmiş fotoğrafını gerektirir ve tabla kaydığı anda yanılır. Yapay zekâ görüş modeli bunun yerine kamera görüntüsünü OpenAI uyumlu bir uç noktaya gönderir.',
+    endpoint: 'Uç nokta temel URL’si',
+    endpointHint: 'OpenAI uyumlu bir sunucunun temel URL’si, örneğin https://api.openai.com/v1. Bambuddy sonuna /chat/completions ekler.',
+    model: 'Model',
+    modelHint: 'Görüntü okuyabilen bir modelin adı, örneğin gpt-4o-mini.',
+    apiKey: 'API anahtarı',
+    apiKeyHint: 'Bearer belirteci olarak gönderilir. Anahtar gerektirmeyen yerel sunucular için boş bırakın.',
+    timeout: 'Zaman aşımı (saniye)',
+    timeoutHint: 'Kontrol, yazıcı zaten baskı yaparken çalışır; bu yüzden kısa tutun. Zamanında yanıt gelmezse baskı devam eder.',
+    envReadOnly: 'Değer {{var}} ortam değişkeniyle ayarlanmış (salt okunur)',
+  },
+
   failureDetection: {
     title: 'AI Başarısızlık Algılama',
     description: 'Baskıları kendi barındırılan bir Obico ML API ile izle ve algılanan başarısızlıklara otomatik olarak yanıt ver.',

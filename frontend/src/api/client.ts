@@ -1326,6 +1326,19 @@ export interface AppSettings {
   obico_action: 'notify' | 'pause' | 'pause_and_off';
   obico_poll_interval: number;
   obico_enabled_printers: string;
+  // Build plate detection (#63). Global provider selection; per-printer
+  // enablement stays on `printers.plate_detection_enabled`. The detector runs
+  // AFTER a print has started and can only pause a running print.
+  plate_detection_provider: 'opencv' | 'ai';
+  plate_detection_ai_endpoint: string;
+  plate_detection_ai_model: string;
+  plate_detection_ai_api_key: string;
+  plate_detection_ai_timeout: number;
+  // Response-only: true when the value comes from an environment variable and
+  // the settings row is therefore read-only (same contract as ha_token_from_env).
+  plate_detection_ai_endpoint_from_env: boolean;
+  plate_detection_ai_model_from_env: boolean;
+  plate_detection_ai_api_key_from_env: boolean;
   // Inventory forecasting global lead time
   forecast_global_lead_time_days: number;
 }

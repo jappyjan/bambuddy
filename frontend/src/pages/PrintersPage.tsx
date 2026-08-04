@@ -1917,6 +1917,21 @@ function PrinterCard({
     refetchInterval: 30000, // Fallback polling, WebSocket handles real-time
   });
 
+  // Which plate detector is globally selected (#63). Shares the ['settings']
+  // query Layout already runs, so this is a cache read rather than an extra
+  // request. Gated on settings:read — without it the badge simply falls back to
+  // the OpenCV wording, which is the default provider anyway.
+  const { data: appSettings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: api.getSettings,
+    staleTime: 5 * 60 * 1000,
+    enabled: hasPermission('settings:read'),
+  });
+  const aiPlateDetection = appSettings?.plate_detection_provider === 'ai';
+  const plateDetectorLabel = aiPlateDetection
+    ? t('printers.plateDetection.detectorAi')
+    : t('printers.plateDetection.detectorOpencv');
+
   // Check for firmware updates (cached for 5 minutes, can be disabled in settings)
   const { data: firmwareInfo } = useQuery({
     queryKey: ['firmwareUpdate', printer.id],
@@ -4362,7 +4377,12 @@ function PrinterCard({
                         );
                       })()}
 
-                      <div className={`inline-flex rounded-lg ${printer.plate_detection_enabled ? 'ring-1 ring-green-500' : ''}`}>
+                      <div className={`relative inline-flex rounded-lg ${printer.plate_detection_enabled ? 'ring-1 ring-green-500' : ''}`}>
+                        {printer.plate_detection_enabled && aiPlateDetection && (
+                          <span className="pointer-events-none absolute -top-1.5 -right-1.5 rounded bg-purple-600 px-1 text-[9px] font-semibold leading-tight text-white">
+                            {t('printers.plateDetection.detectorBadgeAi')}
+                          </span>
+                        )}
                         <button
                           onClick={handleTogglePlateDetection}
                           disabled={!status.connected || plateDetectionMutation.isPending || !hasPermission('printers:update')}
@@ -4371,7 +4391,7 @@ function PrinterCard({
                               ? 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 hover:bg-green-500/20'
                               : 'bg-bambu-dark text-bambu-gray/50 hover:bg-bambu-dark-tertiary hover:text-white'
                           }`}
-                          title={!hasPermission('printers:update') ? t('printers.plateDetection.noPermission') : (printer.plate_detection_enabled ? t('printers.plateDetection.enabledClick') : t('printers.plateDetection.disabledClick'))}
+                          title={!hasPermission('printers:update') ? t('printers.plateDetection.noPermission') : `${printer.plate_detection_enabled ? t('printers.plateDetection.enabledClick') : t('printers.plateDetection.disabledClick')} · ${plateDetectorLabel}`}
                         >
                           {plateDetectionMutation.isPending ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -5895,7 +5915,17 @@ function PrinterCard({
                 <h2 className="text-lg font-semibold text-white">
                   Build Plate Check
                 </h2>
-                {plateCheckResult.reference_count !== undefined && plateCheckResult.max_references && (
+                {/* Which detector produced this verdict (#63) */}
+                <span
+                  className={`text-xs px-2 py-1 rounded ${
+                    aiPlateDetection
+                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300'
+                      : 'text-bambu-gray bg-bambu-dark-tertiary'
+                  }`}
+                >
+                  {plateDetectorLabel}
+                </span>
+                {!aiPlateDetection && plateCheckResult.reference_count !== undefined && plateCheckResult.max_references && (
                   <span className="text-xs text-bambu-gray bg-bambu-dark-tertiary px-2 py-1 rounded">
                     {plateCheckResult.reference_count}/{plateCheckResult.max_references} refs
                   </span>
@@ -5928,9 +5958,18 @@ function PrinterCard({
                     <p className={`font-medium ${plateCheckResult.is_empty ? 'text-green-700 dark:text-green-400' : 'text-yellow-700 dark:text-yellow-400'}`}>
                       {plateCheckResult.is_empty ? t('printers.plateDetection.plateEmpty') : t('printers.plateDetection.objectsDetected')}
                     </p>
+                    {/* `difference_percent` is an OpenCV-only metric — the AI
+                        provider reports 0.0, so showing it would be fiction. */}
                     <p className="text-sm text-bambu-gray mt-1">
-                      {t('printers.plateDetection.confidence')}: {Math.round(plateCheckResult.confidence * 100)}% | {t('printers.plateDetection.difference')}: {plateCheckResult.difference_percent.toFixed(1)}%
+                      {t('printers.plateDetection.confidence')}: {Math.round(plateCheckResult.confidence * 100)}%
+                      {!aiPlateDetection && ` | ${t('printers.plateDetection.difference')}: ${plateCheckResult.difference_percent.toFixed(1)}%`}
                     </p>
+                    {aiPlateDetection && plateCheckResult.message && (
+                      <p className="text-sm text-white mt-2 break-words">
+                        <span className="text-bambu-gray">{t('printers.plateDetection.reason')}: </span>
+                        {plateCheckResult.message}
+                      </p>
+                    )}
                   </div>
                   {plateCheckResult.debug_image_url && (
                     <div>
@@ -5945,14 +5984,30 @@ function PrinterCard({
                       </p>
                     </div>
                   )}
-                  <p className="text-xs text-bambu-gray">
-                    {plateCheckResult.message}
-                  </p>
+                  {!aiPlateDetection && (
+                    <p className="text-xs text-bambu-gray">
+                      {plateCheckResult.message}
+                    </p>
+                  )}
                 </>
               )}
 
+              {/* AI provider active: the OpenCV reference images and ROI below
+                  are not used by it. Kept in the tree (not deleted) because the
+                  calibration flow is still the whole feature in opencv mode. */}
+              {aiPlateDetection && (
+                <div className="p-3 rounded-lg bg-purple-100 dark:bg-purple-500/10 border border-purple-300 dark:border-purple-500/40">
+                  <p className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                    {t('printers.plateDetection.aiActiveTitle')}
+                  </p>
+                  <p className="text-xs text-bambu-gray mt-1">
+                    {t('printers.plateDetection.aiCalibrationNotApplicable')}
+                  </p>
+                </div>
+              )}
+
               {/* Saved References Grid */}
-              {plateReferences && plateReferences.references.length > 0 && (
+              {!aiPlateDetection && plateReferences && plateReferences.references.length > 0 && (
                 <div className="mt-4">
                   <div className="flex items-center gap-2 mb-2">
                     <p className="text-sm font-medium text-white shrink-0">
@@ -6011,7 +6066,7 @@ function PrinterCard({
               )}
 
               {/* ROI Editor */}
-              {!plateCheckResult.needs_calibration && (
+              {!aiPlateDetection && !plateCheckResult.needs_calibration && (
                 <div className="mt-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -6117,7 +6172,11 @@ function PrinterCard({
               )}
             </div>
             <div className="flex justify-end gap-2 p-4">
-              {plateCheckResult.needs_calibration ? (
+              {aiPlateDetection ? (
+                <Button onClick={() => closePlateCheckModal()}>
+                  Close
+                </Button>
+              ) : plateCheckResult.needs_calibration ? (
                 <>
                   <Button variant="ghost" onClick={() => closePlateCheckModal()}>
                     {t('common.cancel')}
