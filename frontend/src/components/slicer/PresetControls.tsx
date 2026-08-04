@@ -122,6 +122,22 @@ export interface PresetDropdownProps {
   // into a trailing "Other printers" group instead of the main tier list.
   selectedPrinterName?: string | null;
   compatIndex?: PrinterCompatibilityIndex;
+  /**
+   * Drop other printers' presets instead of demoting them (#57).
+   *
+   * The owner overruled the demote-don't-hide call the "Other printers" group
+   * was built on: on the `/slicer` rail a profile for a printer you did not
+   * select is noise, not a fallback. `SliceModal` keeps the old grouping —
+   * it is the legacy path and nobody asked for it to change.
+   *
+   * Two presets are deliberately NOT hidden even when this is set:
+   *   - anything the matcher calls 'unknown' (custom / untagged imports),
+   *     because hiding those loses profiles no rule can vouch for either way;
+   *   - the preset currently selected, because a `<select>` whose value is
+   *     absent from its options renders blank — the user would see an empty
+   *     control and a slice request carrying a preset they cannot see.
+   */
+  hideIncompatible?: boolean;
   /** Extra classes on the `<select>` — the rail runs tighter than the modal. */
   selectClassName?: string;
   /**
@@ -149,14 +165,18 @@ export function PresetDropdown({
   swatchColor,
   selectedPrinterName,
   compatIndex,
+  hideIncompatible = false,
   selectClassName = 'px-3 py-2 text-sm',
   typeWarning = null,
 }: PresetDropdownProps) {
   const { t } = useTranslation();
 
+  const selectedValue = toRefValue(value);
+
   // Tier sections (imported → cloud → standard), plus — for a process /
   // filament slot with a selected printer — a trailing group of presets that
-  // resolve to a different printer (#1325). Compatibility-unknown presets
+  // resolve to a different printer (#1325), or nothing at all when
+  // `hideIncompatible` is set (#57). Compatibility-unknown presets
   // stay in their tier, so a custom / untagged preset is never hidden, and
   // empty sections collapse out.
   const { sections, otherEntries } = useMemo(() => {
@@ -177,17 +197,21 @@ export function PresetDropdown({
       }
       const compatible: UnifiedPreset[] = [];
       for (const p of entries) {
-        if (
+        const mismatch =
           presetCompatibility(
             p,
             // filterByPrinter is true here, so slot is never 'printer'.
             slot as 'process' | 'filament',
             selectedPrinterName ?? null,
             compatIndex ?? EMPTY_COMPATIBILITY_INDEX,
-          ) === 'mismatch'
-        ) {
+          ) === 'mismatch';
+        if (!mismatch) {
+          compatible.push(p);
+        } else if (!hideIncompatible) {
           other.push(p);
-        } else {
+        } else if (`${p.source}:${p.id}` === selectedValue) {
+          // Hidden everywhere except where it is already in force — see the
+          // note on `hideIncompatible`.
           compatible.push(p);
         }
       }
@@ -196,10 +220,19 @@ export function PresetDropdown({
       }
     }
     return { sections: compatSections, otherEntries: other };
-  }, [data, slot, t, selectedPrinterName, compatIndex]);
+  }, [data, slot, t, selectedPrinterName, compatIndex, hideIncompatible, selectedValue]);
 
   const totalEntries =
     sections.reduce((sum, s) => sum + s.entries.length, 0) + otherEntries.length;
+
+  // An empty dropdown used to mean "this install has no presets of this kind".
+  // With #57 it can also mean "it has plenty, they all belong to other
+  // printers" — a very different thing to tell the user, and the only thing
+  // standing between them and a disabled control with no explanation.
+  const emptyLabel =
+    hideIncompatible && selectedPrinterName
+      ? t('slice.noPresetsForPrinter')
+      : t('slice.noPresetsForSlot');
 
   const warningText = typeWarning
     ? typeWarning.kind === 'mismatch'
@@ -234,9 +267,7 @@ export function PresetDropdown({
         } ${selectClassName}`}
       >
         <option value="">
-          {totalEntries === 0
-            ? t('slice.noPresetsForSlot')
-            : t('slice.selectPreset')}
+          {totalEntries === 0 ? emptyLabel : t('slice.selectPreset')}
         </option>
         {sections.map((section) => (
           <optgroup key={section.tierLabel} label={section.tierLabel}>

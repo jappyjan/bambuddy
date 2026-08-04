@@ -4062,6 +4062,7 @@ export default {
     filamentTypeMismatch: 'Material incorrecto: esta ranura necesita {{required}}, pero {{selected}} es {{selectedType}}. Elige un perfil de {{required}} antes de laminar.',
     filamentTypeUnavailable: 'No se encontró ningún perfil de {{required}} — esta selección puede ser el material equivocado. Compruébala antes de laminar.',
     noPresetsForSlot: 'No hay preajustes disponibles',
+    noPresetsForPrinter: 'No hay preajustes para esta impresora',
     otherPrinters: 'Otras impresoras',
     presetsLoadFailed: 'Error al cargar los preajustes. Abra Ajustes → Perfiles para importarlos primero.',
     refreshPresets: 'Actualizar',

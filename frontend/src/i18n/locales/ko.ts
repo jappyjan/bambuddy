@@ -3849,6 +3849,7 @@ export default {
     filamentTypeMismatch: '소재 불일치: 이 슬롯에는 {{required}}이(가) 필요하지만 {{selected}}은(는) {{selectedType}}입니다. 슬라이스 전에 {{required}} 프로파일을 선택하세요.',
     filamentTypeUnavailable: '{{required}} 프로파일을 찾을 수 없습니다 — 이 선택은 잘못된 소재일 수 있습니다. 슬라이스 전에 확인하세요.',
     noPresetsForSlot: '사용 가능한 프리셋 없음',
+    noPresetsForPrinter: '이 프린터에 사용할 프리셋 없음',
     presetsLoadFailed: '프리셋 불러오기 실패. 먼저 설정 → 프로필에서 가져오세요.',
     refreshPresets: '새로 고침',
     refreshPresetsTitle: '프리셋 새로 고침 — 최신 클라우드 및 번들 목록 가져오기 (Bambu Studio 또는 Bambu Handy에서 프리셋 삭제 후 사용)',

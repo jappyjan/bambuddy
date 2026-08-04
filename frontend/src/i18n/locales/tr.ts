@@ -4049,6 +4049,7 @@ export default {
     filamentTypeMismatch: 'Malzeme uyuşmuyor: bu yuva {{required}} gerektiriyor, ancak {{selected}} {{selectedType}}. Dilimlemeden önce bir {{required}} profili seçin.',
     filamentTypeUnavailable: '{{required}} profili bulunamadı — bu seçim yanlış malzeme olabilir. Dilimlemeden önce kontrol edin.',
     noPresetsForSlot: 'Kullanılabilir ön ayar yok',
+    noPresetsForPrinter: 'Bu yazıcı için ön ayar yok',
     otherPrinters: 'Diğer yazıcılar',
     presetsLoadFailed: 'Ön ayarlar yüklenemedi. Önce içe aktarmak için Ayarlar → Profiller\'i açın.',
     refreshPresets: 'Yenile',

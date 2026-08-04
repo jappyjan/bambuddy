@@ -4093,6 +4093,7 @@ export default {
     filamentTypeMismatch: 'Material mismatch: this slot needs {{required}}, but {{selected}} is {{selectedType}}. Choose a {{required}} profile before slicing.',
     filamentTypeUnavailable: 'No {{required}} profile found — this pick may be the wrong material. Check it before slicing.',
     noPresetsForSlot: 'No presets available',
+    noPresetsForPrinter: 'No presets for this printer',
     otherPrinters: 'Other printers',
     presetsLoadFailed: 'Failed to load presets. Open Settings → Profiles to import them first.',
     refreshPresets: 'Refresh',

@@ -4047,6 +4047,7 @@ export default {
     filamentTypeMismatch: 'Material incorreto: este slot precisa de {{required}}, mas {{selected}} é {{selectedType}}. Escolha um perfil de {{required}} antes de fatiar.',
     filamentTypeUnavailable: 'Nenhum perfil de {{required}} encontrado — esta escolha pode ser o material errado. Verifique antes de fatiar.',
     noPresetsForSlot: 'Nenhuma predefinição disponível',
+    noPresetsForPrinter: 'Nenhuma predefinição para esta impressora',
     otherPrinters: 'Outras impressoras',
     presetsLoadFailed: 'Falha ao carregar predefinições. Abra Configurações → Perfis para importá-las primeiro.',
     refreshPresets: 'Atualizar',

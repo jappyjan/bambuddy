@@ -13,9 +13,13 @@
 //      derived from the backend's canonical PRINTER_MODEL_MAP (fetched via
 //      /slicer/printer-models), not duplicated here.
 //
-// The result drives grouping, not hard hiding: a preset no rule covers
-// stays in the main list, and only a preset that resolves to a *different*
-// printer is pushed into an "Other printers" group.
+// Only a *confident* 'mismatch' is ever acted on. A preset no rule covers
+// comes back 'unknown' and stays in the main list — see the note on
+// `presetCompatibility`. What callers do with a 'mismatch' differs by
+// surface: `SliceModal` demotes it into an "Other printers" group, while the
+// `/slicer` rail hides it outright (#57, `PresetDropdown.hideIncompatible`).
+// That is why 'unknown' must stay a distinct answer from 'mismatch': on the
+// rail, collapsing the two would hide every custom or untagged import.
 
 export type PrinterCompatibility = 'match' | 'mismatch' | 'unknown';
 
