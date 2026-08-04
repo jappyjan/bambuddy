@@ -5782,6 +5782,7 @@ export default {
     priority: 'Priority',
     pushoverRetry: 'Emergency Retry (s)',
     pushoverExpire: 'Emergency Expire (s)',
+    haServiceHint: 'Pick a service from Home Assistant, or type one if it is not listed.',
     botToken: 'Bot Token',
     chatId: 'Chat ID',
     smtpServer: 'SMTP Server',

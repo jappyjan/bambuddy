@@ -5713,6 +5713,7 @@ export default {
     priority: 'Prioridade',
     pushoverRetry: 'Repetição de emergência (s)',
     pushoverExpire: 'Expiração de emergência (s)',
+    haServiceHint: 'Escolha um serviço do Home Assistant ou digite um se ele não estiver na lista.',
     botToken: 'Token do Bot',
     chatId: 'ID do Chat',
     smtpServer: 'Servidor SMTP',

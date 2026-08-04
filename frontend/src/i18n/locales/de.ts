@@ -5724,6 +5724,7 @@ export default {
     priority: 'Priorität',
     pushoverRetry: 'Notfall-Wiederholung (s)',
     pushoverExpire: 'Notfall-Ablauf (s)',
+    haServiceHint: 'Wähle einen Dienst aus Home Assistant oder gib einen ein, falls er nicht aufgeführt ist.',
     botToken: 'Bot-Token',
     chatId: 'Chat-ID',
     smtpServer: 'SMTP-Server',

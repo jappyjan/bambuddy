@@ -5276,6 +5276,11 @@ export const api = {
         message: string;
       }>;
     }>('/notifications/test-all', { method: 'POST' }),
+  // `services` is null when Home Assistant could not be asked, and a (possibly
+  // empty) list when it answered — see the route docstring. Callers must keep
+  // the service field typeable either way (#61).
+  getHomeAssistantNotifyServices: () =>
+    request<{ services: string[] | null }>('/notifications/homeassistant/notify-services'),
 
   // Notification Templates
   getNotificationTemplates: () => request<NotificationTemplate[]>('/notification-templates'),

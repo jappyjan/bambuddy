@@ -5437,6 +5437,7 @@ export default {
     priority: '우선순위',
     pushoverRetry: '긴급 재알림 (초)',
     pushoverExpire: '긴급 만료 (초)',
+    haServiceHint: 'Home Assistant에서 서비스를 선택하거나 목록에 없으면 직접 입력하세요.',
     botToken: '봇 토큰',
     chatId: '채팅 ID',
     smtpServer: 'SMTP 서버',

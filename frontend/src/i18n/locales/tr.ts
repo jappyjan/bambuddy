@@ -5673,6 +5673,7 @@ export default {
     priority: 'Öncelik',
     pushoverRetry: 'Acil yeniden deneme (sn)',
     pushoverExpire: 'Acil sona erme (sn)',
+    haServiceHint: "Home Assistant'tan bir servis seçin veya listede yoksa elle yazın.",
     botToken: 'Bot Belirteci',
     chatId: 'Sohbet ID',
     smtpServer: 'SMTP Sunucusu',

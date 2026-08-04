@@ -22,6 +22,7 @@ from backend.app.schemas.notification import (
     NotificationTestRequest,
     NotificationTestResponse,
 )
+from backend.app.services.homeassistant import homeassistant_service
 from backend.app.services.notification_service import notification_service
 
 logger = logging.getLogger(__name__)
@@ -387,6 +388,42 @@ async def clear_notification_logs(
     logger.info("Deleted %s notification logs older than %s days", deleted_count, older_than_days)
 
     return {"deleted": deleted_count, "message": f"Deleted {deleted_count} logs older than {older_than_days} days"}
+
+
+@router.get("/homeassistant/notify-services")
+async def list_homeassistant_notify_services(
+    db: AsyncSession = Depends(get_db),
+    _: User | None = RequirePermissionIfAuthEnabled(Permission.NOTIFICATIONS_READ),
+) -> dict:
+    """List the ``notify`` services this Home Assistant exposes.
+
+    Feeds the service picker in the notification provider form, so the user can
+    choose a real service instead of guessing its exact name (#61).
+
+    ``services`` is ``null`` when Home Assistant could not be asked (unreachable,
+    bad token, unparseable answer) and a list — possibly empty — when it
+    answered. The caller needs that distinction: "we don't know" must stay
+    separate from "HA has no notify services", the same way
+    :meth:`HomeAssistantService.list_services` keeps ``None`` distinct from
+    ``{}``. Either way the field stays free-text, so a down HA never blocks
+    editing notification settings.
+    """
+    from backend.app.api.routes.settings import get_homeassistant_settings
+
+    ha_settings = await get_homeassistant_settings(db)
+    ha_url = ha_settings["ha_url"]
+    ha_token = ha_settings["ha_token"]
+
+    if not ha_url or not ha_token:
+        raise HTTPException(
+            400, "Home Assistant not configured. Please set HA URL and token in Settings → Network → Home Assistant."
+        )
+
+    services = await homeassistant_service.list_services(ha_url, ha_token)
+    if services is None:
+        return {"services": None}
+
+    return {"services": [f"notify.{name}" for name in services.get("notify", [])]}
 
 
 # ============================================================================
