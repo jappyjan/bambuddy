@@ -113,7 +113,15 @@ class AIPlateConfig:
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.endpoint and self.model and self.api_key)
+        """Endpoint and model are required; the API key deliberately is NOT.
+
+        Locally hosted OpenAI-compatible servers (Ollama, LM Studio, vLLM) take
+        no auth at all, and they are the most likely real deployment here: no
+        per-call cost, no camera frames leaving the network, and latency low
+        enough to matter for a check that runs mid-print. Requiring a dummy key
+        would defeat the point of a configurable endpoint.
+        """
+        return bool(self.endpoint and self.model)
 
     @property
     def chat_completions_url(self) -> str:
@@ -278,15 +286,18 @@ async def analyze_frame_with_ai(image_data: bytes, config: AIPlateConfig) -> AIP
     pause". See the module docstring.
     """
     if not config.is_configured:
-        logger.warning(
-            "AI plate detection selected but endpoint/model/API key are incomplete — skipping check (fail open)"
-        )
+        logger.warning("AI plate detection selected but endpoint/model are incomplete — skipping check (fail open)")
         return None
     if not image_data:
         logger.warning("AI plate detection got no frame to analyze — skipping check (fail open)")
         return None
 
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {config.api_key}"}
+    headers = {"Content-Type": "application/json"}
+    # Only send Authorization when a key is actually configured. An empty
+    # "Bearer " is rejected by some servers and logged by others, and keyless
+    # local providers need no auth header at all.
+    if config.api_key:
+        headers["Authorization"] = f"Bearer {config.api_key}"
     payload = build_request_payload(image_data, config)
 
     try:

@@ -221,16 +221,60 @@ async def test_fail_open_on_undecodable_response_body():
 
 
 @pytest.mark.asyncio
-async def test_fail_open_on_missing_api_key_without_calling_the_provider():
+async def test_fail_open_on_incomplete_config_without_calling_the_provider():
+    """Endpoint/model missing is a misconfiguration - skip the call, never pause."""
     client = _mock_async_client(response=_chat_response('{"is_empty": false, "confidence": 1.0, "reason": "part"}'))
-    config = AIPlateConfig(endpoint="https://api.example.test/v1", model="vision-model", api_key="")
+
+    for config in (
+        AIPlateConfig(endpoint="", model="vision-model", api_key="k"),
+        AIPlateConfig(endpoint="https://api.example.test/v1", model="", api_key="k"),
+    ):
+        client.post.reset_mock()
+        result, factory = await _run_check(client, config=config)
+
+        assert result.is_empty is True
+        assert result.needs_calibration is False
+        factory.assert_not_called()
+        client.post.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_keyless_local_provider_is_called_and_sends_no_auth_header():
+    """Ollama/LM Studio take no auth. A missing key must NOT disable detection.
+
+    The API key is optional on purpose: requiring a dummy value would defeat the
+    point of a configurable endpoint for locally hosted vision models.
+    """
+    client = _mock_async_client(
+        response=_chat_response(
+            '{"is_empty": false, "confidence": 0.9, "reason": "a printed part is still on the bed"}'
+        )
+    )
+    config = AIPlateConfig(endpoint="http://localhost:11434/v1", model="llava", api_key="")
 
     result, factory = await _run_check(client, config=config)
 
-    assert result.is_empty is True
+    # The provider was actually consulted, and its verdict was honoured.
+    factory.assert_called_once()
+    client.post.assert_called_once()
+    assert result.is_empty is False
     assert result.needs_calibration is False
-    factory.assert_not_called()
-    client.post.assert_not_called()
+    assert "a printed part is still on the bed" in result.message
+
+    # No Authorization header at all - not even an empty "Bearer ".
+    headers = client.post.call_args.kwargs["headers"]
+    assert "Authorization" not in headers
+    assert not any(k.lower() == "authorization" for k in headers)
+
+
+@pytest.mark.asyncio
+async def test_api_key_still_sent_as_bearer_when_configured():
+    client = _mock_async_client(response=_chat_response('{"is_empty": true, "confidence": 1.0, "reason": "clear"}'))
+    config = AIPlateConfig(endpoint="https://api.example.test/v1", model="gpt-4o", api_key="sk-secret")
+
+    _result, _factory = await _run_check(client, config=config)
+
+    assert client.post.call_args.kwargs["headers"]["Authorization"] == "Bearer sk-secret"
 
 
 @pytest.mark.asyncio
@@ -333,10 +377,12 @@ def test_config_normalisation_and_url_building():
     assert full.chat_completions_url == "https://host.test/v1/chat/completions"
 
 
-def test_is_configured_requires_endpoint_model_and_key():
+def test_is_configured_requires_endpoint_and_model_but_not_key():
     assert AIPlateConfig(endpoint="", model="m", api_key="k").is_configured is False
     assert AIPlateConfig(endpoint="e", model="", api_key="k").is_configured is False
-    assert AIPlateConfig(endpoint="e", model="m", api_key="").is_configured is False
+    # The API key is OPTIONAL - keyless local providers must stay usable.
+    assert AIPlateConfig(endpoint="e", model="m", api_key="").is_configured is True
+    assert AIPlateConfig(endpoint="e", model="m", api_key="   ").is_configured is True
 
 
 def test_confidence_is_clamped_and_defaulted():
