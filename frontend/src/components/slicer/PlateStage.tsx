@@ -207,13 +207,14 @@ export function PlateStage({
   );
   const objects = useMemo(() => currentPlate?.objects ?? [], [currentPlate]);
 
-  // Selection is derived, not stored: switching plates, or a reload that
-  // drops the picked object, falls back to the plate's first object so the
-  // readout always has a subject. Deriving rather than syncing in an effect
-  // means there is never a render where the readout shows an object that is
-  // no longer on the plate.
+  // Selection is derived, not stored: switching plates, or a reload that drops
+  // the picked object, leaves **nothing** selected (#55). No fallback to the
+  // plate's first object — the stage opens with an empty selection, and every
+  // deselect gesture has somewhere to land. Deriving rather than syncing in an
+  // effect means there is never a render where the readout shows an object that
+  // is no longer on the plate.
   const selectedObject = useMemo(
-    () => objects.find((object) => object.id === pickedObjectId) ?? objects[0] ?? null,
+    () => objects.find((object) => object.id === pickedObjectId) ?? null,
     [objects, pickedObjectId],
   );
   const selectedObjectId = selectedObject?.id ?? null;
@@ -251,9 +252,17 @@ export function PlateStage({
    * Without that, clicking a part on plate 5 would attach the gizmo to it while
    * the page still sliced plate 1, and every transform it emitted would be
    * filed against the wrong plate.
+   *
+   * `null` is the deselect (#55): the viewport reports it for a click that hits
+   * no object. There is no owner plate to follow in that case — the active
+   * plate is the bed's business, and `onPlatePick` carries it separately.
    */
   const handleObjectClick = useCallback(
-    (objectId: string) => {
+    (objectId: string | null) => {
+      if (objectId == null) {
+        setPickedObjectId(null);
+        return;
+      }
       const owner = plates.find((plate) =>
         plate.objects.some((object) => object.id === objectId),
       );
@@ -262,6 +271,19 @@ export function PlateStage({
     },
     [handlePlateClick, plates, resolvedPlate],
   );
+
+  // Escape deselects (#55). Bound to the window because the pick that made the
+  // selection gave nothing focus — the canvas is not a focusable control — so
+  // there is no element to hang a `keydown` on. Bound only while something is
+  // selected, which keeps the key free for everything else on the page.
+  useEffect(() => {
+    if (pickedObjectId == null) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPickedObjectId(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [pickedObjectId]);
 
   const objectLabel = useCallback(
     (object: StageObject) => object.name || t('plateStage.objectFallback', { id: object.id }),
