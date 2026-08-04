@@ -81,6 +81,19 @@ export function AddNotificationModal({ provider, onClose }: AddNotificationModal
     queryFn: api.getPrinters,
   });
 
+  // Home Assistant notify services, for the service picker (#61). Only asked
+  // for when the provider actually is Home Assistant. The query failing (HA
+  // unconfigured → 400, unreachable → services: null) is not an error state
+  // for the form: it just means we offer no suggestions and the user types the
+  // service by hand, exactly as before.
+  const { data: haServices } = useQuery({
+    queryKey: ['ha-notify-services'],
+    queryFn: api.getHomeAssistantNotifyServices,
+    enabled: providerType === 'homeassistant',
+    retry: false,
+  });
+  const haServiceOptions = haServices?.services ?? [];
+
   // Close on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -263,8 +276,20 @@ export function AddNotificationModal({ provider, onClose }: AddNotificationModal
           { key: 'field_message', label: 'Message Field Name', placeholder: 'message', type: 'text', required: false, showIf: (cfg: Record<string, string>) => cfg.payload_format !== 'slack' },
         ];
       case 'homeassistant':
+        // Suggestions, not a closed list: the value must match a remote enum we
+        // can only sometimes read, so the control stays a text input with a
+        // datalist. Whatever is already stored keeps showing even when it is not
+        // among the suggestions, and nothing here rewrites what the user typed.
         return [
-          { key: 'service', label: 'Home Assistant Service', placeholder: 'notify.mobile_app_myphone', type: 'text', required: false },
+          {
+            key: 'service',
+            label: 'Home Assistant Service',
+            placeholder: 'notify.mobile_app_myphone',
+            type: 'text',
+            required: false,
+            suggestions: haServiceOptions,
+            hint: t('notifications.haServiceHint'),
+          },
         ];
       default:
         return [];
@@ -369,16 +394,29 @@ export function AddNotificationModal({ provider, onClose }: AddNotificationModal
                     ))}
                   </select>
                 ) : (
-                  <input
-                    type={field.type}
-                    value={config[field.key] || ''}
-                    onChange={(e) => {
-                      setConfig({ ...config, [field.key]: e.target.value });
-                      setTestResult(null);
-                    }}
-                    placeholder={field.placeholder}
-                    className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
-                  />
+                  <>
+                    <input
+                      type={field.type}
+                      value={config[field.key] || ''}
+                      onChange={(e) => {
+                        setConfig({ ...config, [field.key]: e.target.value });
+                        setTestResult(null);
+                      }}
+                      placeholder={field.placeholder}
+                      list={'suggestions' in field ? `${field.key}-suggestions` : undefined}
+                      className="w-full px-3 py-2 bg-bambu-dark border border-bambu-dark-tertiary rounded-lg text-white focus:border-bambu-green focus:outline-none"
+                    />
+                    {'suggestions' in field && (
+                      <datalist id={`${field.key}-suggestions`} data-testid={`${field.key}-suggestions`}>
+                        {(field.suggestions as string[]).map((suggestion) => (
+                          <option key={suggestion} value={suggestion} />
+                        ))}
+                      </datalist>
+                    )}
+                  </>
+                )}
+                {'hint' in field && (
+                  <p className="text-xs text-bambu-gray mt-1">{field.hint as string}</p>
                 )}
               </div>
             ))}

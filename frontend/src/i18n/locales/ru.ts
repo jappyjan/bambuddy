@@ -5424,6 +5424,7 @@ export default {
     priority: "Приоритет",
     pushoverRetry: "Повтор экстренного уведомления (с)",
     pushoverExpire: "Срок действия экстренного уведомления (с)",
+    haServiceHint: "Выберите службу из Home Assistant или введите её вручную, если её нет в списке.",
     botToken: "Токен бота",
     chatId: "ID чата",
     smtpServer: "SMTP-сервер",

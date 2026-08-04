@@ -386,3 +386,163 @@ describe('AddNotificationModal — AI Failure Detection toggle (#1794)', () => {
     expect(within(priorityRoot).getByText('AI Failure Detection')).toBeInTheDocument();
   });
 });
+
+/**
+ * Home Assistant service picker (#61).
+ *
+ * The service must match a remote enum, so the form offers the real names from
+ * `GET /notifications/homeassistant/notify-services` — but as *suggestions*, on
+ * a control that is still a plain text input. The three properties pinned here
+ * are the three the ticket calls non-negotiable: degrade to free text, never
+ * drop an already-configured value, never rewrite what the user typed.
+ */
+describe('AddNotificationModal — Home Assistant service picker (#61)', () => {
+  const HA_SERVICES_URL = '*/api/v1/notifications/homeassistant/notify-services';
+
+  function buildHaProvider(config: Record<string, unknown> = {}): NotificationProvider {
+    return buildProvider({
+      id: 1,
+      name: 'HA',
+      provider_type: 'homeassistant',
+      config,
+    });
+  }
+
+  function serviceInput() {
+    return screen.getByPlaceholderText('notify.mobile_app_myphone') as HTMLInputElement;
+  }
+
+  function suggestionValues() {
+    const list = screen.getByTestId('service-suggestions');
+    return Array.from(list.querySelectorAll('option')).map((o) => o.getAttribute('value'));
+  }
+
+  it('offers the fetched notify services as suggestions on the service field', async () => {
+    server.use(
+      http.get(HA_SERVICES_URL, () =>
+        HttpResponse.json({
+          services: ['notify.mobile_app_iphone_von_jan', 'notify.persistent_notification'],
+        }),
+      ),
+    );
+
+    render(<AddNotificationModal provider={buildHaProvider()} onClose={() => undefined} />);
+
+    const input = await screen.findByPlaceholderText('notify.mobile_app_myphone');
+    // Suggestions, not a closed list — the control stays typeable.
+    expect(input.tagName).toBe('INPUT');
+    expect(input).toHaveAttribute('list', 'service-suggestions');
+
+    await waitFor(() =>
+      expect(suggestionValues()).toEqual([
+        'notify.mobile_app_iphone_von_jan',
+        'notify.persistent_notification',
+      ]),
+    );
+  });
+
+  it('keeps an already-configured service that is absent from the fetched list', async () => {
+    // The exact #60 situation: the stored value is wrong, HA offers the right
+    // one. Save-time validation reports it; the form must not silently drop it.
+    server.use(
+      http.get(HA_SERVICES_URL, () =>
+        HttpResponse.json({ services: ['notify.mobile_app_iphone_von_jan'] }),
+      ),
+    );
+
+    render(
+      <AddNotificationModal
+        provider={buildHaProvider({ service: 'notify.iphone_von_jan' })}
+        onClose={() => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(suggestionValues()).toContain('notify.mobile_app_iphone_von_jan'));
+
+    // Still shown verbatim, and not rewritten to the similar-looking real one.
+    expect(serviceInput()).toHaveValue('notify.iphone_von_jan');
+  });
+
+  it('does not rewrite the configured value on save', async () => {
+    server.use(
+      http.get(HA_SERVICES_URL, () =>
+        HttpResponse.json({ services: ['notify.mobile_app_iphone_von_jan'] }),
+      ),
+    );
+
+    let captured: Record<string, unknown> | null = null;
+    server.use(
+      http.patch('*/api/v1/notifications/1', async ({ request }) => {
+        captured = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ id: 1 });
+      }),
+    );
+
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AddNotificationModal
+        provider={buildHaProvider({ service: 'notify.iphone_von_jan' })}
+        onClose={onClose}
+      />,
+    );
+
+    await waitFor(() => expect(suggestionValues()).toContain('notify.mobile_app_iphone_von_jan'));
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+    expect(captured).not.toBeNull();
+    expect((captured!.config as Record<string, unknown>).service).toBe('notify.iphone_von_jan');
+  });
+
+  it('stays typeable when the service lookup fails', async () => {
+    // HA unconfigured/unreachable → the route 400s. A down HA must not block
+    // editing notification settings.
+    server.use(
+      http.get(HA_SERVICES_URL, () =>
+        HttpResponse.json({ detail: 'Home Assistant not configured.' }, { status: 400 }),
+      ),
+    );
+
+    let captured: Record<string, unknown> | null = null;
+    server.use(
+      http.patch('*/api/v1/notifications/1', async ({ request }) => {
+        captured = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ id: 1 });
+      }),
+    );
+
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(<AddNotificationModal provider={buildHaProvider()} onClose={onClose} />);
+
+    const input = await screen.findByPlaceholderText('notify.mobile_app_myphone');
+    // Same picker control as on the happy path — just with nothing to suggest.
+    expect(input.tagName).toBe('INPUT');
+    expect(input).toHaveAttribute('list', 'service-suggestions');
+    await waitFor(() => expect(suggestionValues()).toEqual([]));
+    await user.type(input, 'notify.mobile_app_typed_by_hand');
+    expect(input).toHaveValue('notify.mobile_app_typed_by_hand');
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+    expect((captured!.config as Record<string, unknown>).service).toBe(
+      'notify.mobile_app_typed_by_hand',
+    );
+  });
+
+  it('stays typeable when Home Assistant could not be asked (services: null)', async () => {
+    server.use(http.get(HA_SERVICES_URL, () => HttpResponse.json({ services: null })));
+
+    const user = userEvent.setup();
+    render(<AddNotificationModal provider={buildHaProvider()} onClose={() => undefined} />);
+
+    const input = await screen.findByPlaceholderText('notify.mobile_app_myphone');
+    expect(input).toHaveAttribute('list', 'service-suggestions');
+    await waitFor(() => expect(suggestionValues()).toEqual([]));
+
+    await user.type(input, 'notify.anything');
+    expect(input).toHaveValue('notify.anything');
+  });
+});

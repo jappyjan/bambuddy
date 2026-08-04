@@ -5725,6 +5725,7 @@ export default {
     priority: '優先度',
     pushoverRetry: '緊急再通知 (秒)',
     pushoverExpire: '緊急有効期限 (秒)',
+    haServiceHint: 'Home Assistant のサービスを選択するか、一覧にない場合は入力してください。',
     botToken: 'ボットトークン',
     chatId: 'チャットID',
     smtpServer: 'SMTPサーバー',

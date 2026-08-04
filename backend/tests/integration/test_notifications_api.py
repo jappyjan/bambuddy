@@ -564,3 +564,92 @@ class TestHomeAssistantNotificationProvider:
         result = response.json()
         assert result["success"] is False
         assert "not configured" in result["message"].lower() or "Home Assistant" in result["message"]
+
+
+class TestHomeAssistantNotifyServicesRoute:
+    """Integration tests for GET /notifications/homeassistant/notify-services (#61).
+
+    The route feeds the service picker. Its whole job is to hand the UI the real
+    ``notify`` service names, and to keep "HA could not be asked" (``services:
+    null``) distinguishable from "HA answered and has none" (``services: []``).
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_returns_notify_services_prefixed(self, async_client: AsyncClient, monkeypatch):
+        """Verify the notify domain is returned as full ``notify.<service>`` ids."""
+        monkeypatch.setenv("HA_URL", "http://ha.local:8123")
+        monkeypatch.setenv("HA_TOKEN", "test-token")
+
+        async def fake_list_services(url, token):
+            return {
+                "notify": ["mobile_app_iphone_von_jan", "persistent_notification"],
+                "switch": ["turn_on", "turn_off"],
+            }
+
+        monkeypatch.setattr(
+            "backend.app.api.routes.notifications.homeassistant_service.list_services",
+            fake_list_services,
+        )
+
+        response = await async_client.get("/api/v1/notifications/homeassistant/notify-services")
+
+        assert response.status_code == 200
+        # Only the notify domain, and each entry usable verbatim as config.service.
+        assert response.json() == {
+            "services": ["notify.mobile_app_iphone_von_jan", "notify.persistent_notification"]
+        }
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_returns_null_when_ha_cannot_be_queried(self, async_client: AsyncClient, monkeypatch):
+        """``list_services() -> None`` must surface as null, not as an empty list."""
+        monkeypatch.setenv("HA_URL", "http://ha.local:8123")
+        monkeypatch.setenv("HA_TOKEN", "test-token")
+
+        async def fake_list_services(url, token):
+            return None
+
+        monkeypatch.setattr(
+            "backend.app.api.routes.notifications.homeassistant_service.list_services",
+            fake_list_services,
+        )
+
+        response = await async_client.get("/api/v1/notifications/homeassistant/notify-services")
+
+        assert response.status_code == 200
+        assert response.json() == {"services": None}
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_empty_notify_domain_is_not_null(self, async_client: AsyncClient, monkeypatch):
+        """HA answered but exposes no notify services — an empty list, not null."""
+        monkeypatch.setenv("HA_URL", "http://ha.local:8123")
+        monkeypatch.setenv("HA_TOKEN", "test-token")
+
+        async def fake_list_services(url, token):
+            return {"switch": ["turn_on"]}
+
+        monkeypatch.setattr(
+            "backend.app.api.routes.notifications.homeassistant_service.list_services",
+            fake_list_services,
+        )
+
+        response = await async_client.get("/api/v1/notifications/homeassistant/notify-services")
+
+        assert response.status_code == 200
+        assert response.json() == {"services": []}
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_unconfigured_ha_returns_400(self, async_client: AsyncClient, monkeypatch):
+        """No URL/token configured — 400, same as the other HA listing routes."""
+        monkeypatch.delenv("HA_URL", raising=False)
+        monkeypatch.delenv("HA_TOKEN", raising=False)
+
+        response = await async_client.get("/api/v1/notifications/homeassistant/notify-services")
+
+        # 400, not 404 (route missing) and not 422 (path parsed as
+        # /notifications/{provider_id} with a non-integer id).
+        assert response.status_code == 400
+        assert "not configured" in response.json()["detail"].lower()

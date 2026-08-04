@@ -5713,6 +5713,7 @@ export default {
     priority: '優先順序',
     pushoverRetry: '緊急重試 (秒)',
     pushoverExpire: '緊急逾時 (秒)',
+    haServiceHint: '從 Home Assistant 中選擇一個服務，若清單中沒有也可直接輸入。',
     botToken: '機器人權杖',
     chatId: '聊天 ID',
     smtpServer: 'SMTP 伺服器',
