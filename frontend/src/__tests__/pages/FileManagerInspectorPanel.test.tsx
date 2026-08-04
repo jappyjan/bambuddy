@@ -10,8 +10,8 @@
  * swap the node and fail.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { screen, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { render } from '../utils';
 import { FileManagerPage } from '../../pages/FileManagerPage';
@@ -253,5 +253,122 @@ describe('FileManagerPage — file inspector panel (#27)', () => {
     // The SliceModal stays reachable from the grid — the panel routing away is
     // not a removal of the fallback (spec §10).
     expect(screen.queryByText('Slice model')).not.toBeInTheDocument();
+  });
+
+  /**
+   * The rail/sheet switch happens at 1024px, not 768px (#59): the files row only
+   * becomes two columns at Tailwind's `lg:`, so in the 768–1023px band the rail
+   * had nowhere to sit and fell in below the grid as an ordinary scrolling
+   * block. These tests drive a real resize across that threshold.
+   *
+   * The viewport is faked by swapping `window.matchMedia` the way
+   * `hooks/useIsMobile.test.ts` and `FileManagerInspectorSheet.test.tsx` do,
+   * extended to answer max-width queries against a width we can change and to
+   * fire `change` at the listeners the hook registered — that is what a browser
+   * resize looks like to this code.
+   *
+   * What is asserted here is presentation and selection, not DOM node identity.
+   * Crossing the threshold moves the element between two different parents (the
+   * files row and the sheet), so React necessarily unmounts and remounts it —
+   * verified, not assumed: an identity assertion here fails. That costs nothing
+   * beyond scroll offset, because `FileInspectorPanel` holds no internal state
+   * of its own; the selection lives on the page. The mount-identity guard above
+   * covers what actually matters — clicking between files inside one
+   * presentation must not rebuild the panel.
+   */
+  describe('resize across the 1024px inspector threshold (#59)', () => {
+    let originalMatchMedia: typeof window.matchMedia;
+    let setViewportWidth: (px: number) => void;
+
+    beforeEach(() => {
+      originalMatchMedia = window.matchMedia;
+
+      let width = 1280;
+      const listeners = new Map<string, Set<(e: MediaQueryListEvent) => void>>();
+      const answers = (query: string) => {
+        const max = /max-width:\s*(\d+)px/.exec(query);
+        return max ? width <= Number(max[1]) : false;
+      };
+
+      window.matchMedia = ((query: string) => ({
+        get matches() {
+          return answers(query);
+        },
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: (event: string, cb: (e: MediaQueryListEvent) => void) => {
+          if (event !== 'change') return;
+          const forQuery = listeners.get(query) ?? new Set();
+          forQuery.add(cb);
+          listeners.set(query, forQuery);
+        },
+        removeEventListener: (event: string, cb: (e: MediaQueryListEvent) => void) => {
+          if (event === 'change') listeners.get(query)?.delete(cb);
+        },
+        dispatchEvent: () => true,
+      })) as unknown as typeof window.matchMedia;
+
+      setViewportWidth = (px: number) => {
+        width = px;
+        act(() => {
+          listeners.forEach((forQuery, query) => {
+            forQuery.forEach((cb) => cb({ matches: answers(query) } as MediaQueryListEvent));
+          });
+        });
+      };
+    });
+
+    afterEach(() => {
+      window.matchMedia = originalMatchMedia;
+    });
+
+    it('moves the inspector into the bottom sheet when the viewport narrows to tablet width', async () => {
+      const user = userEvent.setup();
+      render(<FileManagerPage />);
+
+      await waitFor(() => expect(screen.getByText('Benchy')).toBeInTheDocument());
+      await user.click(cardFor('Benchy'));
+      await waitFor(() => expect(screen.getByTestId('file-inspector-panel')).toBeInTheDocument());
+
+      // Desktop: the rail is a sibling of the grid, no sheet anywhere.
+      expect(screen.queryByTestId('bottom-sheet')).not.toBeInTheDocument();
+      expect(screen.getByTestId('file-inspector-panel').className).toContain('lg:w-80');
+
+      // 900px — inside the band the bug was reported in.
+      setViewportWidth(900);
+
+      await waitFor(() => expect(screen.getByTestId('bottom-sheet')).toBeInTheDocument());
+      const panel = screen.getByTestId('file-inspector-panel');
+      // Same file, now presented as the fixed drawer rather than a block that
+      // has to be scrolled to.
+      expect(panel).toHaveAttribute('aria-label', 'Benchy');
+      expect(screen.getByTestId('bottom-sheet')).toContainElement(panel);
+      // And wearing the sheet's class string, not the desktop rail's.
+      expect(panel.className).toContain('h-full');
+      expect(panel.className).not.toContain('lg:w-80');
+    });
+
+    it('returns the inspector to the in-flow rail when the viewport widens again', async () => {
+      const user = userEvent.setup();
+      render(<FileManagerPage />);
+
+      await waitFor(() => expect(screen.getByText('Benchy')).toBeInTheDocument());
+      await user.click(cardFor('Bracket'));
+      await waitFor(() => expect(screen.getByTestId('file-inspector-panel')).toBeInTheDocument());
+
+      setViewportWidth(900);
+      await waitFor(() => expect(screen.getByTestId('bottom-sheet')).toBeInTheDocument());
+
+      setViewportWidth(1280);
+
+      await waitFor(() => expect(screen.queryByTestId('bottom-sheet')).not.toBeInTheDocument());
+      const panel = screen.getByTestId('file-inspector-panel');
+      // The selection survived the round trip in both directions.
+      expect(panel).toHaveAttribute('aria-label', 'Bracket');
+      expect(panel.className).toContain('lg:w-80');
+    });
+
   });
 });
