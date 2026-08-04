@@ -32,6 +32,7 @@ from backend.app.services.archive import ArchiveService
 from backend.app.utils.http import build_content_disposition
 from backend.app.utils.safe_path import safe_join_under
 from backend.app.utils.threemf_tools import (
+    EmbeddedPresets,
     extract_embedded_presets_from_3mf,
     extract_nozzle_mapping_from_3mf,
     extract_project_filaments_from_3mf,
@@ -3454,9 +3455,10 @@ async def get_archive_plates(
     # never raises NameError when the archive isn't a valid zip (e.g. plain
     # .gcode file from a sliced-archive flow that didn't request 3MF output).
     gcode_files: list[str] = []
-    # Printer / process preset names the 3MF was prepared with — used by the
-    # SliceModal to default its dropdowns (#1325).
-    embedded_presets: dict[str, str | None] = {"printer": None, "process": None}
+    # Printer / process / per-slot filament preset names the 3MF was prepared
+    # with — used by the SliceModal and the /slicer page to default their
+    # dropdowns (#1325, #56).
+    embedded_presets: EmbeddedPresets = {"printer": None, "process": None, "filaments": []}
 
     try:
         with zipfile.ZipFile(file_path, "r") as zf:
@@ -3723,6 +3725,7 @@ async def get_archive_plates(
         "has_gcode": has_gcode,
         "embedded_printer": embedded_presets["printer"],
         "embedded_process": embedded_presets["process"],
+        "embedded_filaments": embedded_presets["filaments"],
     }
 
 

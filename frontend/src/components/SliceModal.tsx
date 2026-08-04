@@ -306,6 +306,7 @@ export function SliceModal({ source, onClose }: SliceModalProps) {
     filamentSlots,
     embeddedPrinter: platesQuery.data?.embedded_printer ?? null,
     embeddedProcess: platesQuery.data?.embedded_process ?? null,
+    embeddedFilaments: platesQuery.data?.embedded_filaments ?? null,
     // Don't fetch presets while the plate picker is on screen — saves a
     // round-trip if the user cancels out of the plate step.
     enabled: !platesQuery.isLoading && !needsPlatePicker,

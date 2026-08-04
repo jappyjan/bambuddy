@@ -15,6 +15,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
+from typing import TypedDict
 
 import defusedxml.ElementTree as ET
 
@@ -283,20 +284,55 @@ def _first_settings_id(value: object) -> str | None:
     return None
 
 
-def extract_embedded_presets_from_3mf(zf: zipfile.ZipFile) -> dict[str, str | None]:
-    """Read the printer / process preset names a 3MF project was prepared with.
+def _settings_id_list(value: object) -> list[str | None]:
+    """``filament_settings_id`` is genuinely per-slot: one entry per extruder,
+    in slot order. Unlike ``_first_settings_id`` we keep the **whole** array —
+    collapsing it to the first entry is what made every slot but the first a
+    guess. Blank / non-string entries become ``None`` so a positional consumer
+    can fall back for just that slot without losing the alignment of the rest.
+
+    A bare string (some exporters write one) is treated as a single slot.
+    """
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    if isinstance(value, list):
+        return [item.strip() or None if isinstance(item, str) else None for item in value]
+    return []
+
+
+class EmbeddedPresets(TypedDict):
+    """What ``extract_embedded_presets_from_3mf`` reads out of a 3MF."""
+
+    printer: str | None
+    process: str | None
+    # One entry per filament slot, in slot order. ``None`` where the file
+    # names nothing usable for that slot. May be shorter or longer than the
+    # picked plate's slot count — consumers index defensively.
+    filaments: list[str | None]
+
+
+def extract_embedded_presets_from_3mf(zf: zipfile.ZipFile) -> EmbeddedPresets:
+    """Read the printer / process / filament preset names a 3MF was prepared with.
 
     BambuStudio / OrcaSlicer write the chosen preset names into
-    ``Metadata/project_settings.config`` (``printer_settings_id`` and
-    ``print_settings_id``). The SliceModal uses them to default its printer
-    and process dropdowns to what the file was sliced for (#1325) instead of
-    blindly taking the first listed preset.
+    ``Metadata/project_settings.config`` (``printer_settings_id``,
+    ``print_settings_id`` and ``filament_settings_id``). The SliceModal and the
+    ``/slicer`` page use them to default their dropdowns to what the file was
+    sliced for (#1325, #56) instead of blindly taking the first listed preset.
 
-    Returns ``{"printer": <name|None>, "process": <name|None>}``. Every failure
-    mode (missing config, malformed JSON, unexpected shape) yields ``None``
-    values so the modal falls back to its own defaults.
+    ``filament_settings_id`` is an **array**, one entry per extruder/slot, and
+    is returned whole under ``"filaments"``. Before #56 it was never read at
+    all and the slot → profile mapping was re-derived from (type, colour) — a
+    heuristic that cannot tell two same-type same-colour profiles apart, which
+    is the "shows random filaments" report.
+
+    Returns ``{"printer": <name|None>, "process": <name|None>,
+    "filaments": [<name|None>, ...]}``. Every failure mode (missing config,
+    malformed JSON, unexpected shape) yields ``None`` / ``[]`` so callers fall
+    back to their own defaults.
     """
-    result: dict[str, str | None] = {"printer": None, "process": None}
+    result: EmbeddedPresets = {"printer": None, "process": None, "filaments": []}
     try:
         if "Metadata/project_settings.config" not in zf.namelist():
             return result
@@ -307,6 +343,7 @@ def extract_embedded_presets_from_3mf(zf: zipfile.ZipFile) -> dict[str, str | No
         return result
     result["printer"] = _first_settings_id(data.get("printer_settings_id"))
     result["process"] = _first_settings_id(data.get("print_settings_id"))
+    result["filaments"] = _settings_id_list(data.get("filament_settings_id"))
     return result
 
 

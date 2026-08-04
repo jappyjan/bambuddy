@@ -43,6 +43,10 @@ export interface UseSlicePresetsOptions {
   // Printer / process preset names the source 3MF was prepared with.
   embeddedPrinter?: string | null;
   embeddedProcess?: string | null;
+  // Filament preset names the source 3MF names for its slots, in slot order
+  // (#56). Positional: entry `i` belongs to `filamentSlots[i]`. May be shorter
+  // or longer than `filamentSlots`, and entries may be null.
+  embeddedFilaments?: (string | null)[] | null;
   // Gate the presets fetch. The modal defers it until past the plate picker so
   // cancelling out of that step costs no round-trip.
   enabled?: boolean;
@@ -52,6 +56,7 @@ export function useSlicePresets({
   filamentSlots,
   embeddedPrinter = null,
   embeddedProcess = null,
+  embeddedFilaments = null,
   enabled = true,
 }: UseSlicePresetsOptions) {
   const queryClient = useQueryClient();
@@ -177,12 +182,38 @@ export function useSlicePresets({
     });
   }, [presetsQuery.data, selectedPrinterName, compatIndex, embeddedProcess]);
 
+  // Referentially stable copy of the embedded name list. The pre-pick effect
+  // below depends on it, and a caller that rebuilds the array every render (a
+  // `?? []` default, a `.map`) would otherwise re-run the effect on every
+  // render — which, since the effect sets state, is a render loop. Keying on
+  // the serialised contents makes identity follow value.
+  const embeddedFilamentNames = useMemo<(string | null)[]>(
+    () => embeddedFilaments ?? [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(embeddedFilaments ?? [])],
+  );
+
   // Filament pre-pick: re-runs when the active filament-slot count changes
   // (plate selection, single-plate metadata arriving) or the selected printer
-  // changes. Each slot scores every available filament preset against the
-  // slot's required (type, colour); an existing pick (incl. a user override)
-  // is kept as long as it's still compatible with the selected printer, while
-  // null slots and printer-incompatible picks are re-picked (#1325).
+  // changes. An existing pick (incl. a user override) is kept as long as it's
+  // still compatible with the selected printer, while null slots and
+  // printer-incompatible picks are re-picked (#1325).
+  //
+  // **What the file says beats what we can infer (#56).** When the source 3MF
+  // names a filament profile for this slot (`filament_settings_id`, one entry
+  // per slot) that profile *is* the answer — the designer chose it, and Bambu
+  // Studio shows exactly it for the same file. Scoring (type, colour) can only
+  // ever re-derive an approximation of that choice, and it cannot tell two
+  // same-type same-colour profiles apart at all, which is how the same project
+  // came up with a different vendor's filament every time it was opened.
+  //
+  // The named profile is still refused when it is incompatible with the
+  // selected printer: the user may have switched printers since, and slicing
+  // with a mismatched profile is rejected by the CLI outright.
+  //
+  // The scorer stays as the fallback and must: a 3MF may name a profile the
+  // user does not have installed, and that has to degrade to today's guess,
+  // not to an empty slot the user then has to fill by hand.
   useEffect(() => {
     const data = presetsQuery.data;
     if (!data) return;
@@ -195,6 +226,15 @@ export function useSlicePresets({
             return cur;
           }
         }
+        // Indexing past the end yields undefined, which findPresetByName
+        // reads as "no name" — the list is allowed to be ragged.
+        const named = findPresetByName(data, 'filament', embeddedFilamentNames[i]);
+        if (named) {
+          const p = findPreset(data, named, 'filament');
+          if (p && presetCompatibility(p, 'filament', selectedPrinterName, compatIndex) !== 'mismatch') {
+            return named;
+          }
+        }
         return pickFilamentForSlot(
           data,
           { type: slot.type, color: slot.color },
@@ -203,7 +243,7 @@ export function useSlicePresets({
         );
       });
     });
-  }, [presetsQuery.data, filamentSlots, selectedPrinterName, compatIndex]);
+  }, [presetsQuery.data, filamentSlots, selectedPrinterName, compatIndex, embeddedFilamentNames]);
 
   // The honesty guard (#47), one entry per slot in slot order.
   //
