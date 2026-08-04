@@ -89,6 +89,23 @@ def _provider_to_dict(provider: NotificationProvider) -> dict:
     }
 
 
+async def _validate_provider_config(provider_type: str, config: dict | None, db: AsyncSession) -> None:
+    """Reject a provider whose Home Assistant service does not exist.
+
+    A free-text field that must match a remote enum is only checkable against
+    that remote, so we ask HA at save time rather than letting the mistake
+    surface as an undiagnosable HTTP 400 at the next print failure. If HA is
+    unreachable or unconfigured we let the save through — the service layer
+    logs why, and a down HA must not block editing notification settings.
+    """
+    if provider_type != "homeassistant":
+        return
+
+    error = await notification_service.validate_homeassistant_config(config, db)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+
+
 # ============================================================================
 # Provider List/Create Routes (no path parameters)
 # ============================================================================
@@ -113,6 +130,8 @@ async def create_notification_provider(
     _: User | None = RequirePermissionIfAuthEnabled(Permission.NOTIFICATIONS_CREATE),
 ):
     """Create a new notification provider."""
+    await _validate_provider_config(provider_data.provider_type.value, provider_data.config, db)
+
     provider = NotificationProvider(
         name=provider_data.name,
         provider_type=provider_data.provider_type.value,
@@ -407,6 +426,14 @@ async def update_notification_provider(
 
     # Update only provided fields
     update_dict = update_data.model_dump(exclude_unset=True)
+
+    # Validate against the *effective* post-update values, before mutating.
+    new_type = update_dict.get("provider_type")
+    effective_type = new_type.value if new_type is not None else provider.provider_type
+    effective_config = update_dict.get("config")
+    if effective_config is None:
+        effective_config = json.loads(provider.config) if isinstance(provider.config, str) else provider.config
+    await _validate_provider_config(effective_type, effective_config, db)
 
     for key, value in update_dict.items():
         if key == "config" and value is not None:

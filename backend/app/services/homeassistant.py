@@ -295,6 +295,40 @@ class HomeAssistantService:
             logger.warning("Failed to list HA entities: %s", e)
             return []
 
+    async def list_services(self, url: str, token: str) -> dict[str, list[str]] | None:
+        """List the services HA exposes, grouped by domain.
+
+        ``GET /api/services`` returns ``[{"domain": ..., "services": {...}}, ...]``.
+        We flatten that to ``{"notify": ["mobile_app_phone", ...], ...}``.
+
+        Returns ``None`` — never ``{}`` — when HA could not be queried (bad URL,
+        unreachable, bad token, unparseable body). Callers use this to diagnose
+        "no such service", so "we don't know" must stay distinguishable from
+        "HA answered and the service is not there".
+        """
+        safe_url = self._validate_url(url)
+        if not safe_url or not token:
+            return None
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(
+                    f"{safe_url.rstrip('/')}/api/services",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                response.raise_for_status()
+
+                services: dict[str, list[str]] = {}
+                for entry in response.json():
+                    domain = entry.get("domain")
+                    if not domain:
+                        continue
+                    services[domain] = sorted((entry.get("services") or {}).keys())
+                return services
+        except Exception as e:
+            logger.warning("Failed to list HA services: %s", e)
+            return None
+
     async def list_sensor_entities(self, url: str, token: str) -> list[dict]:
         """List available sensor entities for energy monitoring.
 
