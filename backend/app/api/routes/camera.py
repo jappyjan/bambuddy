@@ -1426,6 +1426,7 @@ async def get_plate_detection_status(
         - chamber_light: bool - Whether chamber light is on
         - message: str - Status message
     """
+    from backend.app.services.ai_plate_detection import load_ai_config
     from backend.app.services.plate_detection import (
         get_calibration_status,
         is_plate_detection_available,
@@ -1435,12 +1436,17 @@ async def get_plate_detection_status(
     # Verify printer exists first (before OpenCV check)
     await get_printer_or_404(printer_id, db)
 
+    # Which detector is actually in charge (#63) - the AI provider needs no
+    # calibration references, so the UI must be able to tell the two apart.
+    provider, _ai_config = await load_ai_config()
+
     if not is_plate_detection_available():
         return {
             "available": False,
             "calibrated": False,
             "plate_type": plate_type,
             "chamber_light": False,
+            "provider": provider,
             "message": "OpenCV not installed",
         }
 
@@ -1450,6 +1456,7 @@ async def get_plate_detection_status(
 
     status = get_calibration_status(printer_id, plate_type)
     status["chamber_light"] = chamber_light
+    status["provider"] = provider
 
     return status
 

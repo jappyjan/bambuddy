@@ -32,6 +32,7 @@ _SENSITIVE_FIELDS_FOR_API_KEY = (
     "prometheus_token",
     "virtual_printer_access_code",
     "ldap_bind_password",
+    "plate_detection_ai_api_key",
 )
 
 
@@ -68,6 +69,21 @@ async def set_setting(db: AsyncSession, key: str, value: str) -> None:
     from backend.app.core.db_dialect import upsert_setting
 
     await upsert_setting(db, Settings, key, value)
+
+
+def get_plate_detection_ai_env_settings() -> dict:
+    """AI plate-detection values supplied via environment (#63).
+
+    Mirrors the HA_URL/HA_TOKEN pattern: environment wins over the database
+    row, and a ``*_from_env`` flag lets the UI render the field as read-only.
+    """
+    from backend.app.services.ai_plate_detection import ENV_OVERRIDES, env_setting_overrides
+
+    overrides = env_setting_overrides()
+    resolved: dict = dict(overrides)
+    for key in ENV_OVERRIDES:
+        resolved[f"{key}_from_env"] = key in overrides
+    return resolved
 
 
 async def _build_settings_response(db: AsyncSession, is_api_key: bool = False) -> AppSettings:
@@ -143,6 +159,7 @@ async def _build_settings_response(db: AsyncSession, is_api_key: bool = False) -
             "preheat_max_wait_seconds",
             "preheat_soak_seconds",
             "queue_max_concurrent_uploads",
+            "plate_detection_ai_timeout",
         ]:
             settings_dict[setting.key] = int(setting.value)
         elif setting.key == "default_printer_id":
@@ -157,6 +174,8 @@ async def _build_settings_response(db: AsyncSession, is_api_key: bool = False) -
 
     ha_settings = await get_homeassistant_settings(db)
     settings_dict.update(ha_settings)
+
+    settings_dict.update(get_plate_detection_ai_env_settings())
 
     # ldap_bind_password is never returned to any caller
     settings_dict["ldap_bind_password"] = ""

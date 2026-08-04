@@ -462,6 +462,42 @@ class AppSettings(BaseModel):
         description="JSON array of printer IDs to monitor (empty = all connected printers)",
     )
 
+    # Empty build-plate detection (#63)
+    plate_detection_provider: str = Field(
+        default="opencv",
+        description="Empty-plate detector: 'opencv' (reference diffing) or 'ai' (vision model)",
+    )
+    plate_detection_ai_endpoint: str = Field(
+        default="",
+        description="OpenAI-compatible base URL, e.g. https://api.openai.com/v1 (/chat/completions is appended)",
+    )
+    plate_detection_ai_model: str = Field(
+        default="",
+        description="Vision model name sent to the AI endpoint (e.g., gpt-4o-mini, qwen2.5vl)",
+    )
+    plate_detection_ai_api_key: str = Field(
+        default="",
+        description="Bearer token for the AI endpoint",
+    )
+    plate_detection_ai_timeout: int = Field(
+        default=5,
+        ge=1,
+        le=9,
+        description="Seconds to wait for the AI verdict. The print is already running - keep it short",
+    )
+    plate_detection_ai_endpoint_from_env: bool = Field(
+        default=False,
+        description="Whether the AI endpoint is set via PLATE_DETECTION_AI_ENDPOINT",
+    )
+    plate_detection_ai_model_from_env: bool = Field(
+        default=False,
+        description="Whether the AI model is set via PLATE_DETECTION_AI_MODEL",
+    )
+    plate_detection_ai_api_key_from_env: bool = Field(
+        default=False,
+        description="Whether the AI API key is set via PLATE_DETECTION_AI_API_KEY",
+    )
+
     # Inventory forecasting
     forecast_global_lead_time_days: int = Field(
         default=0,
@@ -597,6 +633,11 @@ class AppSettingsUpdate(BaseModel):
     obico_action: str | None = None
     obico_poll_interval: int | None = Field(default=None, ge=5, le=120)
     obico_enabled_printers: str | None = None
+    plate_detection_provider: str | None = None
+    plate_detection_ai_endpoint: str | None = None
+    plate_detection_ai_model: str | None = None
+    plate_detection_ai_api_key: str | None = None
+    plate_detection_ai_timeout: int | None = Field(default=None, ge=1, le=9)
     default_sidebar_order: str | None = None
     forecast_global_lead_time_days: int | None = Field(default=None, ge=0)
 
@@ -692,6 +733,15 @@ class AppSettingsUpdate(BaseModel):
             return v
         if v not in ("notify", "pause", "pause_and_off"):
             raise ValueError("obico_action must be 'notify', 'pause', or 'pause_and_off'")
+        return v
+
+    @field_validator("plate_detection_provider")
+    @classmethod
+    def validate_plate_detection_provider(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if v not in ("opencv", "ai"):
+            raise ValueError("plate_detection_provider must be 'opencv' or 'ai'")
         return v
 
     @field_validator("default_sidebar_order")
