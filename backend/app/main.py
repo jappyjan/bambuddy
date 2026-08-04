@@ -2556,6 +2556,11 @@ async def on_print_start(printer_id: int, data: dict):
                             "printer_id": printer_id,
                             "printer_name": printer.name,
                             "message": plate_alert,
+                            # The detector's own explanation, WITHOUT the generic
+                            # headline. The UI renders this in its own "Reason"
+                            # block, so repeating the headline here would show
+                            # the same sentence twice (#63).
+                            "reason": plate_result.message,
                         }
                     )
 
