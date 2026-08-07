@@ -18,9 +18,11 @@ import { resolve } from 'node:path';
 import * as THREE from 'three';
 import {
   anchorsDiffer,
+  createBedGridGeometry,
   createPlateBed,
   paintPlateBeds,
   projectToViewport,
+  resizeSinglePlateBed,
   zoomedCameraPosition,
 } from '../../components/slicer/plateBeds';
 import { plateGridOrigin } from '../../components/slicer/plateGrid';
@@ -227,4 +229,80 @@ describe('the beds and the models of a real multi-plate file', () => {
       }
     }
   }, 30000);
+});
+
+/**
+ * The **single-plate** bed (#69).
+ *
+ * `ModelViewer` builds this furniture before it has fetched the model, so it can
+ * only size it from the printer picked in the rail. A 3MF that declares its own
+ * `printable_area` outranks that and is not known until the parse lands, so the
+ * bed is re-cut afterwards. That second cut is what these cases pin — with no
+ * renderer, because three.js needs WebGL to draw and not to place.
+ *
+ * This is also where "a non-square bed renders non-square" is actually checked.
+ * It cannot be verified end to end: the H2D's 350 x 320 is the only non-square
+ * bed within reach and the deployed sidecar SIGSEGVs slicing a bare STL for it
+ * (#72), so there is no real slice to compare against.
+ */
+describe('resizeSinglePlateBed (#69)', () => {
+  function furniture() {
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(256, 256));
+    plate.rotation.x = -Math.PI / 2;
+    const grid = new THREE.LineSegments(createBedGridGeometry(256, 256, 16));
+    return { plate, grid };
+  }
+
+  it('re-cuts the plate to a non-square bed, non-square', () => {
+    const { plate, grid } = furniture();
+    resizeSinglePlateBed(plate, grid, { x: 350, y: 320 });
+
+    const params = (plate.geometry as THREE.PlaneGeometry).parameters;
+    expect(params.width).toBe(350);
+    expect(params.height).toBe(320);
+  });
+
+  it('re-cuts the grid to match, without overhanging the plate', () => {
+    // The old `THREE.GridHelper(Math.max(x, y))` drew an H2D as 350 x 350 —
+    // correct numbers, wrong shape, which is the whole point of the ticket.
+    const { plate, grid } = furniture();
+    resizeSinglePlateBed(plate, grid, { x: 350, y: 320 });
+
+    grid.geometry.computeBoundingBox();
+    const box = grid.geometry.boundingBox!;
+    expect(box.max.x - box.min.x).toBeCloseTo(350, 3);
+    expect(box.max.z - box.min.z).toBeCloseTo(320, 3);
+  });
+
+  it('gives the H2S reference file back its own 340 x 320 bed', () => {
+    // The single-plate branch used to read `bedSize` nowhere at all, so a file
+    // that declared an H2S rendered on a 256 x 256 plate.
+    const { plate, grid } = furniture();
+    resizeSinglePlateBed(plate, grid, H2S);
+
+    const params = (plate.geometry as THREE.PlaneGeometry).parameters;
+    expect([params.width, params.height]).toEqual([340, 320]);
+  });
+
+  it('releases the geometry it replaces', () => {
+    // Runs on every file and every plate change; a leak here is a leak per click.
+    const { plate, grid } = furniture();
+    const oldPlateGeometry = plate.geometry;
+    const oldGridGeometry = grid.geometry;
+    let disposed = 0;
+    oldPlateGeometry.addEventListener('dispose', () => { disposed += 1; });
+    oldGridGeometry.addEventListener('dispose', () => { disposed += 1; });
+
+    resizeSinglePlateBed(plate, grid, { x: 180, y: 180 });
+
+    expect(disposed).toBe(2);
+    expect(plate.geometry).not.toBe(oldPlateGeometry);
+    expect(grid.geometry).not.toBe(oldGridGeometry);
+  });
+
+  it('does nothing when the scene has no bed yet', () => {
+    // The furniture is built in an effect that may not have run; a null here
+    // must not throw, or the viewport comes up empty.
+    expect(() => resizeSinglePlateBed(null, null, { x: 350, y: 320 })).not.toThrow();
+  });
 });

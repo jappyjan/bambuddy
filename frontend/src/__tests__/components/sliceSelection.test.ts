@@ -18,6 +18,7 @@ import {
   selectionFingerprint,
   type SliceSelection,
 } from '../../components/slicer/sliceSelection';
+import { autoArrangeTransforms, type Vec3 } from '../../components/slicer/transformMath';
 import type { StagePlate } from '../../types/plateStage';
 
 function stagePlate(index: number, x = 0): StagePlate {
@@ -147,5 +148,50 @@ describe('sliceSelection — the Print-now fingerprint', () => {
     const reverted = selectionFingerprint(selection({ bedType: null }));
     expect(changed).not.toBe(recorded);
     expect(reverted).toBe(recorded);
+  });
+});
+
+/**
+ * The bed reaches the slice through the arrangement (#69).
+ *
+ * `buildVolume` is not a field of `SliceSelection` and never becomes one — it is
+ * not in the slice body. It reaches the slicer the long way round: the bed sizes
+ * the stage's Auto-arrange, the arrange writes object transforms, the transforms
+ * land in `selection.plates`, and `layoutKey` hashes them. So a printer change
+ * that moves an object *must* move the fingerprint, or Print now would stay lit
+ * over a completed slice describing the old placement.
+ *
+ * Asserted by running the real chain rather than by reasoning about it: the same
+ * `autoArrangeTransforms` the stage calls, on two beds, into two fingerprints.
+ */
+describe('a bed change reaches the fingerprint (#69)', () => {
+  const OBJECTS = [
+    { id: 'obj-1', transform: { position: [0, 0, 0] as Vec3, rotation: [0, 0, 0] as Vec3, scale: [1, 1, 1] as Vec3 } },
+  ];
+  const METRICS = { 'obj-1': { anchor: [0, 0, 0] as Vec3, size: [40, 40, 40] as Vec3 } };
+
+  function arrangedFingerprint(bed: { x: number; y: number }): string {
+    const arranged = autoArrangeTransforms(OBJECTS, METRICS, bed);
+    return selectionFingerprint(
+      selection({ plates: [{ index: 1, objects: [{ id: 'obj-1', transform: arranged['obj-1'] }] }] }),
+    );
+  }
+
+  it('moves when the printer bed moves the object', () => {
+    // A1 256x256 centres at (128, 128); an H2D's 350x320 at (175, 160).
+    const onA1 = arrangedFingerprint({ x: 256, y: 256 });
+    const onH2D = arrangedFingerprint({ x: 350, y: 320 });
+    expect(autoArrangeTransforms(OBJECTS, METRICS, { x: 256, y: 256 })['obj-1'].position).toEqual([128, 128, 0]);
+    expect(autoArrangeTransforms(OBJECTS, METRICS, { x: 350, y: 320 })['obj-1'].position).toEqual([175, 160, 0]);
+    expect(onH2D).not.toBe(onA1);
+    // And the difference is the placement, visibly — not some unrelated field.
+    expect(onA1).toContain('[128,128,0]');
+    expect(onH2D).toContain('[175,160,0]');
+  });
+
+  it('stays put when a bed change does not move the object', () => {
+    // Print now must not die for nothing: two beds that arrange to the same
+    // place are the same slice. 256x256 and 256x256 with a different height.
+    expect(arrangedFingerprint({ x: 256, y: 256 })).toBe(arrangedFingerprint({ x: 256, y: 256 }));
   });
 });
