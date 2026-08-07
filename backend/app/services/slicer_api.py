@@ -216,6 +216,30 @@ class SlicerApiService:
         tier on both slicers — colour is a runtime spool attribute, not a
         profile one — so an empty colour here is data, not a degraded response.
 
+        Printer entries additionally carry ``printable_area`` (#68): the bed
+        outline as a list of ``"<x>x<y>"`` corner points in bed millimetres,
+        e.g. ``["0x0", "350x0", "350x320", "0x320"]``. **Not** a width/height
+        pair — the raw polygon is passed through so a round or origin-offset
+        bed is not silently flattened into a rectangle, and Bambuddy reduces
+        it itself. Resolved through the same ``inherits:`` walk as the filament
+        fields, and for the same reason: a BBL machine preset is a per-nozzle
+        delta that declares no bed of its own, so a walk-less sidecar reports
+        ``null`` for essentially the whole tier (measured on the bundled trees:
+        the leaf states it for 4/44 presets in OrcaSlicer v2.3.2 and 7/56 in
+        BambuStudio v02.07.01.57; through the walk, 44/44 and 56/56).
+
+        **Only sidecar images built from orca-slicer-api#4 emit it at all**, so
+        every deployment reads ``null`` here until its image is rebuilt. That
+        is the normal state, not an error state, and callers must keep working
+        in it — ``None`` means "no bed known, fall back to a default plate",
+        which is a different instruction from a bed of size zero.
+
+        The listing also contains ``type: "machine_model"`` catalogue entries
+        ("Bambu Lab H2D" with no nozzle suffix) that describe a printer family
+        rather than a slicing preset. Those declare no bed anywhere in their
+        chain and report ``null`` — 11 of 55 printer entries on OrcaSlicer,
+        14 of 70 on BambuStudio.
+
         Returns an empty-shaped dict when the sidecar is unreachable so the
         unified-presets endpoint can degrade to "no standard tier" without
         crashing the modal — cloud + local-imported profiles still render.

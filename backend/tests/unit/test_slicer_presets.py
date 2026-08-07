@@ -12,13 +12,18 @@ routes test.
 
 from __future__ import annotations
 
+import json
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from backend.app.api.routes import slicer_presets as sp
-from backend.app.schemas.slicer_presets import UnifiedPreset
+from backend.app.schemas.slicer_presets import (
+    UnifiedPreset,
+    UnifiedPresetsBySlot,
+    UnifiedPresetsResponse,
+)
 
 
 def _slot(items: list[tuple[str, str, str]]) -> dict[str, list[UnifiedPreset]]:
@@ -1068,9 +1073,7 @@ class TestFilamentVendor:
         ):
             slots = await sp._fetch_bundled_presets(MagicMock())
         assert slots["filament"][0].filament_vendor == "Overture Actual"
-        _, _, _, standard = sp._enrich_cloud_metadata(
-            _empty_tier(), _empty_tier(), _empty_tier(), slots
-        )
+        _, _, _, standard = sp._enrich_cloud_metadata(_empty_tier(), _empty_tier(), _empty_tier(), slots)
         assert standard["filament"][0].filament_vendor == "Overture Actual"
 
     async def test_standard_tier_falls_back_to_the_name_on_todays_sidecar(self):
@@ -1092,9 +1095,7 @@ class TestFilamentVendor:
         ):
             slots = await sp._fetch_bundled_presets(MagicMock())
         assert slots["filament"][0].filament_vendor is None
-        _, _, _, standard = sp._enrich_cloud_metadata(
-            _empty_tier(), _empty_tier(), _empty_tier(), slots
-        )
+        _, _, _, standard = sp._enrich_cloud_metadata(_empty_tier(), _empty_tier(), _empty_tier(), slots)
         assert standard["filament"][0].filament_vendor == "Overture"
 
     def test_bambu_cloud_borrows_vendor_across_the_name_bridge(self):
@@ -1135,3 +1136,303 @@ class TestFilamentVendor:
         _, _, local, _ = sp._enrich_cloud_metadata(_empty_tier(), _empty_tier(), local, _empty_tier())
         assert local["printer"][0].filament_vendor is None
         assert local["process"][0].filament_vendor is None
+
+
+def _printer_tier(items: list[tuple[str, str, str]], **kw) -> dict[str, list[UnifiedPreset]]:
+    """Build a tier dict whose printer slot holds (id, name, source) tuples.
+    Extra keyword args are applied to every preset built."""
+    return {
+        "printer": [UnifiedPreset(id=i, name=n, source=s, **kw) for i, n, s in items],
+        "process": [],
+        "filament": [],
+    }
+
+
+H2D_BED = ["0x0", "350x0", "350x320", "0x320"]
+X1C_BED = ["0x0", "256x0", "256x256", "0x256"]
+
+
+class TestParsePrintableArea:
+    """``_parse_printable_area`` normalises the CONTAINER, never the geometry.
+
+    The bed outline is a polygon of ``"<x>x<y>"`` corner points, and it is not
+    always an origin-anchored rectangle: 8 profiles in OrcaSlicer's vendor tree
+    declare 72-point round delta beds. Every declared point has to survive, in
+    order — a reduction to width/height here would silently turn a round bed
+    into a square one that lies about where a model may be placed.
+    """
+
+    def test_passes_a_rectangle_through_unchanged(self):
+        assert sp._parse_printable_area(list(H2D_BED)) == H2D_BED
+
+    def test_keeps_every_point_of_a_non_rectangular_bed(self):
+        hexagon = ["50x0", "150x0", "200x87", "150x173", "50x173", "0x87"]
+        assert sp._parse_printable_area(list(hexagon)) == hexagon
+
+    def test_keeps_an_origin_offset_bed_where_it_is(self):
+        """A bed that does not start at 0x0 must not be slid to the origin —
+        the offset is the difference between a model on the plate and a model
+        hanging off it."""
+        offset = ["10x20", "260x20", "260x276", "10x276"]
+        assert sp._parse_printable_area(list(offset)) == offset
+
+    def test_splits_a_polygon_written_as_one_comma_joined_string(self):
+        """OrcaSlicer's Creality tree writes Ender-5 Max's bed as a single
+        string rather than an array."""
+        assert sp._parse_printable_area("0x0,400x0,400x400,0x400") == [
+            "0x0",
+            "400x0",
+            "400x400",
+            "0x400",
+        ]
+
+    def test_trims_stray_whitespace_inside_a_point(self):
+        """`Bambu Lab X2D 0.4 nozzle` ships with a trailing space inside its
+        last point in BambuStudio v02.07.01.57."""
+        assert sp._parse_printable_area(["0x0", "256x0", "256x256", "0x256 "]) == X1C_BED
+
+    def test_missing_is_none(self):
+        assert sp._parse_printable_area(None) is None
+
+    def test_empty_list_is_none_not_a_zero_sized_bed(self):
+        assert sp._parse_printable_area([]) is None
+
+    def test_fewer_than_three_points_is_none_not_a_zero_sized_bed(self):
+        """Two points is not a polygon. It must read as "no bed known" so the
+        consumer falls back to a default plate — NOT as a bed whose bounding
+        box happens to be 10 x 0, which would place everything at the origin.
+        `None` and "size zero" have to stay distinguishable."""
+        assert sp._parse_printable_area(["0x0", "10x0"]) is None
+
+    def test_non_string_junk_is_dropped(self):
+        assert sp._parse_printable_area([1, 2, 3]) is None
+        assert sp._parse_printable_area({"x": 350}) is None
+        assert sp._parse_printable_area(350) is None
+
+
+class TestPrintableAreaPerTier:
+    """``printable_area`` per tier (#68).
+
+    This is the only per-printer geometry Bambuddy has — the `Printer` model
+    carries none, `PRINTER_MODEL_MAP` carries none, and the preset NAME is the
+    only other carrier. Each tier resolves it from a different place and every
+    one of them can legitimately come back empty:
+
+      - standard → whatever the sidecar emits. **Today it emits nothing**, so
+        the whole tier reads `None` until each deployment's image is rebuilt.
+      - orca_cloud → the inline profile content Orca's sync already returns.
+      - local → the stored resolved profile blob.
+      - cloud → nothing of its own ever; it borrows across the name bridge.
+
+    Unlike `filament_vendor` there is NO name-parse fallback: a bed cannot be
+    guessed from a string, and the hardcoded model→bed map that used to exist
+    was deliberately removed (CHANGELOG:1173).
+    """
+
+    @pytest.mark.asyncio
+    async def test_standard_tier_reads_the_sidecar_field(self):
+        sp._bundled_cache = None
+        svc_mock = MagicMock()
+        svc_mock.list_bundled_profiles = AsyncMock(
+            return_value={
+                "printer": [
+                    {
+                        "name": "Bambu Lab H2D 0.4 nozzle",
+                        "base_id": "fdm_bbl_3dp_002_common",
+                        "printable_area": list(H2D_BED),
+                    }
+                ],
+                "process": [],
+                "filament": [],
+            }
+        )
+        svc_mock.__aenter__ = AsyncMock(return_value=svc_mock)
+        svc_mock.__aexit__ = AsyncMock(return_value=False)
+        with (
+            patch.object(sp, "_resolve_slicer_api_url", AsyncMock(return_value="http://ok")),
+            patch.object(sp, "SlicerApiService", return_value=svc_mock),
+        ):
+            slots = await sp._fetch_bundled_presets(MagicMock())
+        assert slots["printer"][0].printable_area == H2D_BED
+
+    @pytest.mark.asyncio
+    async def test_old_sidecar_without_the_field_yields_none_and_still_works(self):
+        """**The state every existing deployment is in.** The sidecar image is
+        rebuilt by hand, so until that happens `/profiles/bundled` returns the
+        old `{name, base_id}` shape. The listing must come back intact with the
+        bed simply absent — not raise, not drop the printer, not invent a bed.
+        """
+        sp._bundled_cache = None
+        svc_mock = MagicMock()
+        svc_mock.list_bundled_profiles = AsyncMock(
+            return_value={
+                "printer": [{"name": "Bambu Lab H2D 0.4 nozzle", "base_id": None}],
+                "process": [{"name": "0.20mm Standard", "base_id": None}],
+                "filament": [{"name": "Bambu PLA Basic", "base_id": None, "filament_type": "PLA"}],
+            }
+        )
+        svc_mock.__aenter__ = AsyncMock(return_value=svc_mock)
+        svc_mock.__aexit__ = AsyncMock(return_value=False)
+        with (
+            patch.object(sp, "_resolve_slicer_api_url", AsyncMock(return_value="http://ok")),
+            patch.object(sp, "SlicerApiService", return_value=svc_mock),
+        ):
+            slots = await sp._fetch_bundled_presets(MagicMock())
+        assert [p.name for p in slots["printer"]] == ["Bambu Lab H2D 0.4 nozzle"]
+        assert slots["printer"][0].printable_area is None
+        # Everything else the endpoint already promised is untouched.
+        assert slots["printer"][0].id == "Bambu Lab H2D 0.4 nozzle"
+        assert slots["filament"][0].filament_type == "PLA"
+        assert len(slots["process"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_sidecar_junk_degrades_to_none_rather_than_raising(self):
+        """A sidecar emitting the wrong shape must cost one printer its bed,
+        not cost the caller the entire Standard tier."""
+        sp._bundled_cache = None
+        svc_mock = MagicMock()
+        svc_mock.list_bundled_profiles = AsyncMock(
+            return_value={
+                "printer": [
+                    {"name": "Broken", "base_id": None, "printable_area": {"width": 256}},
+                    {"name": "Fine", "base_id": None, "printable_area": list(X1C_BED)},
+                ],
+                "process": [],
+                "filament": [],
+            }
+        )
+        svc_mock.__aenter__ = AsyncMock(return_value=svc_mock)
+        svc_mock.__aexit__ = AsyncMock(return_value=False)
+        with (
+            patch.object(sp, "_resolve_slicer_api_url", AsyncMock(return_value="http://ok")),
+            patch.object(sp, "SlicerApiService", return_value=svc_mock),
+        ):
+            slots = await sp._fetch_bundled_presets(MagicMock())
+        assert slots["printer"][0].printable_area is None
+        assert slots["printer"][1].printable_area == X1C_BED
+
+    @pytest.mark.asyncio
+    async def test_bed_is_printer_only_and_does_not_leak_to_other_slots(self):
+        sp._bundled_cache = None
+        svc_mock = MagicMock()
+        svc_mock.list_bundled_profiles = AsyncMock(
+            return_value={
+                "printer": [{"name": "P", "base_id": None, "printable_area": list(X1C_BED)}],
+                "process": [{"name": "Q", "base_id": None, "printable_area": list(H2D_BED)}],
+                "filament": [{"name": "R", "base_id": None, "printable_area": list(H2D_BED)}],
+            }
+        )
+        svc_mock.__aenter__ = AsyncMock(return_value=svc_mock)
+        svc_mock.__aexit__ = AsyncMock(return_value=False)
+        with (
+            patch.object(sp, "_resolve_slicer_api_url", AsyncMock(return_value="http://ok")),
+            patch.object(sp, "SlicerApiService", return_value=svc_mock),
+        ):
+            slots = await sp._fetch_bundled_presets(MagicMock())
+        assert slots["printer"][0].printable_area == X1C_BED
+        assert slots["process"][0].printable_area is None
+        assert slots["filament"][0].printable_area is None
+
+    def test_local_tier_reads_the_stored_profile_blob(self):
+        assert sp._parse_local_printable_area(json.dumps({"name": "My H2D", "printable_area": H2D_BED})) == H2D_BED
+
+    def test_local_tier_corrupt_blob_degrades_to_none(self):
+        assert sp._parse_local_printable_area("{ not json") is None
+        assert sp._parse_local_printable_area(None) is None
+        assert sp._parse_local_printable_area("[]") is None
+        assert sp._parse_local_printable_area(json.dumps({"name": "No bed"})) is None
+
+
+class TestPrintableAreaBridge:
+    """The cross-tier name bridge (#68), the same one `filament_vendor` rides.
+
+    Only the standard tier resolves a real bed. A user picking the same
+    physical printer out of the Bambu Cloud tier must get the same bed, or the
+    plate size would depend on which tier happened to win dedup — invisible to
+    the user and not something they chose.
+    """
+
+    def test_cloud_borrows_a_bed_from_the_standard_tier(self):
+        cloud = _printer_tier([("PF1", "Bambu Lab H2D 0.4 nozzle", "cloud")])
+        standard = _printer_tier(
+            [("Bambu Lab H2D 0.4 nozzle", "Bambu Lab H2D 0.4 nozzle", "standard")],
+            printable_area=list(H2D_BED),
+        )
+        _, cloud, _, _ = sp._enrich_cloud_metadata(_empty_tier(), cloud, _empty_tier(), standard)
+        assert cloud["printer"][0].printable_area == H2D_BED
+
+    def test_bridge_never_overwrites_a_bed_an_entry_states_itself(self):
+        """A tier that knows its own geometry is authoritative. Overwriting it
+        from a same-named entry elsewhere would swap a user's customised bed
+        for the stock one."""
+        local = _printer_tier([("1", "Bambu Lab H2D 0.4 nozzle", "local")], printable_area=list(X1C_BED))
+        standard = _printer_tier(
+            [("Bambu Lab H2D 0.4 nozzle", "Bambu Lab H2D 0.4 nozzle", "standard")],
+            printable_area=list(H2D_BED),
+        )
+        _, _, local, _ = sp._enrich_cloud_metadata(_empty_tier(), _empty_tier(), local, standard)
+        assert local["printer"][0].printable_area == X1C_BED
+
+    def test_no_bed_anywhere_stays_none(self):
+        """Old sidecar across the board. Every tier keeps `None`; nothing is
+        invented, and in particular no model→bed map is consulted."""
+        cloud = _printer_tier([("PF1", "Bambu Lab H2D 0.4 nozzle", "cloud")])
+        standard = _printer_tier([("Bambu Lab H2D 0.4 nozzle", "Bambu Lab H2D 0.4 nozzle", "standard")])
+        orca, cloud, local, standard = sp._enrich_cloud_metadata(_empty_tier(), cloud, _empty_tier(), standard)
+        assert cloud["printer"][0].printable_area is None
+        assert standard["printer"][0].printable_area is None
+
+    def test_a_differently_named_printer_does_not_borrow(self):
+        """The bridge keys on the exact name. An A1 mini must not inherit an
+        H2D's 350x320 bed just because both tiers are populated."""
+        cloud = _printer_tier([("PF1", "Bambu Lab A1 mini 0.4 nozzle", "cloud")])
+        standard = _printer_tier(
+            [("Bambu Lab H2D 0.4 nozzle", "Bambu Lab H2D 0.4 nozzle", "standard")],
+            printable_area=list(H2D_BED),
+        )
+        _, cloud, _, _ = sp._enrich_cloud_metadata(_empty_tier(), cloud, _empty_tier(), standard)
+        assert cloud["printer"][0].printable_area is None
+
+    def test_bed_bridge_does_not_touch_process_or_filament_slots(self):
+        """A bed is a printer concept. A process preset sharing a printer's
+        name must not sprout one."""
+        standard = {
+            "printer": [UnifiedPreset(id="p", name="Shared", source="standard", printable_area=list(H2D_BED))],
+            "process": [UnifiedPreset(id="q", name="Shared", source="standard")],
+            "filament": [UnifiedPreset(id="r", name="Shared", source="standard")],
+        }
+        _, _, _, standard = sp._enrich_cloud_metadata(_empty_tier(), _empty_tier(), _empty_tier(), standard)
+        assert standard["process"][0].printable_area is None
+        assert standard["filament"][0].printable_area is None
+
+
+class TestPrintableAreaSerialisation:
+    """The field has to reach the wire, not just the dataclass.
+
+    ``GET /slicer/presets`` returns ``UnifiedPresetsResponse`` directly, so the
+    only thing between a resolved bed and the frontend is the schema.
+    """
+
+    def test_response_carries_the_bed_through_serialisation(self):
+        response = UnifiedPresetsResponse(
+            standard=UnifiedPresetsBySlot(
+                printer=[
+                    UnifiedPreset(
+                        id="Bambu Lab H2D 0.4 nozzle",
+                        name="Bambu Lab H2D 0.4 nozzle",
+                        source="standard",
+                        printable_area=list(H2D_BED),
+                    )
+                ]
+            )
+        )
+        dumped = response.model_dump()
+        assert dumped["standard"]["printer"][0]["printable_area"] == H2D_BED
+
+    def test_field_defaults_to_none_and_is_always_present(self):
+        """Every deployment reads this until its sidecar image is rebuilt. The
+        key must still be emitted so a consumer can distinguish "no bed" from
+        "old backend that has never heard of beds"."""
+        dumped = UnifiedPreset(id="p", name="p", source="standard").model_dump()
+        assert "printable_area" in dumped
+        assert dumped["printable_area"] is None

@@ -1637,6 +1637,23 @@ export interface UnifiedPreset {
   // the process / filament dropdowns by the selected printer using this when
   // present (#1325).
   compatible_printers?: string[] | null;
+  // Populated for the PRINTER slot only: the bed outline the slicer's own
+  // profile tree declares, as a list of `"<x>x<y>"` corner points in bed
+  // millimetres — e.g. `["0x0","350x0","350x320","0x320"]` for an H2D (#68).
+  //
+  // **Not a width/height pair.** The raw polygon is carried through because it
+  // is not always an origin-anchored rectangle — 8 profiles in OrcaSlicer's
+  // vendor tree declare 72-point round delta beds — so consumers reduce it
+  // themselves rather than being handed a rectangle that quietly lies about
+  // where a model may be placed.
+  //
+  // Resolved backend-side through the bundled profile's `inherits:` chain by
+  // the sidecar, which is the only place that walk can happen. **Only rebuilt
+  // sidecar images emit it**, so this is `null` across the whole standard tier
+  // until a deployment's image is rebuilt — that is the normal state, and a
+  // consumer must fall back to its default plate rather than treating a
+  // missing bed as a bed of size zero.
+  printable_area?: string[] | null;
 }
 export interface UnifiedPresetsBySlot {
   printer: UnifiedPreset[];

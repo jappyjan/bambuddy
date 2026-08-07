@@ -51,6 +51,40 @@ class UnifiedPreset(BaseModel):
     vendor could be resolved at all; the frontend buckets those into a
     trailing "Other" group rather than scattering them.
 
+    ``printable_area`` is populated for the **printer** slot only: the bed
+    outline the slicer's own profile tree declares for that printer, as a list
+    of ``"<x>x<y>"`` corner points in bed millimetres — e.g.
+    ``["0x0", "350x0", "350x320", "0x320"]`` for an H2D. It is **not** a
+    width/height pair, and it is deliberately carried in the slicer's own raw
+    shape: 8 profiles in OrcaSlicer's vendor tree declare 72-point round delta
+    beds, and reducing here would flatten a round or origin-offset bed into a
+    rectangle that silently lies about where a model may be placed. Consumers
+    reduce it themselves, to whatever they need (a bounding box for the
+    viewport, the polygon for a render outline).
+
+    This is the only per-printer geometry Bambuddy has: the ``Printer`` DB
+    model has no dimensions, ``PRINTER_MODEL_MAP`` has none, and
+    ``printerPresetAxes.ts`` states outright that the preset NAME is the only
+    carrier of model and nozzle. A hardcoded model→bed map is not an option —
+    one existed and was deliberately removed in favour of reading
+    ``printable_area`` (CHANGELOG:1173).
+
+    Resolution per tier, best source first:
+
+      - standard → the sidecar's ``printable_area``, resolved through the
+        bundled profile's ``inherits:`` chain (orca-slicer-api#4). **Only the
+        rebuilt fork images emit it.**
+      - orca_cloud → the profile content's own ``printable_area``
+      - local → the same key out of the stored resolved profile blob
+      - cloud → borrowed from a same-named entry in another tier; Bambu
+        Cloud's list response carries no profile content at all
+
+    ``None`` means no bed could be resolved, and every deployment reads
+    ``None`` for the whole standard tier until its sidecar image is rebuilt —
+    that is the state each one is in today, and the frontend must keep working
+    in it. **``None`` is never "a bed of size zero"**: a zero-area bed would
+    place a model at the origin, a missing one has to fall back to a default.
+
     ``compatible_printers`` is the slicer's own list of printer-preset names a
     process / filament preset declares itself valid for. Populated for the
     local tier (stored at import time); left ``None`` for cloud (no per-preset
@@ -68,6 +102,7 @@ class UnifiedPreset(BaseModel):
     filament_colour: str | None = None
     filament_vendor: str | None = None
     compatible_printers: list[str] | None = None
+    printable_area: list[str] | None = None
 
 
 class UnifiedPresetsBySlot(BaseModel):
