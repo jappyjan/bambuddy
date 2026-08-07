@@ -42,6 +42,7 @@ import type { ObjectTransform, PlateLayout } from '../../types/plateStage';
  * that prop is what actually places the model on screen.
  */
 let viewerProps: {
+  fileType?: string;
   interactive?: boolean;
   gizmoMode?: string | null;
   onObjectTransform?: (objectId: string, transform: ObjectTransform) => void;
@@ -52,6 +53,7 @@ let viewerProps: {
 vi.mock('../../components/ModelViewer', () => ({
   ModelViewer: (props: {
     selectedPlateId?: number | null;
+    fileType?: string;
     interactive?: boolean;
     gizmoMode?: string | null;
     onObjectTransform?: (objectId: string, transform: ObjectTransform) => void;
@@ -60,7 +62,11 @@ vi.mock('../../components/ModelViewer', () => ({
   }) => {
     viewerProps = props;
     return (
-      <div data-testid="model-viewer" data-selected-plate={String(props.selectedPlateId ?? '')} />
+      <div
+        data-testid="model-viewer"
+        data-selected-plate={String(props.selectedPlateId ?? '')}
+        data-file-type={String(props.fileType ?? '')}
+      />
     );
   },
 }));
@@ -236,6 +242,75 @@ describe('SlicerPage', () => {
     expect(screen.getByTestId('model-viewer')).toBeDefined();
     expect(screen.getByTestId('slice-action-bar')).toBeDefined();
     expect(screen.getByTestId('process-settings-editor')).toBeDefined();
+  });
+
+  // #66 — the download URL carries no extension, so `ModelViewer`'s own
+  // extension fallback cannot classify anything the page hands it. The page
+  // must name the type itself, from the filename, or an STL (which has no
+  // plates and so used to get `fileType: undefined`) renders as
+  // "unsupported file format".
+  describe('model type detection', () => {
+    it('tells the viewer an STL is an STL, even though it has no plates', async () => {
+      renderSlicerPage('?file=100'); // default mock: Cube.stl, plates: []
+      await waitForReady();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('model-viewer').getAttribute('data-file-type')).toBe('stl');
+      });
+      expect(viewerProps.fileType).toBe('stl');
+    });
+
+    it('still says 3mf for a single-plate 3MF', async () => {
+      mockApi.getLibraryFilePlates.mockResolvedValue({
+        file_id: 100,
+        filename: 'Vase.3mf',
+        plates: [
+          { index: 1, name: null, objects: ['a'], has_thumbnail: false, thumbnail_url: null, print_time_seconds: null, filament_used_grams: null, filaments: [] },
+        ],
+        is_multi_plate: false,
+      });
+      renderSlicerPage('?file=100');
+      await waitForReady();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('model-viewer').getAttribute('data-file-type')).toBe('3mf');
+      });
+    });
+
+    it('still says 3mf for a multi-plate 3MF', async () => {
+      mockApi.getLibraryFilePlates.mockResolvedValue({
+        file_id: 100,
+        filename: 'Two.3mf',
+        plates: [
+          { index: 1, name: null, objects: ['a'], has_thumbnail: false, thumbnail_url: null, print_time_seconds: null, filament_used_grams: null, filaments: [] },
+          { index: 2, name: null, objects: ['b'], has_thumbnail: false, thumbnail_url: null, print_time_seconds: null, filament_used_grams: null, filaments: [] },
+        ],
+        is_multi_plate: true,
+      });
+      renderSlicerPage('?file=100');
+      await waitForReady();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('model-viewer').getAttribute('data-file-type')).toBe('3mf');
+      });
+    });
+
+    it('falls back to the plates signal when the filename has no extension', async () => {
+      mockApi.getLibraryFilePlates.mockResolvedValue({
+        file_id: 100,
+        filename: 'no-extension-here',
+        plates: [
+          { index: 1, name: null, objects: ['a'], has_thumbnail: false, thumbnail_url: null, print_time_seconds: null, filament_used_grams: null, filaments: [] },
+        ],
+        is_multi_plate: false,
+      });
+      renderSlicerPage('?file=100');
+      await waitForReady();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('model-viewer').getAttribute('data-file-type')).toBe('3mf');
+      });
+    });
   });
 
   it('takes ?archive=7 as well as ?file=42', async () => {
