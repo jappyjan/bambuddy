@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# Spike harness for ticket #70 — "slice a real STL and measure where it lands".
+#
+# Unlike the #22 harness (../2026-08-02-stl-recentring/run_spike.sh) this one
+# runs NO containers. It talks HTTP to the sidecar of an already-deployed
+# Bambuddy, which is both safer on a machine with a broken credsStore and a
+# more honest test: it exercises the exact image the owner is testing against.
+#
+# The printer / process / filament payloads are the same `{name, inherits,
+# from, type}` stubs Bambuddy's own `_resolve_standard`
+# (backend/app/services/preset_resolver.py:254) sends for the "standard" tier,
+# so the wire payload matches a real /slicer slice byte for byte apart from
+# the model.
+#
+#   SLICER=http://printfarm:3000 ./run_placement_spike.sh
+#
+# Read-only: it POSTs /slice and reads the G-code back out of the response.
+# It never touches the database, the config, or any container.
+set -euo pipefail
+
+PY="${PY:-python3}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SLICER="${SLICER:-http://printfarm:3000}"
+WORK="${WORK:-$(mktemp -d)}"
+
+mkdir -p "$WORK/models" "$WORK/out" "$WORK/prof"
+cd "$WORK"
+
+echo "==> sidecar: $SLICER"
+curl -sf -m 15 "$SLICER/health" && echo
+
+# `_resolve_standard` stub — name, inherits, from:system, type:<category>.
+stub() { # stub <type> <name> <outfile>
+  "$PY" - "$1" "$2" "$3" <<'PYEOF'
+import json, sys
+t, name, out = sys.argv[1], sys.argv[2], sys.argv[3]
+json.dump({"name": name, "inherits": name, "from": "system", "type": t},
+          open(out, "w"))
+PYEOF
+}
+
+echo "==> generating models"
+"$PY" "$HERE/mkmodels.py" models
+
+slice_one() { # slice_one <model> <printer> <process> <filament> <tag> [arrange]
+  local model="$1" printer="$2" process="$3" filament="$4" tag="$5" arrange="${6:-}"
+  stub machine  "$printer"  prof/printer.json
+  stub process  "$process"  prof/process.json
+  stub filament "$filament" prof/filament.json
+  local extra=()
+  [[ -n "$arrange" ]] && extra=(-F "arrange=true")
+  local code
+  code=$(curl -s -o "out/${tag}.gcode" -w "%{http_code}" --max-time 600 \
+    -F "file=@${model};type=model/stl" \
+    -F "printerProfile=@prof/printer.json;type=application/json" \
+    -F "presetProfile=@prof/process.json;type=application/json" \
+    -F "filamentProfile=@prof/filament.json;type=application/json" \
+    "${extra[@]}" \
+    "${SLICER}/slice")
+  echo "  ${tag}: HTTP ${code}"
+  [[ "$code" == 200 ]] || { head -c 400 "out/${tag}.gcode"; echo; }
+}
+
+A1P="Bambu Lab A1 0.4 nozzle";        A1R="0.20mm Standard @BBL A1";   A1F="Bambu PLA Basic @BBL A1 PLA"
+MNP="Bambu Lab A1 mini 0.4 nozzle";   MNR="0.20mm Standard @BBL A1M";  MNF="Bambu PLA Basic @BBL A1M PLA"
+H2P="Bambu Lab H2D 0.4 nozzle";       H2R="0.20mm Standard @BBL H2D";  H2F="Bambu PLA Basic @BBL H2D PLA"
+XCP="Bambu Lab X1 Carbon 0.4 nozzle"; XCR="0.20mm Standard @BBL X1C";  XCF="Bambu PLA Basic @BBL X1C PLA"
+
+echo "==> Q1/Q2: placement + orientation on the A1 (bed 256x256)"
+slice_one models/bar.stl        "$A1P" "$A1R" "$A1F" bar_a1
+slice_one models/bar_offset.stl "$A1P" "$A1R" "$A1F" bar_offset_a1
+slice_one models/ell.stl        "$A1P" "$A1R" "$A1F" ell_a1
+
+slice_one models/pair.stl       "$A1P" "$A1R" "$A1F" pair_a1
+
+echo "==> Q4: same bare mesh onto a smaller and a larger bed"
+slice_one models/ell.stl "$MNP" "$MNR" "$MNF" ell_a1mini   # 180x180
+# Expected to fail: every non-A1 printer SIGSEGVs on a bare STL on this image.
+# Kept in the harness so a future sidecar build shows the fix (or the regression).
+slice_one models/ell.stl  "$H2P" "$H2R" "$H2F" ell_h2d     # 350x320
+slice_one models/ell.stl  "$XCP" "$XCR" "$XCF" ell_x1c     # 256x256
+slice_one models/cube.stl "$H2P" "$H2R" "$H2F" cube_h2d    # model-independent?
+
+echo "==> Q5: does --arrange change anything?"
+slice_one models/bar_offset.stl "$A1P" "$A1R" "$A1F" bar_offset_a1_arr arrange
+slice_one models/ell.stl        "$A1P" "$A1R" "$A1F" ell_a1_arr        arrange
+# The discriminating pair: a 150 mm gap arranging would close ...
+slice_one models/pair.stl       "$A1P" "$A1R" "$A1F" pair_a1_arr       arrange
+# ... and a 60x320 layout that cannot fit a 256 bed unless something repacks it.
+# Identical failure with and without the flag == the flag does nothing.
+slice_one models/far_pair.stl   "$A1P" "$A1R" "$A1F" farpair_noarr
+slice_one models/far_pair.stl   "$A1P" "$A1R" "$A1F" farpair_arr       arrange
+
+echo
+echo "==> first-layer placement / orientation"
+"$PY" "$HERE/gcode_shape.py" out/*.gcode
+
+echo
+echo "==> printable_area the slicer wrote into each successful G-code"
+for f in out/*.gcode; do
+  a=$(grep -m1 '^; printable_area' "$f" || true)
+  [[ -n "$a" ]] && printf "  %-26s %s\n" "$(basename "$f")" "$a"
+done
+
+echo
+echo "==> arrange no-op check (bodies, ignoring the generation timestamp)"
+"$PY" - <<'PYEOF'
+import re, os
+def body(n):
+    p = os.path.join("out", n + ".gcode")
+    if not os.path.exists(p):
+        return None
+    return re.sub(r"; generated by .*\n", "", open(p, errors="ignore").read())
+for a, b in (("bar_offset_a1", "bar_offset_a1_arr"),
+             ("ell_a1", "ell_a1_arr"),
+             ("pair_a1", "pair_a1_arr"),
+             ("bar_a1", "bar_offset_a1")):
+    A, B = body(a), body(b)
+    if A is None or B is None:
+        print(f"  {a} vs {b}: MISSING")
+        continue
+    # bar_a1 vs bar_offset_a1 is expected to DIFFER only in the
+    # `; printing object <name>` comments — count the motion lines that
+    # differ, because zero of those is the finding, not "identical files".
+    moves = 0
+    if A != B:
+        import difflib
+        moves = sum(
+            1
+            for line in difflib.unified_diff(A.splitlines(), B.splitlines(), n=0)
+            if line[:1] in "+-"
+            and not line.startswith(("+++", "---"))
+            and not line[1:].lstrip().startswith(";")
+        )
+    verdict = "IDENTICAL" if A == B else f"differs, but {moves} motion lines differ"
+    print(f"  {a:22s} vs {b:22s} -> {verdict}")
+PYEOF
+
+echo
+echo "artifacts left in $WORK"
