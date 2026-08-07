@@ -780,7 +780,11 @@ export function SlicerPage() {
 
   const stageProps = {
     url: modelUrl,
-    fileType: platesMeta.length > 0 ? ('3mf' as const) : undefined,
+    // The download URL carries no extension (#66), so `ModelViewer`'s
+    // extension fallback can never see an STL. The filename from the plates
+    // endpoint is authoritative; the plates signal stays as the fallback for a
+    // name that somehow has no extension.
+    fileType: filename.match(/\.([^.]+)$/)?.[1].toLowerCase() || (platesMeta.length > 0 ? '3mf' : undefined),
     plates: stagePlates,
     // Handed to both layouts, so the phone's wizard paints from exactly the
     // same colours as the desktop stage.
