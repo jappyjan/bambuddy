@@ -52,6 +52,7 @@ interface MockViewerProps {
   onObjectMetrics?: (metrics: Record<string, ObjectMetrics>) => void;
   onPlatePick?: (plateIndex: number) => void;
   onPlateAnchors?: (anchors: Record<number, PlateScreenAnchor>) => void;
+  onFileBedSize?: (bedSize: { x: number; y: number } | null) => void;
 }
 
 let viewerProps: MockViewerProps = {};
@@ -172,6 +173,16 @@ function renderControlled(props: Parameters<typeof ControlledStage>[0] = {}) {
 function selectObject(objectId: string) {
   act(() => {
     viewerProps.onObjectPick?.(objectId);
+  });
+}
+
+/**
+ * Simulate the viewport finishing a parse and reporting the bed the **file**
+ * declares — `null` for an STL, or a 3MF with no `printable_area` (#69).
+ */
+function reportFileBed(bedSize: { x: number; y: number } | null) {
+  act(() => {
+    viewerProps.onFileBedSize?.(bedSize);
   });
 }
 
@@ -838,6 +849,79 @@ describe('PlateStage', () => {
       const a = renderedTransform('2').position;
       const b = renderedTransform('3').position;
       expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeGreaterThan(40);
+    });
+
+    /**
+     * Auto-arrange centres on the bed, so *which* bed it uses is visible in the
+     * emitted transform (#69). One object, anchor at the origin, lands at the
+     * bed's centre exactly — which makes the bed readable off the position.
+     *
+     * This is the stage half of the rule; `buildVolume.test.ts` pins the rule
+     * itself. What is checked here is that the stage arranges onto the bed the
+     * viewport actually **drew**, rather than onto the rail's printer — the two
+     * differ for any 3MF that declares its own `printable_area`, and an arrange
+     * that used the wrong one would put the model beside the visible plate.
+     */
+    describe('the bed Auto-arrange lands on (#69)', () => {
+      async function arrangeOne(props: {
+        buildVolume?: { x: number; y: number; z: number };
+        fileBed?: { x: number; y: number } | null;
+      }) {
+        const user = userEvent.setup();
+        renderControlled({
+          initialPlates: [
+            {
+              index: 1,
+              objects: [
+                { id: '2', transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+              ],
+            },
+          ],
+          buildVolume: props.buildVolume,
+        });
+        act(() => viewerProps.onObjectMetrics?.({ '2': { anchor: [0, 0, 0], size: [40, 40, 40] } }));
+        reportFileBed(props.fileBed ?? null);
+        await user.click(screen.getByRole('button', { name: 'Auto-arrange' }));
+        return renderedTransform('2').position;
+      }
+
+      it('uses the selected printer when the file declares no bed', async () => {
+        // Rule 2 — an STL, or a 3MF without `printable_area`. An H2D's
+        // 350 x 320 centres at (175, 160), not (128, 128).
+        const position = await arrangeOne({ buildVolume: { x: 350, y: 320, z: 256 }, fileBed: null });
+        expect(position[0]).toBe(175);
+        expect(position[1]).toBe(160);
+      });
+
+      it('moves with the printer, which is the whole ask', async () => {
+        // Same file, a different printer picked in the rail: an A1 mini is
+        // 180 x 180 and centres at (90, 90) — the figure #70's spike measured
+        // off a real slice.
+        const position = await arrangeOne({ buildVolume: { x: 180, y: 180, z: 256 }, fileBed: null });
+        expect(position[0]).toBe(90);
+        expect(position[1]).toBe(90);
+      });
+
+      it('uses the FILE\'s bed when it declares one, whatever the rail says', async () => {
+        // Rule 1, and the regression that matters most. The H2S reference file
+        // (#41) is 340 x 320 and its plate-grid offsets are baked against that;
+        // with an H2D selected the arrange must still land on 340, at 170 — not
+        // on the H2D's 350, at 175.
+        const position = await arrangeOne({
+          buildVolume: { x: 350, y: 320, z: 256 },
+          fileBed: { x: 340, y: 320 },
+        });
+        expect(position[0]).toBe(170);
+        expect(position[1]).toBe(160);
+      });
+
+      it('falls back to 256 when neither the file nor the printer says', async () => {
+        // Rule 3 — the live state of every deployment whose sidecar image
+        // predates #68, so it has to stay exactly as it was.
+        const position = await arrangeOne({ buildVolume: undefined, fileBed: null });
+        expect(position[0]).toBe(128);
+        expect(position[1]).toBe(128);
+      });
     });
 
     it('hands the caller each object\'s anchor and size (#32 saves against these)', () => {

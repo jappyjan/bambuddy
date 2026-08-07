@@ -441,6 +441,7 @@ export function SlicerPage() {
     setUseEmbedded,
     canUseEmbedded,
     selectedPrinterName,
+    selectedPrinterBuildVolume,
     compatIndex,
   } = useSlicePresets({
     filamentSlots: presetSlots,
@@ -786,6 +787,18 @@ export function SlicerPage() {
     // name that somehow has no extension.
     fileType: filename.match(/\.([^.]+)$/)?.[1].toLowerCase() || (platesMeta.length > 0 ? '3mf' : undefined),
     plates: stagePlates,
+    /**
+     * The selected printer's bed (#69) — what the owner asked for: *"changing
+     * the printer should change plate size accordingly"*.
+     *
+     * **Only a fallback**, not an override. A 3MF that declares its own
+     * `printable_area` keeps drawing on that bed however the rail is set,
+     * because Studio bakes the plate-grid offsets into the build items against
+     * it; overriding it slides every plate off its geometry (#39/#40/#41).
+     * `resolveBuildVolume` holds that rule. `null` here — the state of every
+     * deployment whose sidecar image predates #68 — falls back to 256 cubed.
+     */
+    buildVolume: selectedPrinterBuildVolume ?? undefined,
     // Handed to both layouts, so the phone's wizard paints from exactly the
     // same colours as the desktop stage.
     filamentColors: stageColors,

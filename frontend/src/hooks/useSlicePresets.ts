@@ -27,6 +27,7 @@ import {
   pickProcessDefault,
   type FilamentTypeWarning,
 } from '../utils/slicePresetPicker';
+import { printerBuildVolume, type BuildVolume } from '../components/slicer/buildVolume';
 
 // The only part of a plate's filament requirement the pre-pick scores against.
 // `PlateFilament` is assignable to this, so callers pass their slot list as-is.
@@ -125,6 +126,22 @@ export function useSlicePresets({
     if (!presetsQuery.data || !printerPreset) return null;
     return findPreset(presetsQuery.data, printerPreset, 'printer')?.name ?? null;
   }, [presetsQuery.data, printerPreset]);
+
+  /**
+   * The selected printer's bed, reduced from its `printable_area` (#68/#69).
+   *
+   * `null` is the ordinary answer, not a failure: the field is resolved through
+   * the bundled profile tree by the sidecar, so only a rebuilt sidecar image
+   * emits it and the whole standard tier reports `null` until a deployment is
+   * upgraded. Consumers fall back to the default plate — a missing bed is not a
+   * bed of size zero.
+   */
+  const selectedPrinterBuildVolume = useMemo<BuildVolume | null>(() => {
+    if (!presetsQuery.data || !printerPreset) return null;
+    const preset = findPreset(presetsQuery.data, printerPreset, 'printer');
+    return printerBuildVolume(preset?.printable_area);
+  }, [presetsQuery.data, printerPreset]);
+
   // Compatibility ground truth: the slicer's own `compatible_printers` list
   // on local-imported presets, plus the @BBL <code> name fallback for cloud
   // / standard presets via the backend Bambu printer-model registry.
@@ -343,6 +360,7 @@ export function useSlicePresets({
     setUseEmbedded,
     canUseEmbedded,
     selectedPrinterName,
+    selectedPrinterBuildVolume,
     compatIndex,
     applyPipeline,
   };

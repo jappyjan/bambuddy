@@ -15,6 +15,10 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import JSZip from 'jszip';
 import { swapYZ, type ObjectMetrics, type Vec3 } from './transformMath';
 import type { BedSize } from './plateGrid';
+// One reducer for `printable_area`, shared with the printer-preset side (#69):
+// a 3MF and a printer profile spell the bed outline identically, and two
+// readers of the same format drift.
+import { printableAreaBed } from './buildVolume';
 // The one definition of "this slot has no colour" (#45). Imported rather than
 // restated so the stage's neutral and the rail badge's neutral are the same
 // grey; `filamentSlots` pulls in nothing but pure helpers.
@@ -210,37 +214,6 @@ function componentPath(compEl: Element): string | null {
   return compEl.getAttribute('p:path') || compEl.getAttributeNS(PRODUCTION_NS, 'path') || null;
 }
 
-/**
- * The bed footprint from a project's `printable_area`, or `null`.
- *
- * The value is the bed outline as `"XxY"` corner strings — `["0x0", "340x0",
- * "340x320", "0x320"]` for an H2S — so the footprint is the extent of those
- * corners rather than the last one. Anything unparseable, degenerate or
- * non-rectangular-looking yields `null`, and the caller falls back to the
- * printer's own build volume.
- */
-function parsePrintableArea(raw: unknown): BedSize | null {
-  if (!Array.isArray(raw) || raw.length < 3) return null;
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  for (const corner of raw) {
-    if (typeof corner !== 'string') return null;
-    const [xPart, yPart] = corner.split('x');
-    const x = Number.parseFloat(xPart);
-    const y = Number.parseFloat(yPart);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x);
-    maxY = Math.max(maxY, y);
-  }
-  const x = maxX - minX;
-  const y = maxY - minY;
-  return x > 0 && y > 0 ? { x, y } : null;
-}
-
 function parsePlateIdFromAttributes(element: Element): number | null {
   const plateAttribute = Array.from(element.attributes).find((attr) => {
     const name = attr.name.toLowerCase();
@@ -279,7 +252,7 @@ export async function parse3MF(arrayBuffer: ArrayBuffer): Promise<Parsed3MFData>
   if (projectSettingsFile) {
     try {
       const settings = JSON.parse(await projectSettingsFile.async('string')) as Record<string, unknown>;
-      bedSize = parsePrintableArea(settings.printable_area);
+      bedSize = printableAreaBed(settings.printable_area);
     } catch {
       // A missing or malformed project config is not a parse failure: the
       // viewer falls back to the selected printer's build volume.

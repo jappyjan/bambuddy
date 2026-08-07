@@ -20,6 +20,13 @@ import type { BedSize, PlateCell } from './plateGrid';
 /** Spacing of a plate's own grid lines, in millimetres. */
 const BED_GRID_STEP_MM = 10;
 
+/**
+ * Spacing of the **single-plate** bed's grid, in millimetres. 16 reproduces
+ * exactly what `GridHelper(256, ceil(256 / 16))` drew before that grid stopped
+ * being square (#69).
+ */
+export const SINGLE_PLATE_GRID_STEP_MM = 16;
+
 /** Bed colours: the active plate reads as "this is what Slice will cut". */
 const BED_ACTIVE_COLOR = 0x00ae42;
 const BED_IDLE_COLOR = 0x8a8a8a;
@@ -133,6 +140,35 @@ export function createPlateBed(cell: PlateCell, bed: BedSize): PlateBed {
     labelAnchor: new THREE.Vector3(centerX, 0, cell.y),
     badgeAnchor: new THREE.Vector3(cell.x + bed.x * 0.94, 0, cell.y + bed.y * 0.94),
   };
+}
+
+/**
+ * Re-cut the **single-plate** bed and its grid to `bed` (#69).
+ *
+ * The single-plate furniture is built in `ModelViewer`'s scene-setup effect,
+ * which runs before the model has been fetched — so it can only be sized from
+ * the printer selected in the rail. A 3MF that declares its own
+ * `printable_area` outranks that, and is not known until the parse lands, so the
+ * size has to be applied a second time rather than decided once.
+ *
+ * Here rather than in the component for the reason the module header gives: this
+ * is the function that decides the on-screen bed size, and inside
+ * `ModelViewer.tsx` nothing could check it. Geometry is disposed on the way out
+ * — this runs on every file and every plate change.
+ */
+export function resizeSinglePlateBed(
+  plate: THREE.Mesh | null,
+  grid: THREE.LineSegments | null,
+  bed: BedSize,
+) {
+  if (plate) {
+    plate.geometry.dispose();
+    plate.geometry = new THREE.PlaneGeometry(bed.x, bed.y);
+  }
+  if (grid) {
+    grid.geometry.dispose();
+    grid.geometry = createBedGridGeometry(bed.x, bed.y, SINGLE_PLATE_GRID_STEP_MM);
+  }
 }
 
 /** Paint the beds so the active plate is the one that reads as selected. */

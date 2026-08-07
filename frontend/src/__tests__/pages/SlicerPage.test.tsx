@@ -23,7 +23,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, cleanup, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { render } from '../utils';
 import { SlicerPage } from '../../pages/SlicerPage';
@@ -45,6 +45,7 @@ let viewerProps: {
   fileType?: string;
   interactive?: boolean;
   gizmoMode?: string | null;
+  buildVolume?: { x: number; y: number; z: number };
   onObjectTransform?: (objectId: string, transform: ObjectTransform) => void;
   onObjectMetrics?: (metrics: Record<string, ObjectMetrics>) => void;
   objectTransforms?: Record<string, ObjectTransform>;
@@ -56,6 +57,7 @@ vi.mock('../../components/ModelViewer', () => ({
     fileType?: string;
     interactive?: boolean;
     gizmoMode?: string | null;
+    buildVolume?: { x: number; y: number; z: number };
     onObjectTransform?: (objectId: string, transform: ObjectTransform) => void;
     onObjectMetrics?: (metrics: Record<string, ObjectMetrics>) => void;
     objectTransforms?: Record<string, ObjectTransform>;
@@ -66,6 +68,13 @@ vi.mock('../../components/ModelViewer', () => ({
         data-testid="model-viewer"
         data-selected-plate={String(props.selectedPlateId ?? '')}
         data-file-type={String(props.fileType ?? '')}
+        // Empty means "no bed given" — the viewport falls back to its own 256
+        // cubed default, which is exactly what an un-upgraded sidecar produces.
+        data-build-volume={
+          props.buildVolume
+            ? `${props.buildVolume.x}x${props.buildVolume.y}x${props.buildVolume.z}`
+            : ''
+        }
       />
     );
   },
@@ -242,6 +251,100 @@ describe('SlicerPage', () => {
     expect(screen.getByTestId('model-viewer')).toBeDefined();
     expect(screen.getByTestId('slice-action-bar')).toBeDefined();
     expect(screen.getByTestId('process-settings-editor')).toBeDefined();
+  });
+
+  /**
+   * The owner's request, end to end (#69): *"changing the printer should change
+   * plate size accordingly, just like BambuStudio."*
+   *
+   * Before this, `printerPreset` reached the rail and the slice body and nothing
+   * else — it never got into `stageProps`, and `PlateStage` was rendered without
+   * a `buildVolume` at all, so the viewport drew a 256 x 256 plate whatever was
+   * picked. These cases walk the whole chain the page owns: preset
+   * `printable_area` → `useSlicePresets` → `stageProps` → `PlateStage` →
+   * `ModelViewer`.
+   *
+   * The default fixture is `Cube.stl`, which declares no bed of its own — rule 2
+   * of `resolveBuildVolume`, the branch where the printer is allowed to win.
+   */
+  describe('the bed follows the selected printer (#69)', () => {
+    /** An H2D and an A1 mini, with the bed outlines their profiles declare. */
+    const PRINTERS_WITH_BEDS: UnifiedPresetsResponse = {
+      ...PRESETS,
+      local: {
+        ...PRESETS.local,
+        printer: [
+          {
+            id: '1',
+            name: 'Bambu Lab H2D 0.4 nozzle',
+            source: 'local',
+            printable_area: ['0x0', '350x0', '350x320', '0x320'],
+          },
+          {
+            id: '9',
+            name: 'Bambu Lab A1 mini 0.4 nozzle',
+            source: 'local',
+            printable_area: ['0x0', '180x0', '180x180', '0x180'],
+          },
+        ],
+      },
+    };
+
+    it('draws the selected printer\'s bed, at its real proportions', async () => {
+      mockApi.getSlicerPresets.mockResolvedValue(PRINTERS_WITH_BEDS);
+      renderSlicerPage('?file=100');
+      await waitForReady();
+
+      // 350 x 320, not 350 x 350: a printer-shaped bed that renders square
+      // defeats the point of the ticket.
+      await waitFor(() => {
+        expect(screen.getByTestId('model-viewer')).toHaveAttribute(
+          'data-build-volume',
+          '350x320x256',
+        );
+      });
+    });
+
+    it('changes the plate when the printer changes', async () => {
+      const user = userEvent.setup();
+      mockApi.getSlicerPresets.mockResolvedValue(PRINTERS_WITH_BEDS);
+      renderSlicerPage('?file=100');
+      await waitForReady();
+      await waitFor(() => {
+        expect(screen.getByTestId('model-viewer')).toHaveAttribute(
+          'data-build-volume',
+          '350x320x256',
+        );
+      });
+
+      const model = screen.getByLabelText('Printer') as HTMLSelectElement;
+      await user.selectOptions(
+        model,
+        within(model).getByRole('option', { name: /A1 mini/i }),
+      );
+
+      // The A1 mini's 180 x 180 — the bed #70's spike measured a real slice
+      // centring on at (90, 90).
+      await waitFor(() => {
+        expect(screen.getByTestId('model-viewer')).toHaveAttribute(
+          'data-build-volume',
+          '180x180x256',
+        );
+      });
+    });
+
+    it('gives the viewport no bed at all when the sidecar declares none', async () => {
+      // Rule 3, and the state of **every** deployment until its sidecar image is
+      // rebuilt: `printable_area` is null across the whole standard tier. The
+      // page must hand down nothing rather than a zero-sized bed, so the
+      // viewport keeps its own 256 cubed default and the plate still draws.
+      mockApi.getSlicerPresets.mockResolvedValue(PRESETS); // no printable_area
+      renderSlicerPage('?file=100');
+      await waitForReady();
+
+      expect(screen.getByTestId('model-viewer')).toHaveAttribute('data-build-volume', '');
+      expect(viewerProps.buildVolume).toBeUndefined();
+    });
   });
 
   // #66 — the download URL carries no extension, so `ModelViewer`'s own

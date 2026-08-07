@@ -12,12 +12,20 @@ import { linkGizmoToOrbit } from './slicer/gizmoOrbit';
 import { plateGridOrigins, type BedSize } from './slicer/plateGrid';
 import {
   anchorsDiffer,
+  createBedGridGeometry,
   createPlateBed,
   paintPlateBeds,
   projectToViewport,
+  resizeSinglePlateBed,
   zoomedCameraPosition,
+  SINGLE_PLATE_GRID_STEP_MM,
   type PlateBed,
 } from './slicer/plateBeds';
+import {
+  DEFAULT_BUILD_VOLUME,
+  resolveBuildVolume,
+  type BuildVolume,
+} from './slicer/buildVolume';
 import {
   identityTransform,
   objectNodeToTransform,
@@ -32,18 +40,17 @@ import {
   type Parsed3MFData,
 } from './slicer/parse3mf';
 
-interface BuildVolume {
-  x: number;
-  y: number;
-  z: number;
-}
-
 /** Gizmo modes offered by the stage toolbar (#25). `null` hides the gizmo. */
 export type GizmoMode = 'translate' | 'rotate' | 'scale';
 
 interface ModelViewerProps {
   url: string;
   fileType?: string;
+  /**
+   * The **selected printer's** bed (#69). Used only when the file does not
+   * declare one of its own — see `resolveBuildVolume` in `slicer/buildVolume.ts`
+   * for why a 3MF's own `printable_area` outranks it.
+   */
   buildVolume?: BuildVolume;
   filamentColors?: string[];
   selectedPlateId?: number | null;
@@ -110,15 +117,19 @@ interface ModelViewerProps {
    * (#32) and what rotation and scale pivot about.
    */
   onObjectMetrics?: (metrics: Record<string, ObjectMetrics>) => void;
+  /**
+   * Fired once per parse with the bed the **file** declares, or `null` when it
+   * declares none (#69).
+   *
+   * This is the only place that number exists: the 3MF is parsed in here, so a
+   * caller that has to agree with the drawn bed — `PlateStage`, which arranges
+   * objects onto it — cannot work it out for itself. It gets the file's
+   * contribution and runs the same `resolveBuildVolume` against the same
+   * printer bed, rather than being handed a resolved volume it could not
+   * re-derive when the printer changes.
+   */
+  onFileBedSize?: (bedSize: BedSize | null) => void;
 }
-
-/**
- * Module-level so the default is referentially stable. As a default *parameter*
- * it was a fresh object on every render, and it is in the scene-setup effect's
- * dependency list — every render of a caller that omits `buildVolume` tore the
- * WebGL context down and rebuilt it, which no gizmo can survive.
- */
-const DEFAULT_BUILD_VOLUME: BuildVolume = { x: 256, y: 256, z: 256 };
 
 /** Handle scale for pointer vs finger. 1 is three.js's desktop default. */
 const GIZMO_SIZE_POINTER = 1;
@@ -163,6 +174,7 @@ export function ModelViewer({
   onObjectTransform,
   onObjectPick,
   onObjectMetrics,
+  onFileBedSize,
 }: ModelViewerProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -172,7 +184,7 @@ export function ModelViewer({
   const controlsRef = useRef<OrbitControls | null>(null);
   const modelGroupRef = useRef<THREE.Group | null>(null);
   const plateRef = useRef<THREE.Mesh | null>(null);
-  const gridRef = useRef<THREE.GridHelper | null>(null);
+  const gridRef = useRef<THREE.LineSegments | null>(null);
   const [loading, setLoading] = useState(true);
   // ---- Multi-plate stage (#41) ----------------------------------------------
   const plateBedsRef = useRef<PlateBed[]>([]);
@@ -202,6 +214,7 @@ export function ModelViewer({
     onObjectMetrics,
     onPlatePick,
     onPlateAnchors,
+    onFileBedSize,
   });
   callbacksRef.current = {
     onObjectTransform,
@@ -209,6 +222,7 @@ export function ModelViewer({
     onObjectMetrics,
     onPlatePick,
     onPlateAnchors,
+    onFileBedSize,
   };
   // Read inside the pointer handler, which is bound once for the scene's life.
   const objectTransformsRef = useRef(objectTransforms);
@@ -377,10 +391,26 @@ export function ModelViewer({
     directionalLight2.position.set(-100, 50, -100);
     scene.add(directionalLight2);
 
-    // Grid - use the larger dimension for the grid size
-    const gridSize = Math.max(buildVolume.x, buildVolume.y);
-    const gridDivisions = Math.ceil(gridSize / 16);
-    const gridHelper = new THREE.GridHelper(gridSize, gridDivisions, 0x444444, 0x333333);
+    /**
+     * The bed grid.
+     *
+     * **Not `THREE.GridHelper`.** That is square by construction, so this used
+     * to be `Math.max(x, y)` — which drew an H2D's 350 x 320 bed as 350 x 350,
+     * overhanging the plate on one axis. A printer-shaped bed that renders
+     * square defeats the point of #69, so it is the same explicitly-rectangular
+     * geometry the multi-plate beds have used since #41.
+     *
+     * Sized here from the printer's bed and resized by the model effect once the
+     * file has been parsed, because the file's own bed outranks it and is not
+     * known until then.
+     *
+     * `0x333333` is the colour `GridHelper` gave every line but the two centre
+     * ones, so the bed looks as it did.
+     */
+    const gridHelper = new THREE.LineSegments(
+      createBedGridGeometry(buildVolume.x, buildVolume.y, SINGLE_PLATE_GRID_STEP_MM),
+      new THREE.LineBasicMaterial({ color: 0x333333 }),
+    );
     scene.add(gridHelper);
     gridRef.current = gridHelper;
 
@@ -552,6 +582,23 @@ export function ModelViewer({
     }
 
     const isStlModel = !!stlGeometry;
+
+    /**
+     * The bed everything below is drawn and centred on (#69).
+     *
+     * The file's own `printable_area` if it declares one — for a **single**
+     * plate as much as for a grid of them. Until now `bedSize` was read on
+     * exactly one line, inside the multi-plate branch, so a single-plate H2D
+     * project rendered on a 256 x 256 plate no matter what it said. Otherwise
+     * the printer picked in the rail, otherwise 256 cubed. See
+     * `slicer/buildVolume.ts` for why the file outranks the printer.
+     */
+    const fileBedSize = isStlModel ? null : parsedData!.bedSize;
+    const bedVolume = resolveBuildVolume(fileBedSize, buildVolume);
+    // The caller arranges objects onto this same bed, and only this module ever
+    // sees the file's declaration.
+    callbacksRef.current.onFileBedSize?.(fileBedSize);
+
     // An STL has no object ids, so it gets no placeable nodes: its placement is
     // rewritten server-side after the sidecar converts it to a project 3MF
     // (see `backend/app/services/plate_layout.py`), and there is nothing here
@@ -600,9 +647,11 @@ export function ModelViewer({
 
       // The bed the *authoring* slicer used, not the printer picked in the
       // rail: the grid offsets are baked into the transforms above, and they
-      // were computed against this bed. Falling back to the build volume keeps
-      // a file that does not say at least self-consistent.
-      const bed: BedSize = parsedData!.bedSize ?? { x: buildVolume.x, y: buildVolume.y };
+      // were computed against this bed. `resolveBuildVolume` puts the file
+      // first for exactly this reason, so a multi-plate project is unmoved by a
+      // printer change; falling back to the printer's bed keeps a file that
+      // does not say at least self-consistent.
+      const bed: BedSize = { x: bedVolume.x, y: bedVolume.y };
       const cells = plateGridOrigins(plateList, bed);
 
       const bedGroup = new THREE.Group();
@@ -656,6 +705,9 @@ export function ModelViewer({
 
     if (plateRef.current) plateRef.current.visible = true;
     if (gridRef.current) gridRef.current.visible = true;
+    // The bed furniture was built from the printer's volume before the file had
+    // been read; resize it now that `bedVolume` knows which of the two won.
+    resizeSinglePlateBed(plateRef.current, gridRef.current, bedVolume);
     // Back to the single-plate view's own reset position; a home recorded for a
     // grid of beds points at empty space once there is only one.
     homeViewRef.current = null;
@@ -703,8 +755,8 @@ export function ModelViewer({
       plateOffsetZ = plateBox.min.z - selectedPlateBounds.minY;
     }
 
-    const plateCenterX = buildVolume.x / 2;
-    const plateCenterZ = buildVolume.y / 2;
+    const plateCenterX = bedVolume.x / 2;
+    const plateCenterZ = bedVolume.y / 2;
 
     if (!isStlModel && buildPlateId != null && parsedData!.buildItems.length > 0 && selectedPlateBounds) {
       group.position.x = centerOffsetX - plateOffsetX;

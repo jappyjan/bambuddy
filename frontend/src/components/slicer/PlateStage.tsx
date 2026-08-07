@@ -75,22 +75,14 @@ import type {
   StageObject,
   StagePlate,
 } from '../../types/plateStage';
-import { plateNumberBadge } from './plateGrid';
+import { plateNumberBadge, type BedSize } from './plateGrid';
+import { resolveBuildVolume, type BuildVolume } from './buildVolume';
 import {
   autoArrangeTransforms,
   layFlatTransform,
   transformsEqual,
   type ObjectMetrics,
 } from './transformMath';
-
-interface BuildVolume {
-  x: number;
-  y: number;
-  z: number;
-}
-
-/** Matches `ModelViewer`'s own default, so arrange lands on the drawn bed. */
-const DEFAULT_BUILD_VOLUME: BuildVolume = { x: 256, y: 256, z: 256 };
 
 /** Scale can be typed as a percentage; 0 or negative collapses the geometry. */
 const MIN_SCALE = 0.01;
@@ -113,7 +105,16 @@ export interface PlateStageProps {
    * one-plate-at-a-time view with a name strip.
    */
   multiPlate?: boolean;
-  /** The selected printer's build volume — the bed is drawn at this size. */
+  /**
+   * The **selected printer's** build volume (#69).
+   *
+   * Not necessarily the bed that gets drawn: a 3MF that declares its own
+   * `printable_area` outranks it, because the file's geometry is already placed
+   * against that bed and a printer change must not slide the plates out from
+   * under it. The viewport reports what the file said on `onFileBedSize`, and
+   * `resolveBuildVolume` settles the two — so Auto-arrange lands on the bed the
+   * user can actually see.
+   */
   buildVolume?: BuildVolume;
   /** Per-slot filament colours, used to tint the meshes. */
   filamentColors?: string[];
@@ -192,6 +193,16 @@ export function PlateStage({
   // scene has drawn a frame — and always empty where there is no WebGL at all,
   // which is why the labels fall back to a strip rather than disappearing.
   const [plateAnchors, setPlateAnchors] = useState<Record<number, PlateScreenAnchor>>({});
+  // The bed the *file* declares, as reported by the viewport — the only place
+  // the 3MF is parsed. `null` until a parse lands, and for a file that declares
+  // none, which is the same thing as far as the rule is concerned.
+  const [fileBedSize, setFileBedSize] = useState<BedSize | null>(null);
+
+  /** The bed that is actually drawn, and so the bed Auto-arrange must use. */
+  const bedVolume = useMemo(
+    () => resolveBuildVolume(fileBedSize, buildVolume),
+    [fileBedSize, buildVolume],
+  );
 
   const showAllPlates = (multiPlate ?? !isMobile) && plates.length > 1;
 
@@ -351,18 +362,14 @@ export function PlateStage({
   }, [emitTransform, selectedObject]);
 
   const handleAutoArrange = useCallback(() => {
-    const arranged = autoArrangeTransforms(
-      objects,
-      metrics,
-      buildVolume ?? DEFAULT_BUILD_VOLUME,
-    );
+    const arranged = autoArrangeTransforms(objects, metrics, bedVolume);
     for (const object of objects) {
       const next = arranged[object.id];
       // Only genuinely-moved objects are reported: an arrange that is already
       // an arrange must not invalidate a completed slice.
       if (next && !transformsEqual(next, object.transform)) emitTransform(object.id, next);
     }
-  }, [buildVolume, emitTransform, metrics, objects]);
+  }, [bedVolume, emitTransform, metrics, objects]);
 
   const showPlateLabels = plates.length > 1;
   const showObjectPicker = objects.length > 1;
@@ -393,6 +400,7 @@ export function PlateStage({
           onObjectMetrics={handleObjectMetrics}
           onPlatePick={handlePlateClick}
           onPlateAnchors={setPlateAnchors}
+          onFileBedSize={setFileBedSize}
           className="w-full h-full"
         />
 
