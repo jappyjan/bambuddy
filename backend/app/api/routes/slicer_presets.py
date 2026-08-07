@@ -287,6 +287,15 @@ async def _fetch_orca_cloud_presets(
                 filament_colour=filament_colour,
                 filament_vendor=filament_vendor,
             )
+            if slot == "printer":
+                # Orca Cloud hands us the whole profile content, so a printer
+                # profile that states its bed states it right here. A cloud
+                # profile is a user's own export and is normally already
+                # flattened; one that only `inherits:` a bundled base states
+                # nothing and stays `None` — Bambuddy has no copy of the
+                # slicer's profile tree to walk, which is exactly why the
+                # sidecar resolves the standard tier.
+                preset.printable_area = _parse_printable_area(content.get("printable_area"))
             if slot in ("process", "filament"):
                 # The profile's own compatible-printer list, straight out of
                 # the content Orca already hands us (#2628). Without it the
@@ -314,6 +323,14 @@ async def _fetch_local_presets(db: AsyncSession) -> dict[str, list[UnifiedPreset
         if slot is None:
             continue
         preset = UnifiedPreset(id=str(p.id), name=p.name, source="local")
+        if slot == "printer":
+            # `LocalPreset.setting` is the full *resolved* profile blob the
+            # importer stored, so an imported printer preset carries its bed
+            # here even though no column exists for it. Re-parsing the blob is
+            # what `_parse_filament_metadata` already does for the filament
+            # slot; adding a column would need a migration for a value only
+            # this listing reads.
+            preset.printable_area = _parse_local_printable_area(p.setting)
         if slot == "filament":
             preset.filament_type, preset.filament_colour = _parse_filament_metadata(p.setting)
             # The MODEL COLUMN, not the stored profile blob (#58). This
@@ -398,6 +415,56 @@ def _first_scalar(value: object) -> str | None:
     return None
 
 
+def _parse_local_printable_area(setting_json: str | None) -> list[str] | None:
+    """``printable_area`` out of a stored local-preset blob.
+
+    Defensive parse, same contract as :func:`_parse_filament_metadata`: any
+    error returns ``None`` so a corrupt row costs one printer its bed rather
+    than costing the caller the whole local tier.
+    """
+    if not setting_json:
+        return None
+    try:
+        data = json.loads(setting_json)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return _parse_printable_area(data.get("printable_area"))
+
+
+def _parse_printable_area(value: object) -> list[str] | None:
+    """Normalise a declared bed outline to a list of ``"<x>x<y>"`` corner points.
+
+    Container shape only — **never geometry**. Every declared point survives,
+    in order, because the outline is not always an origin-anchored rectangle:
+    8 profiles in OrcaSlicer's vendor tree declare 72-point round delta beds,
+    3 declare 6 points and 3 declare 239. Reducing here would flatten those
+    into a rectangle that lies about where a model may be placed, which is
+    precisely why the sidecar hands the polygon over raw.
+
+    What does get normalised is the packaging, which the profile trees are not
+    consistent about — one vendor writes the whole polygon as a single
+    comma-joined string, and one BBL preset ships a stray space inside a point.
+    The sidecar already normalises both, so in practice this only fires for the
+    local and orca_cloud tiers, which read profile JSON directly.
+
+    Anything that is not a polygon of at least 3 usable points returns
+    ``None``. That keeps ``None`` meaning "no bed known" rather than degrading
+    into a bed whose bounding box happens to be zero-sized — the two must stay
+    distinguishable, because a consumer treats the first as "fall back to the
+    default plate" and the second as "place everything at the origin".
+    """
+    if isinstance(value, str):
+        raw: list[object] = list(value.split(","))
+    elif isinstance(value, list):
+        raw = list(value)
+    else:
+        return None
+    points = [p.strip() for p in raw if isinstance(p, str) and p.strip()]
+    return points if len(points) >= 3 else None
+
+
 async def _fetch_bundled_presets(db: AsyncSession, *, refresh: bool = False) -> dict[str, list[UnifiedPreset]]:
     """Standard slicer-bundled profiles via the sidecar's /profiles/bundled.
 
@@ -433,7 +500,23 @@ async def _fetch_bundled_presets(db: AsyncSession, *, refresh: bool = False) -> 
                 continue
             # Bundled presets are addressed by name (the slicer resolves them
             # by name during the `inherits:` walk), so name doubles as id.
-            extra: dict[str, str | None] = {}
+            extra: dict[str, Any] = {}
+            if slot == "printer":
+                # The printer's bed outline, resolved by the sidecar through
+                # the bundled profile's `inherits:` chain — a BBL machine
+                # preset is a per-nozzle delta that declares no bed of its own
+                # (measured: the leaf states it for 4/44 presets in OrcaSlicer
+                # v2.3.2 and 7/56 in BambuStudio v02.07.01.57; through the walk
+                # it resolves for 44/44 and 56/56).
+                #
+                # **Only sidecar images built from orca-slicer-api#4 emit it.**
+                # Every deployment runs an older one until its image is
+                # rebuilt, so this reads `None` for the entire standard tier
+                # today and every consumer must cope with that — it is the
+                # normal state, not an error state. Read it anyway so a
+                # rebuilt sidecar starts supplying beds without a second
+                # change here (same pattern as `filament_vendor`, #58).
+                extra["printable_area"] = _parse_printable_area(entry.get("printable_area"))
             if slot == "filament":
                 extra["filament_type"] = entry.get("filament_type")
                 extra["filament_colour"] = entry.get("filament_colour")
@@ -527,6 +610,16 @@ def _enrich_cloud_metadata(
     not merely score badly, it would sit in a different heading from the
     identically-named local copy of the same spool.
 
+    Bed merge (#68): ``printable_area`` rides the same name bridge on the
+    PRINTER slot. Only the standard tier resolves a real bed (the sidecar
+    walks the bundled profile's ``inherits:`` chain); Bambu Cloud carries no
+    profile content at all, and an Orca Cloud or local copy of the same
+    printer is often a delta that states no geometry. Without the bridge, the
+    bed a printer reports would depend on which tier happened to win dedup —
+    invisible to the user and not something they chose. There is no
+    name-parse fallback for this one: a bed cannot be guessed from a string,
+    and a hardcoded model→bed map was deliberately removed (CHANGELOG:1173).
+
     Finally, every filament entry left without a vendor after the bridge gets
     one parsed out of its NAME. This runs across all four tiers, not just the
     standard one: the local tier's vendor column is nullable and rows imported
@@ -566,6 +659,34 @@ def _enrich_cloud_metadata(
         for p in tier["filament"]:
             if not p.filament_vendor:
                 p.filament_vendor = _parse_vendor_from_name(p.name)
+
+    # Bed bridge (#68). Same name bridge, printer slot: whichever copy of a
+    # printer preset knows its bed teaches the ones that don't.
+    #
+    # This is what keeps the feature working while deployments are mid-upgrade.
+    # A user picks "Bambu Lab H2D 0.4 nozzle" out of whichever tier ranks
+    # highest for them — Bambu Cloud never carries profile content at all, and
+    # an Orca Cloud or local copy may be a delta that only `inherits:` a
+    # bundled base. The standard tier is the one that resolves a real bed
+    # (through the sidecar's inheritance walk), and the identically-named entry
+    # in it is the same physical printer. Without the bridge the bed would
+    # depend on which tier happened to win dedup, which is not something the
+    # user chose or can see.
+    #
+    # Only ever fills a gap, and only with a real value: an entry that states
+    # its own bed keeps it, and `None` is never propagated over anything.
+    beds_by_name: dict[str, list[str]] = {}
+    for tier in (local, orca_cloud, standard):
+        for p in tier["printer"]:
+            if p.printable_area and p.name not in beds_by_name:
+                beds_by_name[p.name] = p.printable_area
+    if beds_by_name:
+        for tier in (local, orca_cloud, cloud, standard):
+            for p in tier["printer"]:
+                if p.printable_area is None:
+                    borrowed = beds_by_name.get(p.name)
+                    if borrowed:
+                        p.printable_area = borrowed
 
     # Compatibility bridge (#2628). Runs over both slots that carry the
     # list, and in both directions between the cloud tiers — whichever copy
